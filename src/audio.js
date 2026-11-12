@@ -97,8 +97,14 @@ export function createAudio() {
   };
   a.win = () => {
     if (!ok()) return;
-    const d = out(null, 0.6);
-    [523, 659, 784, 1047].forEach((f, i) => tone(d, { t: i * 0.12, dur: 0.6, type: 'triangle', f, gain: 0.3 }));
+    const d = out(null, 0.7);
+    // a low swell that rises into the monolith, then a bright open chord that rings out
+    tone(d, { dur: 1.2, type: 'sine', f: 55, f2: 110, gain: 0.55 });
+    noise(d, { dur: 1.1, type: 'bandpass', f: 300, f2: 2400, q: 1.4, gain: 0.25 });
+    [261.6, 392, 523.3, 659.3, 784].forEach((f, i) => {
+      tone(d, { t: 0.55 + i * 0.07, dur: 2.6, type: 'sine', f, gain: 0.22 });
+      tone(d, { t: 0.55 + i * 0.07, dur: 1.6, type: 'triangle', f: f * 2.003, gain: 0.05 });
+    });
   };
   let stepT = 0;
   a.step = (dt, speed, grounded) => {

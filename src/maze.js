@@ -2,12 +2,12 @@
 // Cell walls use Unity's names: L (-x), R (+x), B (-z), F (+z), in Unity's left-handed coordinates.
 import { DotNetRandom } from './rng.js';
 
-/** Same formula as the C#: Year*10000 + Month*100 + Day (local date). */
+/** Same formula as the C#: Year*10000 + Month*100 + Day, on the UTC date so everyone shares one maze (and the contract's day). */
 export function dailySeed(d = new Date()) {
-  return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+  return d.getUTCFullYear() * 10000 + (d.getUTCMonth() + 1) * 100 + d.getUTCDate();
 }
 
-export function generateMaze(width, depth, seed) {
+export function generateMaze(width, depth, seed, loops = 0) {
   const rng = new DotNetRandom(seed);
   const cells = [];
   for (let x = 0; x < width; x++) {
@@ -44,6 +44,17 @@ export function generateMaze(width, depth, seed) {
     } while (next);
   };
   visit(null, cell(0, 0));
+
+  // Loops (admin setting): knock out extra interior walls so there is more than one route. Uses its own
+  // generator so a maze with 0 loops is identical to the Unity original.
+  if (loops > 0) {
+    const lr = new DotNetRandom(seed ^ 0x5eed);
+    for (let i = 0, tries = 0; i < loops && tries < loops * 20; tries++) {
+      const x = lr.next(width - 1), z = lr.next(depth - 1), c = cell(x, z);
+      if (lr.next(2) === 0) { if (c.R) { c.R = false; cell(x + 1, z).L = false; i++; } }
+      else if (c.F) { c.F = false; cell(x, z + 1).B = false; i++; }
+    }
+  }
 
   return { width, depth, seed, cells, cell, goal: { x: Math.floor(width / 2), z: Math.floor(depth / 2) } };
 }

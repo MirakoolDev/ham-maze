@@ -5,10 +5,12 @@ import { DotNetRandom } from './rng.js';
 import { cellCenter } from './world.js';
 import { buildDrone } from './dronemodel.js';
 
-const HOVER = 2.3, RADIUS = 0.6, HP = 60;
+import { CFG } from './config.js';
+const HOVER = 2.3, RADIUS = 0.6;
 const SPEED_PATROL = 2.4, SPEED_HUNT = 4.6;
 const SIGHT = 42, FOV_COS = Math.cos((75 * Math.PI) / 180), REACT = 0.5;
-const BOLT_SPEED = 26, BOLT_DMG = 13, RANGE = 30;
+const BOLT_SPEED = 26, RANGE = 30;
+const REST_Y = 0.4; // wreck height: the lower shell (0.37 below centre) just touches the floor
 
 const shared = {
   bolt: new THREE.SphereGeometry(0.11, 12, 8),
@@ -36,7 +38,7 @@ export function createEnemies(scene, world, maze, effects, audio, { count = 8 } 
       const p = cellCenter(c.x, c.z); p.y = HOVER;
       group.position.copy(p); scene.add(group);
       drones.push({
-        group, model, pos: p, vel: new THREE.Vector3(), yaw: rng.next(4) * Math.PI / 2, hp: HP, dead: false,
+        group, model, pos: p, vel: new THREE.Vector3(), yaw: rng.next(4) * Math.PI / 2, hp: CFG.sentryHealth, dead: false,
         state: 'patrol', route: [], wait: rng.sample() * 2, repath: 0, seeT: 0, lostT: 0, lastSeen: new THREE.Vector3(),
         cooldown: 1 + rng.sample(), charge: 0, flash: 0, phase: rng.sample() * 6, fall: 0, rng, strafe: rng.sample() < 0.5 ? -1 : 1,
       });
@@ -111,7 +113,20 @@ export function createEnemies(scene, world, maze, effects, audio, { count = 8 } 
     for (const d of drones) {
       const g = d.group;
       if (d.dead) { // wreck falls and stays
-        if (d.pos.y > 0.45) { d.vel.y -= 18 * dt; d.pos.addScaledVector(d.vel, dt); g.rotation.x += dt * 3; g.rotation.z += dt * 2; if (d.pos.y < 0.45) { d.pos.y = 0.45; d.vel.set(0, 0, 0); effects.sparks(d.pos, new THREE.Vector3(0, 1, 0), 20, 0xffa040, 4); } }
+        if (!d.landed) {
+          d.vel.y -= 18 * dt; d.pos.addScaledVector(d.vel, dt); g.rotation.x += dt * 3; g.rotation.z += dt * 2;
+          if (d.pos.y <= REST_Y) {
+            d.pos.y = REST_Y; d.vel.set(0, 0, 0); d.landed = true;
+            // settle onto its flat underside: wrap the tumble to the nearest upright angle, keep a slight lean
+            const wrap = (a) => a - Math.round(a / (Math.PI * 2)) * Math.PI * 2;
+            g.rotation.x = wrap(g.rotation.x); g.rotation.z = wrap(g.rotation.z);
+            d.restX = (Math.random() - 0.5) * 0.16; d.restZ = (Math.random() - 0.5) * 0.16;
+            effects.sparks(d.pos, new THREE.Vector3(0, 1, 0), 20, 0xffa040, 4);
+          }
+        } else {
+          const k = 1 - Math.exp(-10 * dt);
+          g.rotation.x += (d.restX - g.rotation.x) * k; g.rotation.z += (d.restZ - g.rotation.z) * k;
+        }
         g.position.copy(d.pos); continue;
       }
       d.phase += dt;
@@ -195,7 +210,7 @@ export function createEnemies(scene, world, maze, effects, audio, { count = 8 } 
         // player capsule: segment from feet+0.2 to eye
         const py = Math.max(player.pos.y + 0.2, Math.min(eye.y, b.pos.y));
         if (active && Math.hypot(b.pos.x - player.pos.x, b.pos.y - py, b.pos.z - player.pos.z) < 0.5) {
-          api.onPlayerHit && api.onPlayerHit(BOLT_DMG, b.origin); gone = true;
+          api.onPlayerHit && api.onPlayerHit(CFG.sentryDamage, b.origin); gone = true;
         } else if (world.solidAt(b.pos)) {
           effects.sparks(b.pos, b.vel.clone().normalize().negate(), 14, 0xff7a3a, 4); gone = true;
         }

@@ -3,3 +3,6 @@ dist/
 www/
 design/royale.html
 .vercel/
+contracts/out/
+contracts/cache/
+contracts/broadcast/

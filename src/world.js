@@ -6,7 +6,10 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { urls } from './assets.js';
 
-export const CELL = 7, THICK = 1.4, HEIGHT = 7;
+export let CELL = 7;
+export const THICK = 1.4, HEIGHT = 7;
+/** Called once before the world is built (admin setting). */
+export function setCellSize(v) { CELL = v; }
 export const cellCenter = (x, z) => new THREE.Vector3(x * CELL, 0, -z * CELL);
 
 /** Box with UVs in world metres (tileM per texture repeat), so textures keep their scale on every wall. */
@@ -172,7 +175,7 @@ export function buildWorld(scene, maze) {
   }));
   sky.frustumCulled = false;
   scene.add(sky);
-  scene.fog = new THREE.FogExp2(new THREE.Color(0.74, 0.77, 0.86), 0.007);
+  scene.fog = new THREE.FogExp2(new THREE.Color(0.74, 0.77, 0.86), 0.007 * Math.min(1, 84 / (Math.max(W, D) * CELL)));
   scene.background = new THREE.Color(0.8, 0.82, 0.9);
 
   scene.add(new THREE.HemisphereLight(0xc4d2ff, 0xf0dce4, 2.5));
@@ -200,7 +203,7 @@ export function buildWorld(scene, maze) {
         float fr = pow(1.0 - abs(dot(normalize(vNormal), normalize(vViewPosition))), 3.0);
         gl_FragColor.rgb += vec3(1.0, 0.55, 0.25) * fr * 0.5;
         gl_FragColor.rgb += vec3(1.0, 0.5, 0.22) * 0.35 * (1.0 - smoothstep(0.0, 5.0, vMY));
-        gl_FragColor.a = clamp(gl_FragColor.a + fr * 0.2, 0.0, 1.0) * (1.0 - 0.5 * smoothstep(50.0, ${'$'}{MONO_H.toFixed(1)}, vMY));
+        gl_FragColor.a = clamp(gl_FragColor.a + fr * 0.2, 0.0, 1.0) * (1.0 - 0.5 * smoothstep(50.0, ${MONO_H.toFixed(1)}, vMY));
         #include <dithering_fragment>`);
   };
   const shellGeo = new THREE.BoxGeometry(3, MONO_H, 3); shellGeo.translate(0, MONO_H / 2, 0);
@@ -213,6 +216,12 @@ export function buildWorld(scene, maze) {
   core.position.copy(pillar.position); core.renderOrder = 1;
   scene.add(core, pillar);
   const pillarMat = shellMat;
+  // shockwave ring for the moment you reach it
+  const ringMat = new THREE.MeshBasicMaterial({ color: srgb(1, 0.5, 0.18).multiplyScalar(2.2), transparent: true, opacity: 0, depthWrite: false, fog: false, side: THREE.DoubleSide });
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.92, 1, 96), ringMat);
+  ring.rotation.x = -Math.PI / 2; ring.position.set(gc.x, 0.06, gc.z); ring.visible = false;
+  scene.add(ring);
+  let surge = -1; // seconds since the monolith was reached, -1 = idle
   // pale motes drifting up around it, and a soft pink light on the surrounding walls
   const MOTES = 60, mp = new Float32Array(MOTES * 3), mseed = [];
   for (let i = 0; i < MOTES; i++) mseed.push({ a: Math.random() * 6.28, r: 2 + Math.random() * 1.8, y: Math.random() * 30, v: 0.3 + Math.random() * 0.6 });
@@ -330,9 +339,19 @@ export function buildWorld(scene, maze) {
     const pulse = 0.5 + 0.5 * Math.sin(t * 1.1);
     pillarMat.emissiveIntensity = 0.28 + pulse * 0.16;
     coreMat.opacity = 0.45 + pulse * 0.2;
+    if (surge >= 0) {
+      surge += dt;
+      const s = surge, flash = Math.exp(-s * 1.6) * (1 + 0.35 * Math.sin(s * 18) * Math.exp(-s * 2.5));
+      pillarMat.emissiveIntensity += flash * 2.4;
+      coreMat.opacity = Math.min(1, coreMat.opacity + flash * 0.6);
+      core.scale.set(1 + flash * 0.5, 1, 1 + flash * 0.5);
+      glow.intensity += flash * 260;
+      const r = 1.5 + s * 26;
+      ring.visible = s < 2.4; ring.scale.setScalar(r); ringMat.opacity = Math.max(0, 1 - s / 2.4) * 0.9;
+    }
     glow.intensity = 24 + pulse * 12;
     for (let i = 0; i < MOTES; i++) {
-      const m = mseed[i]; m.y += m.v * dt; m.a += dt * 0.15;
+      const m = mseed[i]; const boost = surge >= 0 ? 1 + 9 * Math.exp(-surge * 1.2) : 1; m.y += m.v * dt * boost; m.a += dt * 0.15 * boost;
       if (m.y > 30) { m.y = 0; m.r = 2 + Math.random() * 1.8; }
       mp[i * 3] = gc.x + Math.cos(m.a) * m.r; mp[i * 3 + 1] = m.y; mp[i * 3 + 2] = gc.z + Math.sin(m.a) * m.r;
     }
@@ -341,6 +360,8 @@ export function buildWorld(scene, maze) {
 
   return {
     boxes, collide, reachedGoal, update, raycast, los, solidAt, cellOf, neighbours, path,
+    /** The run is over: the monolith surges, a ring rolls out across the maze. */
+    celebrate() { surge = 0; },
     spawn: cellCenter(0, 0), goal: new THREE.Vector3(gc.x, 0, gc.z), center, sunDir, sun,
     /** Shadow quality: 0 = off, else the shadow map size. */
     setShadows(size) {

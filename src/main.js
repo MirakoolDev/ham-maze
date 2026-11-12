@@ -12,10 +12,14 @@ import { createAudio } from './audio.js';
 import { createPost } from './post.js';
 import { createSettings } from './settings.js';
 import { installUiAssets, urls } from './assets.js';
+import { CFG } from './config.js';
+import { setCellSize, CELL } from './world.js';
 
-// Same size as the Unity scene (mazeWidth / mazeDepth = 12).
-const MAZE_W = 12, MAZE_D = 12, DRONES = 8;
-const DMG_BODY = 20, DMG_CRIT = 45, MAX_HP = 100, REGEN_DELAY = 4.5, REGEN_RATE = 22;
+// Size and difficulty come from the admin settings (defaults match the Unity scene: 12 x 12 cells of 7 m, 8 sentries).
+const MAZE_W = CFG.mazeSize, MAZE_D = CFG.mazeSize, DRONES = CFG.sentries;
+const DMG_BODY = 20, DMG_CRIT = 45, MAX_HP = CFG.playerHealth, REGEN_DELAY = 4.5, REGEN_RATE = 22;
+setCellSize(CFG.cellSize);
+const HALF = MAZE_W * CELL / 2; // centre to edge
 
 installUiAssets();
 
@@ -44,7 +48,7 @@ const envMap = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(
 scene.environment = envMap; scene.environmentIntensity = 0.12;
 
 const seed = dailySeed();
-const maze = generateMaze(MAZE_W, MAZE_D, seed);
+const maze = generateMaze(MAZE_W, MAZE_D, seed, CFG.loops);
 const world = buildWorld(scene, maze);
 const effects = createEffects(scene);
 const audio = createAudio();
@@ -52,7 +56,7 @@ const input = createInput(canvas);
 const player = new Player(camera, world);
 const weapon = createWeapon(envMap);
 const enemies = createEnemies(scene, world, maze, effects, audio, { count: DRONES });
-const hud = createHud({ magSize: MAG });
+const hud = createHud({ magSize: CFG.magSize });
 hud.setSeed(seed);
 hud.setKills(0, DRONES);
 const touchUi = document.getElementById('touch');
@@ -112,9 +116,9 @@ function resume() {
 }
 function complete() {
   setMode('complete'); state.timerOn = false; input.unlock();
-  audio.win();
-  hud.debrief({ time: state.elapsed, walked: player.walked, retries: state.retries, kills: enemies.kills, acc: weapon.shots ? weapon.hits / weapon.shots : 0 });
-  hud.show(false); hud.setScreen('complete');
+  audio.win(); world.celebrate();
+  const stats = { time: state.elapsed, walked: player.walked, retries: state.retries, kills: enemies.kills, acc: weapon.shots ? weapon.hits / weapon.shots : 0 };
+  setTimeout(() => { hud.debrief(stats); hud.show(false); hud.setScreen('complete'); }, 2200);
 }
 function die() {
   setMode('dead'); input.unlock();
@@ -231,7 +235,7 @@ function tick(dt, inp) {
     }
   } else if (state.mode === 'title') {
     // slow orbit just above the walls, the monolith against the sky, framed right of the title panel
-    const a = state.t * 0.04, g = world.goal, R = 30;
+    const a = state.t * 0.04, g = world.goal, R = HALF * 0.72;
     camera.position.set(g.x + Math.cos(a) * R, 10.5 + Math.sin(state.t * 0.13) * 1.2, g.z + Math.sin(a) * R);
     const shift = innerWidth > 760 ? Math.min(0.42, 460 / innerWidth) * 11 : 0; // aim left of the pillar so it sits in the open area
     camera.lookAt(g.x - Math.sin(a) * shift, 11, g.z + Math.cos(a) * shift);
@@ -247,7 +251,7 @@ function tick(dt, inp) {
   // music swells as you close in on the monolith: a quarter volume at the far corners, full at the foot of it
   if (musicOn) {
     const d = Math.hypot(camera.position.x - world.goal.x, camera.position.z - world.goal.z);
-    const near = state.mode === 'play' || state.mode === 'paused' ? 1 - Math.min(1, d / 60) : 0.7;
+    const near = state.mode === 'play' || state.mode === 'paused' ? 1 - Math.min(1, d / (HALF * 1.42)) : 0.7;
     musicMix += (0.25 + 0.75 * near * near - musicMix) * Math.min(1, dt * 1.5);
     music.volume = Math.min(1, musicLevel * musicMix);
   }

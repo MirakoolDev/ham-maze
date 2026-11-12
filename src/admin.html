@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>HAM Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root { --bg: #050505; --panel: #0e0e10; --line: #222226; --ink: #f4f4f5; --muted: #8b8b93; --dim: #55555c; --pink: #ff8fa6; --blue: #9fb4e0; --orange: #ff7a2e; --ok: #7ed6a7; --bad: #ff6b6b; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 400 14px/1.5 Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 max(16px, env(safe-area-inset-right)) 64px max(16px, env(safe-area-inset-left)); }
+header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 0; border-bottom: 1px solid var(--line); margin-bottom: 28px; }
+.brand { display: flex; align-items: baseline; gap: 12px; }
+.brand b { font-weight: 600; font-size: 18px; letter-spacing: .02em; }
+.label, .brand span, th { font-size: 11px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+button, .btn { font: 600 12px/1 Inter, sans-serif; letter-spacing: .12em; text-transform: uppercase; border: 1px solid var(--ink); background: var(--ink); color: #050505; border-radius: 0; padding: 0 18px; min-height: 40px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+button.ghost, .btn.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+button:disabled { opacity: .35; cursor: not-allowed; }
+button:focus-visible, input:focus-visible, .btn:focus-visible { outline: 2px solid var(--pink); outline-offset: 2px; }
+.gate { max-width: 520px; margin: 12vh auto 0; text-align: center; display: grid; gap: 18px; justify-items: center; }
+.gate h1 { font-weight: 600; font-size: 28px; margin: 0; letter-spacing: -.01em; }
+.gate p { color: var(--muted); margin: 0; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 24px; align-items: start; }
+.card { background: var(--panel); border: 1px solid var(--line); padding: 22px; display: grid; gap: 18px; }
+.card h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.row { display: grid; grid-template-columns: 130px minmax(0, 1fr) 64px; align-items: center; gap: 12px; }
+.row .unit { color: var(--dim); font-size: 12px; }
+input[type=range] { width: 100%; accent-color: var(--orange); }
+input[type=number], input[type=text] { width: 100%; background: #000; border: 1px solid var(--line); color: var(--ink); font: 500 14px Inter, sans-serif; padding: 9px 10px; border-radius: 0; font-variant-numeric: tabular-nums; }
+.stack { display: grid; gap: 8px; }
+.inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.inline > input { flex: 1; min-width: 160px; }
+.choice { display: grid; gap: 8px; }
+.choice label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; color: var(--muted); }
+.choice input { accent-color: var(--orange); margin-top: 3px; }
+.choice b { color: var(--ink); font-weight: 500; }
+canvas { width: 100%; height: auto; aspect-ratio: 1; display: block; background: #0a0a0c; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.stats div { background: var(--panel); padding: 12px; display: grid; gap: 4px; }
+.stats b { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 9px 0; border-bottom: 1px solid var(--line); }
+td.addr { font-family: ui-monospace, monospace; font-size: 12px; }
+.note { color: var(--muted); font-size: 13px; }
+.status { font-size: 13px; min-height: 20px; }
+.status.ok { color: var(--ok); } .status.bad { color: var(--bad); }
+.pill { font: 500 11px/1 Inter; letter-spacing: .1em; text-transform: uppercase; padding: 6px 9px; border: 1px solid var(--line); color: var(--muted); }
+.pill.on { color: var(--ok); border-color: rgba(126, 214, 167, .4); }
+.mono { font-family: ui-monospace, monospace; font-size: 12px; overflow-wrap: anywhere; }
+.full { grid-column: 1 / -1; }
+@media (max-width: 900px) { .grid { grid-template-columns: minmax(0, 1fr); } .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .row { grid-template-columns: 100px minmax(0, 1fr) 56px; } }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand"><b>HAM</b><span>Admin</span></div>
+    <div class="inline"><span class="pill" id="netPill">Not connected</span><button class="ghost" id="walletBtn" type="button">Connect wallet</button></div>
+  </header>
+
+  <section class="gate" id="gate">
+    <span class="label">Restricted</span>
+    <h1>Sign in with your wallet</h1>
+    <p>Connect the owner wallet and sign a message to open the settings. The signature costs nothing. Saving a change sends a transaction that only the contract's owner can make.</p>
+    <button id="signBtn" type="button">Connect and sign</button>
+    <div class="status" id="gateStatus" role="status"></div>
+  </section>
+
+  <main id="app" hidden>
+    <div class="grid">
+      <section class="card" aria-labelledby="mazeH">
+        <div class="inline" style="justify-content:space-between"><h2 id="mazeH">Maze settings</h2><span class="pill" id="cfgSource">Defaults</span></div>
+        <div class="stack" id="fields"></div>
+        <div class="choice" role="radiogroup" aria-label="When the change applies">
+          <span class="label">Applies</span>
+          <label><input type="radio" name="when" value="tomorrow" checked><span><b>From tomorrow</b>, 00:00 UTC. Today's maze stays fair for everyone already playing.</span></label>
+          <label><input type="radio" name="when" value="now"><span><b>Right away</b>. Only allowed before anyone has entered today.</span></label>
+        </div>
+        <div class="inline">
+          <button id="saveCfg" type="button">Save to contract</button>
+          <a class="btn ghost" id="previewLink" target="_blank" rel="noopener">Preview in game</a>
+          <button class="ghost" id="resetCfg" type="button">Reset</button>
+        </div>
+        <div class="status" id="cfgStatus" role="status"></div>
+      </section>
+
+      <section class="card" aria-labelledby="prevH">
+        <div class="inline" style="justify-content:space-between"><h2 id="prevH">Preview</h2><span class="label" id="prevSeed"></span></div>
+        <canvas id="map" width="900" height="900" aria-label="Top-down view of the maze with these settings"></canvas>
+        <div class="stats">
+          <div><span class="label">Across</span><b id="sAcross">-</b></div>
+          <div><span class="label">Shortest route</span><b id="sRoute">-</b></div>
+          <div><span class="label">Dead ends</span><b id="sDead">-</b></div>
+          <div><span class="label">Sentry density</span><b id="sDensity">-</b></div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="ecoH">
+        <h2 id="ecoH">Economy and roles</h2>
+        <div class="stack"><span class="label">Contract</span>
+          <div class="inline"><input type="text" id="contractIn" placeholder="0x… HamDailyRun address" spellcheck="false"><button class="ghost" id="contractSave" type="button">Use</button></div>
+          <span class="note" id="contractNote"></span>
+        </div>
+        <div class="stack"><span class="label">Entry fee (ETH)</span><div class="inline"><input type="number" id="feeIn" min="0" max="1" step="0.0001"><button class="ghost" data-act="fee" type="button">Save</button></div></div>
+        <div class="stack"><span class="label">Holder NFT (free run + 10% bonus)</span><div class="inline"><input type="text" id="holderIn" placeholder="0x… or empty to turn off" spellcheck="false"><button class="ghost" data-act="holder" type="button">Save</button></div></div>
+        <div class="stack"><span class="label">Referee (signs run times)</span><div class="inline"><input type="text" id="refereeIn" spellcheck="false"><button class="ghost" data-act="referee" type="button">Save</button></div></div>
+        <div class="stack"><span class="label">Treasury</span><div class="inline"><input type="text" id="treasuryIn" spellcheck="false"><button class="ghost" data-act="treasury" type="button">Save</button></div></div>
+        <div class="inline"><span class="label">Entries</span><span class="pill" id="pausedPill">Open</span><button class="ghost" data-act="pause" type="button" id="pauseBtn">Pause entries</button></div>
+        <div class="status" id="ecoStatus" role="status"></div>
+      </section>
+
+      <section class="card" aria-labelledby="dayH">
+        <h2 id="dayH">Today</h2>
+        <div class="stats">
+          <div><span class="label">Pot</span><b id="dPot">-</b></div>
+          <div><span class="label">Runs</span><b id="dEntries">-</b></div>
+          <div><span class="label">Treasury owed</span><b id="dTreasury">-</b></div>
+          <div><span class="label">Next config</span><b id="dNext">-</b></div>
+        </div>
+        <table><thead><tr><th>#</th><th>Player</th><th>Time</th></tr></thead><tbody id="topRows"><tr><td colspan="3" class="note">No finished runs yet.</td></tr></tbody></table>
+        <div class="inline"><button class="ghost" data-act="settle" type="button">Settle yesterday</button><button class="ghost" data-act="withdraw" type="button">Send treasury</button><button class="ghost" id="refresh" type="button">Refresh</button></div>
+        <div class="status" id="dayStatus" role="status"></div>
+      </section>
+    </div>
+  </main>
+</div>
+<!--JS-->
+</body>
+</html>

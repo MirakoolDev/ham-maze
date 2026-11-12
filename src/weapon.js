@@ -2,11 +2,13 @@
 import * as THREE from 'three';
 import { buildGun, SIGHT_Y } from './gunmodel.js';
 
-export const MAG = 30;
+import { CFG } from './config.js';
+export let MAG = 30;
 const RESERVE = 150, RPM = 620, RELOAD_T = 1.9;
 const HIP = new THREE.Vector3(0.16, -0.215, -0.6), HIP_YAW = 0.13, HIP_PITCH = 0.03;
 const ADS = new THREE.Vector3(0, -SIGHT_Y, -0.21);
 export function createWeapon(envMap) {
+  MAG = CFG.magSize;
   const scene = new THREE.Scene();
   scene.environment = envMap; scene.environmentIntensity = 0.6;
   const cam = new THREE.PerspectiveCamera(52, 1, 0.01, 10);

@@ -8,6 +8,7 @@
     "build": "node build.mjs"
   },
   "dependencies": {
+    "ethers": "^6.13.4",
     "three": "^0.180.0"
   },
   "devDependencies": {
