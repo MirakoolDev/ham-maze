@@ -1,0 +1,464 @@
+<title>HAM Maze Royale</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: one reading column on a pale-sky ground; the royale simulator breaks out wide, beside its event log. */
+@font-face { font-family: 'Bread Island'; src: url({{BREAD}}) format('opentype'); font-display: swap; }
+@font-face { font-family: 'Cabinet Grotesk'; src: url({{CABINET}}) format('opentype'); font-display: swap; }
+:root {
+  --bg: #eceff6; --paper: #fbf9f5; --ink: #2a2733; --muted: #676477; --line: rgba(42, 39, 51, .12);
+  --pink: #e0708a; --pink-soft: #f6d3dc; --blue: #7d97c8; --blue-soft: #d6e1f4; --cream: #f6e4b4; --haze: rgba(176, 168, 196, .55);
+  --f-display: 'Bread Island', Georgia, serif;
+  --f-body: 'Cabinet Grotesk', 'Segoe UI', system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #1c1a24; --paper: #25222f; --ink: #f2ede5; --muted: #a9a4b8; --line: rgba(255, 255, 255, .1);
+  --pink: #ff8fa6; --pink-soft: #4a2e3a; --blue: #9fb4e0; --blue-soft: #2b3346; --cream: #f6e4b4; --haze: rgba(120, 110, 150, .5); color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #1c1a24; --paper: #25222f; --ink: #f2ede5; --muted: #a9a4b8; --line: rgba(255, 255, 255, .1);
+  --pink: #ff8fa6; --pink-soft: #4a2e3a; --blue: #9fb4e0; --blue-soft: #2b3346; --cream: #f6e4b4; --haze: rgba(120, 110, 150, .5); color-scheme: dark; }
+
+body { background: var(--bg); color: var(--ink); font: 500 17px/1.55 var(--f-body); margin: 0; }
+.wrap { max-width: 1060px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.col { max-width: 720px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 400; text-wrap: balance; margin: 0; }
+h2 { font-size: clamp(30px, 4.4vw, 42px); line-height: 1.05; }
+h3 { font-size: 22px; line-height: 1.15; }
+p { margin: 0; }
+a { color: inherit; }
+.eyebrow { font: 500 13px/1 var(--f-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+section { padding-block: clamp(48px, 8vw, 88px); border-top: 1px solid var(--line); }
+section > .wrap { display: grid; gap: 28px; }
+.lead { font-size: 19px; color: var(--muted); max-width: 62ch; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* hero: the monolith screenshot with the name set over the sky */
+.hero { position: relative; border-top: 0; padding-block: 0; }
+.hero-img { position: relative; overflow: hidden; background: #c9d4ea; }
+.hero-img img { display: block; width: 100%; height: clamp(360px, 62vw, 620px); object-fit: cover; object-position: 50% 35%; }
+.hero-img::after { content: ""; position: absolute; inset: auto 0 0; height: 45%; background: linear-gradient(transparent, rgba(42, 39, 51, .55)); }
+.hero-copy { position: absolute; left: 0; right: 0; bottom: clamp(20px, 5vw, 48px); z-index: 1; color: #fffaf2; }
+.brand { display: flex; align-items: center; gap: 14px; }
+.logo { width: 52px; height: 52px; flex: none; background: currentColor; -webkit-mask: url({{LOGO}}) center / contain no-repeat; mask: url({{LOGO}}) center / contain no-repeat; }
+.hero h1 { font-size: clamp(56px, 11vw, 120px); line-height: .9; color: var(--cream); }
+.hero .tag { font: 500 14px/1.2 var(--f-body); letter-spacing: .06em; text-transform: uppercase; opacity: .9; }
+.hero p.big { font-size: clamp(18px, 2.3vw, 23px); max-width: 34ch; margin-top: 14px; text-shadow: 0 1px 12px rgba(42, 39, 51, .45); }
+.cta { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin-top: 20px; }
+.btn { display: inline-flex; align-items: center; min-height: 46px; padding: 0 22px; border-radius: 12px; background: var(--cream); color: #2a2733; font: 500 16px/1 var(--f-body); text-decoration: none; }
+.btn:focus-visible, button:focus-visible { outline: 2px solid var(--pink); outline-offset: 3px; }
+.cta small { font-size: 13px; opacity: .85; }
+
+/* cards for the three daily-run facts */
+.trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.fact { background: var(--paper); border-radius: 16px; padding: 20px; display: grid; gap: 8px; align-content: start; }
+.fact b { font: 400 21px/1.15 var(--f-display); }
+.fact p { color: var(--muted); font-size: 15.5px; }
+.shot { border-radius: 16px; overflow: hidden; }
+.shot img { display: block; width: 100%; height: auto; }
+.cap { font-size: 14px; color: var(--muted); margin-top: 8px; }
+.split { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 28px; align-items: center; }
+
+/* the match sequence: a real order, so it is numbered */
+.steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); }
+.steps li { padding: 18px 18px 20px 0; border-bottom: 1px solid var(--line); display: grid; gap: 6px; align-content: start; }
+.steps li + li { padding-left: 18px; border-left: 1px solid var(--line); }
+.steps li:nth-child(3n + 1) { padding-left: 0; border-left: 0; }
+.steps .n { font: 400 30px/1 var(--f-display); color: var(--pink); }
+.steps b { font-weight: 500; font-size: 18px; }
+.steps p { color: var(--muted); font-size: 15px; }
+
+/* simulator */
+.sim { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; background: var(--paper); border-radius: 20px; padding: 18px; }
+.board { position: relative; }
+canvas { display: block; width: 100%; height: auto; aspect-ratio: 1; max-width: 100%; border-radius: 12px; background: var(--bg); }
+.hud { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; justify-content: space-between; gap: 8px; pointer-events: none; }
+.pill { background: rgba(42, 39, 51, .72); color: #fffaf2; border-radius: 999px; padding: 6px 12px; font-size: 13px; }
+.side { display: grid; grid-template-rows: auto auto 1fr auto; gap: 14px; min-width: 0; }
+.players { display: grid; gap: 6px; }
+.pl { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; align-items: center; gap: 10px; font-size: 15px; }
+.pl i { width: 12px; height: 12px; border-radius: 50%; }
+.pl span:last-child { color: var(--muted); font-size: 13px; }
+.pl.out { opacity: .45; text-decoration: line-through; }
+.log { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; align-content: start; font-size: 14px; color: var(--muted); max-height: 260px; overflow: hidden; }
+.log li b { color: var(--ink); font-weight: 500; }
+.controls { display: flex; gap: 8px; flex-wrap: wrap; }
+.controls button { font: 500 14px/1 var(--f-body); min-height: 38px; padding: 0 14px; border-radius: 10px; border: 1.5px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; }
+.controls button.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+/* power-ups and guns */
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.pu { border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: grid; gap: 6px; align-content: start; }
+.pu header { display: flex; align-items: center; gap: 10px; }
+.pu svg { width: 26px; height: 26px; flex: none; stroke: var(--pink); fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.pu b { font: 400 20px/1 var(--f-display); }
+.pu p { color: var(--muted); font-size: 15px; }
+.pu .meta { font-size: 13px; color: var(--ink); }
+.gun { background: var(--paper); border: 0; }
+.gun .tier { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--blue); }
+
+/* money table */
+.tablebox { overflow-x: auto; background: var(--paper); border-radius: 16px; }
+table { border-collapse: collapse; width: 100%; min-width: 620px; font-size: 15.5px; }
+th, td { text-align: left; padding: 14px 18px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 500 13px/1.2 var(--f-body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+tr:last-child td { border-bottom: 0; }
+td:first-child { font-weight: 500; white-space: nowrap; }
+.bar { display: flex; height: 34px; border-radius: 10px; overflow: hidden; font-size: 13px; }
+.bar span { display: flex; align-items: center; padding-left: 10px; white-space: nowrap; overflow: hidden; color: #2a2733; }
+.note { font-size: 14px; color: var(--muted); }
+
+.trust { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.trust div { display: grid; gap: 6px; }
+.trust p { color: var(--muted); font-size: 15.5px; }
+.road { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.road li { border-top: 3px solid var(--line); padding-top: 12px; display: grid; gap: 6px; align-content: start; }
+.road li.now { border-top-color: var(--pink); }
+.road p { color: var(--muted); font-size: 15px; }
+.qs { margin: 0; padding-left: 20px; display: grid; gap: 8px; color: var(--muted); }
+.qs b { color: var(--ink); font-weight: 500; }
+footer { padding-block: 40px 56px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); }
+
+@media (max-width: 860px) {
+  .sim { grid-template-columns: minmax(0, 1fr); }
+  .split, .trust { grid-template-columns: minmax(0, 1fr); }
+  .trio, .grid3 { grid-template-columns: minmax(0, 1fr); }
+  .steps { grid-template-columns: minmax(0, 1fr); }
+  .steps li, .steps li + li { padding-left: 0; border-left: 0; }
+  .road { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<header class="hero">
+  <div class="hero-img"><img src="{{HERO}}" alt="The pink monolith rising out of the pastel maze under a pale blue sky"></div>
+  <div class="hero-copy"><div class="wrap">
+    <div class="brand"><i class="logo" aria-hidden="true"></i><span class="tag">Home&rsquo;s a Maze &middot; Robinhood Chain</span></div>
+    <h1>Maze Royale</h1>
+    <p class="big">One maze a day, the same for everyone. Pay to run it, race to the monolith and split the pot. Or drop into a four-player royale and be first to the centre.</p>
+    <div class="cta"><a class="btn" href="https://claude.ai/artifact/9qRcYPkW5dqTqaD6cYTHrs" target="_blank" rel="noopener">Play today&rsquo;s maze</a><small>Single-player browser build. Wallet and pot come next.</small></div>
+  </div></div>
+</header>
+
+<section id="daily">
+  <div class="wrap">
+    <div class="col" style="display:grid;gap:14px">
+      <div class="eyebrow">Mode 1 &middot; Playable now</div>
+      <h2>The daily run</h2>
+      <p class="lead">The maze from the Unity game, rebuilt for the browser in first person. It changes at 00:00 UTC and everyone gets the same layout, so the leaderboard is a fair fight.</p>
+    </div>
+    <div class="split">
+      <figure class="shot" style="margin:0"><img src="{{CORRIDOR}}" alt="A corridor of pink and blue concrete walls with a floating sentry and the player's carbine"><figcaption class="cap">A sentry drifting down a corridor. Its eye is the weak spot.</figcaption></figure>
+      <div class="trio" style="grid-template-columns:minmax(0,1fr)">
+        <div class="fact"><b>Same maze for everyone</b><p>12 &times; 12 cells, 7 m each, generated from the date with the same algorithm as the Unity build. 143 openings, one route that matters.</p></div>
+        <div class="fact"><b>Sentries guard it</b><p>Eight floating sentries patrol. They hunt on sight or on the sound of a shot, part their shells and fire. A hit to the eye does 45 damage, the body 20.</p></div>
+        <div class="fact"><b>Your time is your score</b><p>The clock starts on your first metre and stops when you touch the monolith. Fastest three times split the day&rsquo;s pot.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="royale">
+  <div class="wrap">
+    <div class="col" style="display:grid;gap:14px">
+      <div class="eyebrow">Mode 2 &middot; Proposed</div>
+      <h2>Maze Royale</h2>
+      <p class="lead">Four players start in the four corners of the same maze. The sentries are still there. The first to touch the monolith wins, and anyone still standing when the others fall wins too.</p>
+    </div>
+    <ol class="steps">
+      <li><span class="n">1</span><b>Join a lobby</b><p>Pay the seat fee. A lobby holds four players.</p></li>
+      <li><span class="n">2</span><b>Wait up to 60 seconds</b><p>Seats still empty when the timer ends are filled by bots, so a match always starts.</p></li>
+      <li><span class="n">3</span><b>Spawn in a random corner</b><p>Corners are drawn with onchain randomness, so nobody can pick the short route.</p></li>
+      <li><span class="n">4</span><b>Race, dodge, fight</b><p>Sentries patrol, crates hold power-ups, and you can shoot your rivals.</p></li>
+      <li><span class="n">5</span><b>The haze closes in</b><p>Every 40 seconds the outer ring of cells fills with haze that drains health, pushing everyone toward the centre.</p></li>
+      <li><span class="n">6</span><b>Monolith or last alive</b><p>First touch wins the match. If everyone else is down, the last player standing wins.</p></li>
+    </ol>
+
+    <div class="sim" aria-label="Maze Royale simulation">
+      <div class="board">
+        <canvas id="cv" width="720" height="720" aria-label="Top-down view of a 12 by 12 maze with four players racing to the centre"></canvas>
+        <div class="hud"><span class="pill num" id="alive">4 alive</span><span class="pill num" id="hazeT">Haze in 40 s</span></div>
+      </div>
+      <div class="side">
+        <div style="display:grid;gap:6px"><div class="eyebrow">Match <span class="num" id="matchNo">1</span></div><h3 id="status">Racing to the monolith</h3></div>
+        <div class="players" id="players"></div>
+        <ul class="log" id="log" aria-live="polite"></ul>
+        <div class="controls">
+          <button type="button" id="restart">New match</button>
+          <button type="button" id="speed" aria-pressed="false">2&times; speed</button>
+        </div>
+      </div>
+    </div>
+    <p class="note">A top-down sketch of the match running on its own: a random maze, bots on every seat, crates, sentries and the closing haze. In the game it plays in first person, like the daily run.</p>
+  </div>
+</section>
+
+<section id="powerups">
+  <div class="wrap">
+    <div class="col" style="display:grid;gap:14px">
+      <div class="eyebrow">Crates</div>
+      <h2>Power-ups</h2>
+      <p class="lead">Crates sit in the corridors. Driving through one gives you a random power-up, like the item boxes in a kart racer. You hold one at a time, so you choose between using it now and saving it.</p>
+    </div>
+    <div class="grid3">
+      <article class="pu"><header><svg viewBox="0 0 24 24"><path d="M4 12h9M10 7l5 5-5 5"/><path d="M19 4v16"/></svg><b>Blink</b></header><p>Teleport to a random open cell up to three cells closer to the monolith.</p></article>
+      <article class="pu"><header><svg viewBox="0 0 24 24"><path d="M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7"/></svg><b>Freeze</b></header><p>The nearest rival in your line of sight stops dead for 3 seconds.</p></article>
+      <article class="pu"><header><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/><circle cx="5" cy="12" r="2"/></svg><b>Steal</b></header><p>Take the power-up a rival is holding. If they hold nothing, take 10 of their rounds.</p></article>
+      <article class="pu"><header><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.9 4.9a10 10 0 0 0 0 14.2M19.1 4.9a10 10 0 0 1 0 14.2"/></svg><b>Sonar</b></header><p>See every rival on your compass for 6 seconds. Once per match.</p><span class="meta">Single use</span></article>
+      <article class="pu"><header><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg><b>Shield</b></header><p>Blocks the next hit, Freeze or Steal aimed at you.</p></article>
+      <article class="pu"><header><svg viewBox="0 0 24 24"><circle cx="8" cy="8" r="3"/><circle cx="16" cy="16" r="3" stroke-dasharray="2 2"/><path d="M10 10l4 4"/></svg><b>Decoy</b></header><p>A copy of you walks off another way. Sentries and rivals&rsquo; Sonar follow it.</p></article>
+    </div>
+  </div>
+</section>
+
+<section id="guns">
+  <div class="wrap">
+    <div class="col" style="display:grid;gap:14px">
+      <div class="eyebrow">NFTs</div>
+      <h2>Guns are power-ups you keep</h2>
+      <p class="lead">Everyone starts with the K-7 carbine. Gun NFTs swap raw damage for a tool with a few charges per run, so holding one gives you options rather than a win.</p>
+    </div>
+    <div class="grid3">
+      <article class="pu gun"><span class="tier">Common</span><header><b>Marker</b></header><p>Fires pink paint that stays on the wall. Mark dead ends and the turns you took. Your marks last all day, across every attempt.</p><span class="meta">Unlimited paint &middot; 12 damage</span></article>
+      <article class="pu gun"><span class="tier">Rare</span><header><b>Frost dart</b></header><p>A dart that freezes a rival or a sentry for 3 seconds.</p><span class="meta">3 charges per run</span></article>
+      <article class="pu gun"><span class="tier">Rare</span><header><b>Pulse</b></header><p>A sonar round. Where it lands, rivals and sentries show through walls for 4 seconds.</p><span class="meta">4 charges per run</span></article>
+      <article class="pu gun"><span class="tier">Epic</span><header><b>Blinker</b></header><p>Teleports you to where the bolt lands, as far as you can see.</p><span class="meta">1 charge per run</span></article>
+      <article class="pu gun"><span class="tier">Epic</span><header><b>Snare</b></header><p>Drops a trap in a corridor. The first rival or sentry through it is held for 4 seconds.</p><span class="meta">2 traps per run</span></article>
+      <article class="pu gun"><span class="tier">Free</span><header><b>K-7 carbine</b></header><p>The standard rifle. 30 rounds, 620 rounds a minute, a red-dot sight.</p><span class="meta">Everyone has one</span></article>
+    </div>
+  </div>
+</section>
+
+<section id="money">
+  <div class="wrap">
+    <div class="col" style="display:grid;gap:14px">
+      <div class="eyebrow">Onchain &middot; Robinhood Chain, chain ID 4663</div>
+      <h2>Pots and payouts</h2>
+      <p class="lead">This follows the rules already proven in Sherwood: a daily pot, a settle after midnight UTC, top three paid, a share rolled into tomorrow, and a week to claim.</p>
+    </div>
+    <div style="display:grid;gap:10px">
+      <div class="eyebrow">Daily run pot</div>
+      <div class="bar num" role="img" aria-label="Daily pot split: 1st 50 percent, 2nd 20 percent, 3rd 10 percent, treasury and buyback 10 percent, rolls to tomorrow 10 percent">
+        <span style="flex:50;background:var(--pink)">1st &middot; 50%</span><span style="flex:20;background:#f2a9b9">2nd &middot; 20%</span><span style="flex:10;background:var(--pink-soft)">3rd</span><span style="flex:10;background:var(--blue)">Treasury</span><span style="flex:10;background:var(--blue-soft)">Rollover</span>
+      </div>
+      <p class="note">1st 50%, 2nd 20%, 3rd 10%, treasury and buyback 10%, rollover to tomorrow 10%.</p>
+    </div>
+    <div class="tablebox"><table>
+      <thead><tr><th>Rule</th><th>Daily run</th><th>Maze Royale</th></tr></thead>
+      <tbody>
+        <tr><td>Entry</td><td>A fee per attempt, paid in ETH. Every attempt adds to today&rsquo;s pot.</td><td>A seat fee per match. Bot seats pay nothing and add nothing.</td></tr>
+        <tr><td>Who wins</td><td>The fastest three times when the day settles.</td><td>First to the monolith, or the last player standing.</td></tr>
+        <tr><td>Split</td><td>50 / 20 / 10, then 10% treasury and 10% rollover.</td><td>Winner 80%, 10% into the daily pot, 10% treasury.</td></tr>
+        <tr><td>Holder bonus</td><td colspan="2">Holding a gun NFT or the season pass adds 10% to any prize, paid from the treasury share. Holders also get one free daily attempt.</td></tr>
+        <tr><td>Referrals</td><td colspan="2">Set once, on a player&rsquo;s first entry, never to yourself and never mutual. The referrer earns 5% of what the player wins, paid from the treasury share, not the prize.</td></tr>
+        <tr><td>Claims</td><td colspan="2">Seven days after settlement. Unclaimed prizes return to the pot.</td></tr>
+      </tbody>
+    </table></div>
+    <p class="note">Every percentage here is a starting proposal to tune, not a commitment.</p>
+  </div>
+</section>
+
+<section id="fair">
+  <div class="wrap">
+    <div class="col" style="display:grid;gap:14px">
+      <div class="eyebrow">Keeping it fair</div>
+      <h2>A time has to be proven before it pays</h2>
+      <p class="lead">A browser can be made to report any time it likes. A run only counts once a referee has replayed it and signed the result.</p>
+    </div>
+    <div class="trust">
+      <div><h3>Replay-checked runs</h3><p>The game records your inputs. The referee replays them in the same deterministic simulation, checks the finish time and signs it. The contract only accepts signed times.</p></div>
+      <div><h3>Server-run matches</h3><p>Royale matches run on an authoritative room server. It uses Net Forge, the engine behind Sherwood, which already fills empty seats with bots.</p></div>
+      <div><h3>Fair corners and crates</h3><p>Spawn corners and crate drops come from Dice, the same randomness service Sherwood uses.</p></div>
+      <div><h3>What you trust</h3><p>The referee&rsquo;s signing key. Replays are published so anyone can check a winning run themselves.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="pass">
+  <div class="wrap">
+    <div class="col" style="display:grid;gap:14px">
+      <div class="eyebrow">Funding the build</div>
+      <h2>The season pass</h2>
+      <p class="lead">A season pass NFT pays for development and gives holders the holder bonus, a free daily attempt, extra paint colours for the Marker, season challenges and early access to Maze Royale. Selling passes is how the build gets funded.</p>
+    </div>
+  </div>
+</section>
+
+<section id="roadmap">
+  <div class="wrap">
+    <h2>Roadmap</h2>
+    <ol class="road">
+      <li class="now"><b>Now</b><p>The daily run plays in the browser: maze, sentries, carbine, music and the HAM look.</p></li>
+      <li><b>Next</b><p>The daily run goes onchain on Robinhood Chain: wallet, entry fee, signed times and a leaderboard in the ham2d style.</p></li>
+      <li><b>Then</b><p>Maze Royale on Net Forge rooms, with lobbies, bot seats, crates and the haze.</p></li>
+      <li><b>After</b><p>Gun NFTs and the season pass, then season two.</p></li>
+    </ol>
+  </div>
+</section>
+
+<section id="questions">
+  <div class="wrap col" style="display:grid;gap:16px">
+    <h2>Open questions</h2>
+    <ul class="qs">
+      <li><b>Entry price.</b> What should one attempt and one royale seat cost?</li>
+      <li><b>Top 3 or top 10.</b> ham2d pays the top ten; this page proposes the top three, as in Sherwood.</li>
+      <li><b>ETH or a token.</b> Pay in ETH, or route entries through a token pool the way Sherwood uses $PFWA?</li>
+      <li><b>Paint.</b> Should rivals see your Marker paint? Seeing it lets you follow a leader, or get misled by fake trails.</li>
+      <li><b>Player damage.</b> A royale where players shoot each other, or a pure race where only sentries shoot?</li>
+    </ul>
+  </div>
+</section>
+
+<footer><div class="wrap">HAM &middot; Home&rsquo;s a Maze. Design notes for discussion. Numbers are proposals.</div></footer>
+
+<script>
+(() => {
+  const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+  const N = 12, S = cv.width / N, C = 6; // goal cell (6,6), as in the game
+  const $ = (id) => document.getElementById(id);
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const PLAYERS = [
+    { name: 'You', color: '#e0708a' }, { name: 'Bot Ada', color: '#7d97c8' },
+    { name: 'Bot Rook', color: '#c79a3c' }, { name: 'Bot Juno', color: '#6aa88f' },
+  ];
+  const POWERS = ['Blink', 'Freeze', 'Steal', 'Sonar', 'Shield', 'Decoy'];
+  let rnd, walls, crates, sentries, ps, t, hazeRing, nextHaze, over, match = 0, fast = false, sonar = 0;
+
+  function mulberry(a) { return () => { a = (a + 0x6d2b79f5) >>> 0; let x = a; x = Math.imul(x ^ (x >>> 15), x | 1); x ^= x + Math.imul(x ^ (x >>> 7), x | 61); return ((x ^ (x >>> 14)) >>> 0) / 4294967296; }; }
+  // walls[x][z] = { r, f }: wall on the right (+x) and on the far (+z) side of each cell
+  function makeMaze() {
+    walls = Array.from({ length: N }, () => Array.from({ length: N }, () => ({ r: true, f: true })));
+    const seen = new Set(['0,0']), stack = [[0, 0]];
+    while (stack.length) {
+      const [x, z] = stack[stack.length - 1];
+      const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dz]) => [x + dx, z + dz, dx, dz]).filter(([a, b]) => a >= 0 && b >= 0 && a < N && b < N && !seen.has(a + ',' + b));
+      if (!nb.length) { stack.pop(); continue; }
+      const [a, b, dx, dz] = nb[Math.floor(rnd() * nb.length)];
+      if (dx === 1) walls[x][z].r = false; if (dx === -1) walls[a][b].r = false;
+      if (dz === 1) walls[x][z].f = false; if (dz === -1) walls[a][b].f = false;
+      seen.add(a + ',' + b); stack.push([a, b]);
+    }
+    for (let i = 0; i < 14; i++) { // open a few loops so there is more than one way in
+      const x = 1 + Math.floor(rnd() * (N - 2)), z = 1 + Math.floor(rnd() * (N - 2));
+      if (rnd() < 0.5) walls[x][z].r = false; else walls[x][z].f = false;
+    }
+  }
+  const open = (x, z, dx, dz) => {
+    const a = x + dx, b = z + dz; if (a < 0 || b < 0 || a >= N || b >= N) return false;
+    if (dx === 1) return !walls[x][z].r; if (dx === -1) return !walls[a][b].r;
+    if (dz === 1) return !walls[x][z].f; return !walls[a][b].f;
+  };
+  function path(from, to) {
+    const key = (x, z) => x * N + z, prev = new Map([[key(...from), -1]]), q = [from];
+    while (q.length) { const [x, z] = q.shift(); if (x === to[0] && z === to[1]) break;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (open(x, z, dx, dz) && !prev.has(key(x + dx, z + dz))) { prev.set(key(x + dx, z + dz), key(x, z)); q.push([x + dx, z + dz]); } }
+    const out = []; let k = key(...to); if (!prev.has(k)) return out;
+    while (k !== key(...from)) { out.unshift([Math.floor(k / N), k % N]); k = prev.get(k); }
+    return out;
+  }
+  const ring = (x, z) => Math.min(x, z, N - 1 - x, N - 1 - z);
+
+  function log(html) { const li = document.createElement('li'); li.innerHTML = html; const ul = $('log'); ul.prepend(li); while (ul.children.length > 9) ul.lastChild.remove(); }
+  function start() {
+    match++; rnd = mulberry((Date.now() & 0xffff) + match * 977); makeMaze();
+    const corners = [[0, 0], [N - 1, 0], [0, N - 1], [N - 1, N - 1]].sort(() => rnd() - 0.5);
+    ps = PLAYERS.map((p, i) => ({ ...p, cell: corners[i], from: corners[i], k: 0, route: [], hp: 100, frozen: 0, shield: false, held: null, alive: true, speed: 2.1 + rnd() * 0.5, thinkT: rnd() }));
+    for (const p of ps) p.route = path(p.cell, [C, C]);
+    crates = []; while (crates.length < 9) { const x = Math.floor(rnd() * N), z = Math.floor(rnd() * N); if (ring(x, z) > 0 && !(x === C && z === C) && !crates.some((c) => c.x === x && c.z === z)) crates.push({ x, z, on: true }); }
+    sentries = Array.from({ length: 3 }, () => { const x = 2 + Math.floor(rnd() * 8), z = 2 + Math.floor(rnd() * 8); return { cell: [x, z], from: [x, z], k: 0, route: [], cool: 0 }; });
+    t = 0; hazeRing = -1; nextHaze = 40; over = false; sonar = 0;
+    $('log').innerHTML = ''; $('matchNo').textContent = match; $('status').textContent = 'Racing to the monolith';
+    log('Lobby waited 60 s. <b>3 bots</b> took the empty seats.');
+    log('Corners drawn. You start in the ' + ['south-west', 'south-east', 'north-west', 'north-east'][[[0, 0], [N - 1, 0], [0, N - 1], [N - 1, N - 1]].findIndex((c) => c[0] === ps[0].cell[0] && c[1] === ps[0].cell[1])] + ' corner.');
+    renderPlayers();
+  }
+  function renderPlayers() {
+    $('players').innerHTML = ps.map((p) => `<div class="pl${p.alive ? '' : ' out'}"><i style="background:${p.color}"></i><span>${p.name}</span><span class="num">${p.alive ? (p.frozen > 0 ? 'frozen' : p.held ? p.held : Math.round(p.hp) + ' hp') : 'out'}</span></div>`).join('');
+    const n = ps.filter((p) => p.alive).length; $('alive').textContent = n + ' alive';
+  }
+  const pos = (u) => { const a = u.from, b = u.route[0] || u.cell, k = u.route.length ? u.k : 0; return [(a[0] + (b[0] - a[0]) * k + 0.5) * S, (a[1] + (b[1] - a[1]) * k + 0.5) * S]; };
+  const near = (a, b) => { const [ax, az] = pos(a), [bx, bz] = pos(b); return Math.hypot(ax - bx, az - bz) / S; };
+
+  function use(p) {
+    const others = ps.filter((o) => o !== p && o.alive), what = p.held; p.held = null;
+    const target = others.sort((a, b) => near(p, a) - near(p, b))[0];
+    if (what === 'Blink') { const r = p.route; const jump = Math.min(3, Math.max(0, r.length - 1)); if (jump) { p.cell = r[jump - 1]; p.from = p.cell; p.route = r.slice(jump); p.k = 0; } log(`<b>${p.name}</b> used Blink and skipped ${jump} cells.`); }
+    else if (what === 'Freeze' && target) { if (target.shield) { target.shield = false; log(`<b>${target.name}</b>'s Shield blocked a Freeze.`); } else { target.frozen = 3; log(`<b>${p.name}</b> froze <b>${target.name}</b> for 3 s.`); } }
+    else if (what === 'Steal' && target) { if (target.held) { p.held = target.held; target.held = null; log(`<b>${p.name}</b> stole <b>${target.name}</b>'s ${p.held}.`); } else log(`<b>${p.name}</b> stole 10 rounds from <b>${target.name}</b>.`); }
+    else if (what === 'Sonar') { sonar = 6; log(`<b>${p.name}</b> pinged Sonar. Every rival is visible for 6 s.`); }
+    else if (what === 'Shield') { p.shield = true; log(`<b>${p.name}</b> raised a Shield.`); }
+    else if (what === 'Decoy') { log(`<b>${p.name}</b> dropped a Decoy. The nearest sentry turned to chase it.`); const s = sentries[0]; s.cool = 4; }
+  }
+  function step(u, dt, speed) {
+    if (!u.route.length) return true;
+    u.k += dt * speed; while (u.k >= 1 && u.route.length) { u.k -= 1; u.cell = u.route.shift(); u.from = u.cell; }
+    return !u.route.length;
+  }
+
+  function update(dt) {
+    if (over) return;
+    t += dt; sonar = Math.max(0, sonar - dt);
+    if ((nextHaze -= dt) <= 0) { hazeRing++; nextHaze = 40; log(`The haze took ring <b>${hazeRing + 1}</b>. Move inward.`); }
+    $('hazeT').textContent = hazeRing >= 4 ? 'Haze at the centre' : 'Haze in ' + Math.ceil(nextHaze) + ' s';
+    for (const s of sentries) { s.cool = Math.max(0, s.cool - dt); if (!s.route.length) { const [x, z] = s.cell; s.route = path(s.cell, [Math.max(0, Math.min(N - 1, x + Math.floor(rnd() * 5) - 2)), Math.max(0, Math.min(N - 1, z + Math.floor(rnd() * 5) - 2))]); } step(s, dt, 0.9); }
+    for (const p of ps) {
+      if (!p.alive) continue;
+      if (p.frozen > 0) { p.frozen -= dt; continue; }
+      if (ring(...p.cell) <= hazeRing) p.hp -= 14 * dt;
+      for (const s of sentries) if (s.cool <= 0 && near(p, s) < 0.9) { s.cool = 2.5; if (p.shield) { p.shield = false; log(`<b>${p.name}</b>'s Shield took a sentry bolt.`); } else { p.hp -= 26 + rnd() * 18; log(`A sentry hit <b>${p.name}</b>.`); } }
+      if (p.hp <= 0) { p.alive = false; log(`<b>${p.name}</b> is out.`); continue; }
+      const c = crates.find((c) => c.on && c.x === p.cell[0] && c.z === p.cell[1]);
+      if (c && !p.held) { c.on = false; p.held = POWERS[Math.floor(rnd() * POWERS.length)]; log(`<b>${p.name}</b> picked up ${p.held}.`); p.thinkT = 1 + rnd() * 3; }
+      if (p.held && (p.thinkT -= dt) <= 0) use(p);
+      if (step(p, dt, p.speed)) { over = true; win(p, 'touched the monolith'); return; }
+    }
+    const alive = ps.filter((p) => p.alive);
+    if (alive.length === 1) { over = true; win(alive[0], 'is the last one standing'); }
+    else if (!alive.length) { over = true; $('status').textContent = 'Nobody made it'; setTimeout(start, 3500); }
+    renderPlayers();
+  }
+  function win(p, how) { $('status').textContent = `${p.name} wins`; log(`<b>${p.name}</b> ${how} at <span class="num">${t.toFixed(1)}</span> s.`); renderPlayers(); setTimeout(start, 4000); }
+
+  function draw() {
+    const W = cv.width; ctx.clearRect(0, 0, W, W);
+    ctx.fillStyle = css('--bg'); ctx.fillRect(0, 0, W, W);
+    // haze
+    if (hazeRing >= 0) { ctx.fillStyle = css('--haze'); for (let x = 0; x < N; x++) for (let z = 0; z < N; z++) if (ring(x, z) <= hazeRing) ctx.fillRect(x * S, z * S, S, S); }
+    // walls: x-facing pink, z-facing blue, like the game
+    ctx.lineCap = 'round'; ctx.lineWidth = Math.max(3, S * 0.12);
+    const wall = (x1, y1, x2, y2, col) => { ctx.strokeStyle = col; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); };
+    const pink = css('--pink'), blue = css('--blue');
+    wall(0, 0, W, 0, blue); wall(0, 0, 0, W, pink);
+    for (let x = 0; x < N; x++) for (let z = 0; z < N; z++) {
+      if (walls[x][z].r) wall((x + 1) * S, z * S, (x + 1) * S, (z + 1) * S, pink);
+      if (walls[x][z].f) wall(x * S, (z + 1) * S, (x + 1) * S, (z + 1) * S, blue);
+    }
+    // monolith
+    const m = (C + 0.5) * S, pulse = 1 + Math.sin(performance.now() / 500) * 0.06;
+    ctx.fillStyle = 'rgba(224,112,138,.18)'; ctx.beginPath(); ctx.arc(m, m, S * 0.55 * pulse, 0, 7); ctx.fill();
+    ctx.fillStyle = pink; ctx.fillRect(m - S * 0.2, m - S * 0.2, S * 0.4, S * 0.4);
+    // crates
+    for (const c of crates) if (c.on) { const x = (c.x + 0.5) * S, z = (c.z + 0.5) * S; ctx.save(); ctx.translate(x, z); ctx.rotate(Math.PI / 4 + performance.now() / 2000); ctx.strokeStyle = css('--ink'); ctx.lineWidth = 2; ctx.strokeRect(-S * 0.13, -S * 0.13, S * 0.26, S * 0.26); ctx.restore(); }
+    // sentries
+    for (const s of sentries) { const [x, z] = pos(s); ctx.fillStyle = css('--paper'); ctx.strokeStyle = css('--ink'); ctx.lineWidth = 2; ctx.beginPath(); ctx.roundRect(x - S * 0.17, z - S * 0.17, S * 0.34, S * 0.34, 5); ctx.fill(); ctx.stroke(); ctx.fillStyle = pink; ctx.beginPath(); ctx.arc(x, z, S * 0.06, 0, 7); ctx.fill(); }
+    // players
+    for (const p of ps) {
+      const [x, z] = pos(p);
+      ctx.globalAlpha = p.alive ? 1 : 0.25;
+      if (sonar > 0 && p.alive) { ctx.strokeStyle = p.color; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, z, S * (0.4 + (performance.now() / 600 % 1) * 0.5), 0, 7); ctx.stroke(); }
+      ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(x, z, S * 0.2, 0, 7); ctx.fill();
+      if (p.shield) { ctx.strokeStyle = p.color; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, z, S * 0.3, 0, 7); ctx.stroke(); }
+      if (p.frozen > 0) { ctx.strokeStyle = '#9fd6ff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, z, S * 0.26, 0, 7); ctx.stroke(); }
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  let last = performance.now();
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000) * (fast ? 2 : 1) * (reduce ? 0.5 : 1); last = now;
+    update(dt); draw(); requestAnimationFrame(frame);
+  }
+  $('restart').addEventListener('click', start);
+  $('speed').addEventListener('click', (e) => { fast = !fast; e.currentTarget.classList.toggle('on', fast); e.currentTarget.setAttribute('aria-pressed', String(fast)); });
+  start(); draw(); requestAnimationFrame(frame);
+})();
+</script>

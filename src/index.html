@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>HAM Maze</title>
+<!--CSS-->
+</head>
+<body>
+<div id="app">
+  <canvas id="view" tabindex="0"></canvas>
+  <div id="ui">
+    <div class="hud" id="hud">
+      <div class="h-hurt" id="hurt"></div>
+      <div class="h-arcs" id="arcs"></div>
+      <canvas class="h-compass" id="compass"></canvas>
+      <div class="h-obj">
+        <div class="h-k">Today&rsquo;s maze</div>
+        <div class="h-obj-t">Find the monolith</div>
+        <div class="h-timer" id="timer">0:00.00</div>
+        <div class="h-sub" id="sub">Timer starts when you move</div>
+        <div class="h-kills"><span class="h-k">Machines down</span><b id="kills">0/8</b></div>
+      </div>
+      <div class="h-cross" id="cross"><i class="c-t"></i><i class="c-b"></i><i class="c-l"></i><i class="c-r"></i><i class="c-dot"></i></div>
+      <div class="h-hit" id="hitm"><i></i><i></i><i></i><i></i></div>
+      <div class="h-msg" id="msg"></div>
+      <div class="h-health" id="health">
+        <div class="h-k">Integrity</div>
+        <div class="h-hp-row"><div class="h-hp-n" id="hpn">100</div><div class="h-hp-bar" id="hpbar"></div></div>
+      </div>
+      <div class="h-ammo" id="ammo">
+        <div class="h-cue" id="cue">Reload</div>
+        <div class="h-ammo-row"><div class="h-ammo-n" id="mag">30</div><div class="h-ammo-r" id="res">150</div></div>
+        <div class="h-pips" id="pips"></div>
+        <div class="h-wname">K-7 Carbine</div>
+      </div>
+    </div>
+
+    <div class="touch" id="touch">
+      <div class="t-stick" id="tstick"><div class="t-ring"></div><div class="t-nub" id="tnub"></div></div>
+      <button class="t-btn t-fire" data-t="fire" aria-label="Fire"><span>Fire</span></button>
+      <button class="t-btn t-ads" data-t="ads" aria-label="Aim"><span>Aim</span></button>
+      <button class="t-btn t-jump" data-t="jump" aria-label="Jump"><span>Jump</span></button>
+      <button class="t-btn t-reload" data-t="reload" aria-label="Reload"><span>Rld</span></button>
+      <button class="t-btn t-pause" data-t="pause" aria-label="Pause"><span>II</span></button>
+    </div>
+
+    <div class="menu open" id="menu" data-screen="title">
+      <div class="m-veil"></div>
+      <div class="m-bars"><i></i><i></i></div>
+
+      <section class="m-screen m-title" aria-label="HAM Maze">
+        <div class="m-side">
+          <div class="m-brand"><i class="m-logo" aria-hidden="true"></i><div><div class="m-word">HAM</div><div class="m-no">Daily maze No. <b data-f="seed">0</b></div></div></div>
+          <h2 class="m-how">How to play HAM</h2>
+          <ul class="m-steps">
+            <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span>Find the monolith to solve today&rsquo;s maze.</span></li>
+            <li><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7.5"/><path d="M12 1.5v5M12 17.5v5M1.5 12h5M17.5 12h5"/></svg><span>Sentry machines patrol the corridors. Aim for the eye.</span></li>
+            <li><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M12 7v5.5l3.5 2"/></svg><span>Come back tomorrow for a new challenge.</span></li>
+          </ul>
+          <div class="m-actions">
+            <button class="btn primary" data-act="deploy">Enter the maze</button>
+            <button class="btn" data-act="settings">Settings</button>
+            <button class="btn" data-act="controls">Controls</button>
+          </div>
+          <p class="m-note">Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>, look with the mouse, click to fire, right-click to aim. <kbd>Esc</kbd> pauses.</p>
+        </div>
+      </section>
+
+      <section class="m-screen m-card" data-s="paused" aria-label="Paused">
+        <div class="m-k">Run on hold</div>
+        <h2 class="m-h">Paused</h2>
+        <div class="m-actions col">
+          <button class="btn primary" data-act="resume">Resume</button>
+          <button class="btn" data-act="settings">Settings</button>
+          <button class="btn" data-act="restart">Restart run</button>
+          <button class="btn" data-act="quit">Back to title</button>
+        </div>
+      </section>
+
+      <section class="m-screen m-card m-debrief" data-s="complete" aria-label="Debrief">
+        <div class="m-k">Maze No. <span data-f="seed">0</span></div>
+        <h2 class="m-h">Monolith found</h2>
+        <dl class="m-stats">
+          <div><dt>Time</dt><dd data-f="time">0:00.00</dd></div>
+          <div><dt>Machines destroyed</dt><dd data-f="kills">0</dd></div>
+          <div><dt>Accuracy</dt><dd data-f="acc">0%</dd></div>
+          <div><dt>Distance walked</dt><dd data-f="walked">0 m</dd></div>
+          <div><dt>Retries</dt><dd data-f="retries">0</dd></div>
+        </dl>
+        <div class="m-actions col"><button class="btn primary" data-act="again">Run it again</button></div>
+      </section>
+
+      <section class="m-screen m-card m-dead" data-s="dead" aria-label="Down">
+        <div class="m-k">Maze No. <span data-f="seed">0</span></div>
+        <h2 class="m-h">Signal lost</h2>
+        <dl class="m-stats">
+          <div><dt>Time survived</dt><dd data-f="dtime">0:00.00</dd></div>
+          <div><dt>Machines destroyed</dt><dd data-f="dkills">0</dd></div>
+        </dl>
+        <div class="m-actions col"><button class="btn primary" data-act="retry">Retry</button></div>
+      </section>
+
+      <div class="panel" id="panel" role="dialog" aria-modal="true" aria-label="Settings and controls" tabindex="-1" hidden>
+        <header class="panel-h">
+          <div class="tabs" role="tablist">
+            <button type="button" class="tab" role="tab" data-tab="settings" aria-selected="true">Settings</button>
+            <button type="button" class="tab" role="tab" data-tab="controls" aria-selected="false">Controls</button>
+          </div>
+          <button type="button" class="btn small" data-act="close-panel">Close</button>
+        </header>
+        <div class="panel-b" data-pane="settings">
+          <div class="row"><label id="l-q">Graphics quality</label><div class="seg" id="q-seg" role="group" aria-labelledby="l-q"></div></div>
+          <div class="row"><label for="s-sens">Look sensitivity</label><div class="slider"><input id="s-sens" type="range" min="0.2" max="3" step="0.05"><output data-o="sens"></output></div></div>
+          <div class="row"><label id="l-inv">Invert look</label><button type="button" class="toggle" id="t-inv" aria-labelledby="l-inv" aria-pressed="false"><i></i><span>Off</span></button></div>
+          <div class="row"><label for="s-fov">Field of view</label><div class="slider"><input id="s-fov" type="range" min="60" max="100" step="1"><output data-o="fov"></output></div></div>
+          <div class="row"><label for="s-vol">Sound effects</label><div class="slider"><input id="s-vol" type="range" min="0" max="100" step="1"><output data-o="vol"></output></div></div>
+          <div class="row"><label for="s-mus">Music</label><div class="slider"><input id="s-mus" type="range" min="0" max="100" step="1"><output data-o="mus"></output></div></div>
+          <p class="panel-note" data-f="qnote"></p>
+        </div>
+        <div class="panel-b" data-pane="controls" hidden>
+          <h3>Keyboard and mouse</h3>
+          <dl class="keys">
+            <div><dt>Move</dt><dd><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrows</dd></div>
+            <div><dt>Look</dt><dd>Mouse</dd></div>
+            <div><dt>Fire</dt><dd>Left mouse</dd></div>
+            <div><dt>Aim</dt><dd>Right mouse (hold)</dd></div>
+            <div><dt>Reload</dt><dd><kbd>R</kbd></dd></div>
+            <div><dt>Sprint</dt><dd><kbd>Shift</kbd></dd></div>
+            <div><dt>Jump</dt><dd><kbd>Space</kbd></dd></div>
+            <div><dt>Crouch</dt><dd><kbd>C</kbd></dd></div>
+            <div><dt>Pause</dt><dd><kbd>Esc</kbd> or <kbd>P</kbd></dd></div>
+          </dl>
+          <p class="panel-note">If the browser will not capture the mouse, hold a mouse button and drag to look.</p>
+          <h3>Touch</h3>
+          <dl class="keys">
+            <div><dt>Move</dt><dd>Drag on the left side</dd></div>
+            <div><dt>Look</dt><dd>Drag on the right side</dd></div>
+            <div><dt>Sprint</dt><dd>Push the stick all the way up</dd></div>
+            <div><dt>Fire, aim, jump, reload</dt><dd>On-screen buttons</dd></div>
+          </dl>
+          <h3>Tips</h3>
+          <p class="panel-note">Drones charge before they fire: the eye flares and rises in pitch. Step behind a corner. The eye takes more than double damage. The compass diamond always points to the monolith.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<!--JS-->
+</body>
+</html>
