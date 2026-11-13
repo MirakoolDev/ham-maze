@@ -5,7 +5,7 @@
 
 // The same contract is deployed on each chain; each has its own pot and leaderboard. Fill in `contract` after deploying.
 export const CHAINS = {
-  'aurora-testnet': { id: 1313161555, name: 'Aurora Testnet', rpc: 'https://testnet.aurora.dev', explorer: 'https://explorer.testnet.aurora.dev', contract: '', testnet: true },
+  'aurora-testnet': { id: 1313161555, name: 'Aurora Testnet', rpc: 'https://testnet.aurora.dev', explorer: 'https://explorer.testnet.aurora.dev', contract: '0xa05A8D95a26c7CD12d4Ae26CBbE8906c92FA1869', testnet: true },
   aurora: { id: 1313161554, name: 'Aurora', rpc: 'https://mainnet.aurora.dev', explorer: 'https://explorer.aurora.dev', contract: '' },
   robinhood: { id: 4663, name: 'Robinhood Chain', rpc: 'https://rpc.mainnet.chain.robinhood.com', explorer: 'https://explorer.chain.robinhood.com', contract: '' },
 };
