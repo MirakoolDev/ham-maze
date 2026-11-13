@@ -8,3 +8,4 @@ contracts/cache/
 contracts/broadcast/
 .env.local
 .e2e
+design/rivals.html

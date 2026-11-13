@@ -1,0 +1,316 @@
+<title>HAM Rivals</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+@font-face { font-family: 'Bread Island'; src: url({{BREAD}}) format('opentype'); font-display: swap; }
+@font-face { font-family: 'Cabinet Grotesk'; src: url({{CABINET}}) format('opentype'); font-display: swap; }
+/* Layout: a dark gallery wall; four lit "rooms" in a 2x2 grid, each a live 3D render of one rival. Single dark look on purpose. */
+:root {
+  --wall: #0d0b10; --panel: #17141c; --line: rgba(232, 228, 218, .12);
+  --bone: #e8e4da; --dim: rgba(232, 228, 218, .62); --cyan: #8ff4ff; --pink: #f3a6c0;
+  --f-display: 'Bread Island', Georgia, serif; --f-label: 'Cabinet Grotesk', 'Segoe UI', system-ui, sans-serif;
+  color-scheme: dark;
+}
+body { background: var(--wall); color: var(--bone); font: 400 15px/1.55 var(--f-label); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 40px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 28px; }
+header { display: grid; gap: 10px; }
+.k { font: 600 11px/1 var(--f-label); letter-spacing: .26em; text-transform: uppercase; color: var(--dim); }
+h1 { margin: 0; font: 400 clamp(44px, 7vw, 76px)/.95 var(--f-display); letter-spacing: .01em; text-wrap: balance; }
+.lede { margin: 0; max-width: 62ch; color: var(--dim); }
+.controls { display: flex; flex-wrap: wrap; gap: 18px 28px; align-items: center; }
+.group { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; gap: 2px; }
+.seg button, .sw { font: 600 12px/1 var(--f-label); letter-spacing: .04em; color: var(--dim); background: none; border: 0; border-radius: 999px; padding: 8px 14px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--bone); color: var(--wall); }
+.sw { width: 26px; height: 26px; padding: 0; border: 2px solid transparent; background: var(--c); box-shadow: 0 0 12px var(--c); }
+.sw[aria-pressed="true"] { border-color: var(--bone); }
+button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.card { background: var(--panel); border-radius: 18px; overflow: hidden; display: grid; grid-template-rows: auto 1fr; }
+.stage { position: relative; aspect-ratio: 5 / 4; max-width: 100%; cursor: grab; touch-action: pan-y; }
+.stage canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; display: block; }
+.stage .tag { position: absolute; left: 14px; top: 12px; font: 600 10px/1 var(--f-label); letter-spacing: .22em; text-transform: uppercase; color: var(--bone); background: rgba(13, 11, 16, .55); padding: 6px 9px; border-radius: 999px; }
+.info { padding: 16px 18px 20px; display: grid; gap: 6px; align-content: start; }
+.info h2 { margin: 0; font: 400 30px/1 var(--f-display); }
+.info p { margin: 0; color: var(--dim); max-width: 60ch; }
+.use { font: 600 11px/1.3 var(--f-label); letter-spacing: .14em; text-transform: uppercase; color: var(--cyan); }
+.notes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; border-top: 1px solid var(--line); padding-top: 24px; }
+.notes h3 { margin: 0 0 6px; font: 600 12px/1.2 var(--f-label); letter-spacing: .16em; text-transform: uppercase; }
+.notes p { margin: 0; color: var(--dim); font-size: 14px; }
+footer { color: var(--dim); font-size: 13px; }
+@media (max-width: 760px) { .grid, .notes { grid-template-columns: minmax(0, 1fr); } }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="k">HAM · Character concepts</span>
+    <h1>Rivals</h1>
+    <p class="lede">Four ways to draw the other people in the maze, in the style of the art: black cut-out figures with lit edges, a red room, iridescent objects and a soft floating head. Each one is a live render using the same tricks the game can afford, so what you see here is what you would see in a corridor. Drag a figure to turn it.</p>
+  </header>
+
+  <div class="controls" role="group" aria-label="Preview options">
+    <div class="group"><span class="k">Room</span>
+      <div class="seg" id="room"><button type="button" data-v="red" aria-pressed="true">Red room</button><button type="button" data-v="maze" aria-pressed="false">In the maze</button></div></div>
+    <div class="group"><span class="k">Pose</span>
+      <div class="seg" id="pose"><button type="button" data-v="idle" aria-pressed="true">Standing</button><button type="button" data-v="run" aria-pressed="false">Running</button></div></div>
+    <div class="group" id="edge" aria-label="Edge colour"><span class="k">Edge</span>
+      <button type="button" class="sw" style="--c:#8ff4ff" data-v="#8ff4ff" aria-label="Cyan" aria-pressed="true"></button>
+      <button type="button" class="sw" style="--c:#ffffff" data-v="#ffffff" aria-label="White" aria-pressed="false"></button>
+      <button type="button" class="sw" style="--c:#f3a6c0" data-v="#f3a6c0" aria-label="Pink" aria-pressed="false"></button>
+      <button type="button" class="sw" style="--c:#ff8a3d" data-v="#ff8a3d" aria-label="Monolith orange" aria-pressed="false"></button>
+    </div>
+  </div>
+
+  <section class="grid">
+    <article class="card"><div class="stage" data-kind="outline"><span class="tag">01 · Default</span></div>
+      <div class="info"><h2>Outline</h2><p>A black cut-out with a lit edge and nothing else. It reads against cream walls, red walls and fog, and from the far end of a corridor.</p><span class="use">Every rival in Maze Royale</span></div></article>
+    <article class="card"><div class="stage" data-kind="soft"><span class="tag">02 · Holder</span></div>
+      <div class="info"><h2>Soft Head</h2><p>The body stays a silhouette while the head floats free above it, a pastel sphere that breathes slowly. You know it is a person at a glance.</p><span class="use">Free skin for $PFWA and pass holders</span></div></article>
+    <article class="card"><div class="stage" data-kind="prism"><span class="tag">03 · Power-up</span></div>
+      <div class="info"><h2>Prism</h2><p>An iridescent shard circles the hand and a visor catches the light. Whoever carries a power-up gun wears this, so everyone can see who is armed.</p><span class="use">Power-up carrier · collectible skin</span></div></article>
+    <article class="card"><div class="stage" data-kind="ghost"><span class="tag">04 · Ghost</span></div>
+      <div class="info"><h2>Afterimage</h2><p>Only the edges, no body. Today's top runs replay as afterimages in the single-player maze, so you race the leaderboard instead of reading it.</p><span class="use">Ghost runs on the daily maze</span></div></article>
+  </section>
+
+  <section class="notes">
+    <div><h3>Cheap to draw</h3><p>The look is a black body plus an edge glow worked out per pixel, no textures. Twenty rivals cost about the same as the sentries do now.</p></div>
+    <div><h3>Edges are teams</h3><p>The edge colour carries meaning: cyan for rivals, white for you in replays, pink for a friend you invited, orange for whoever is closest to the monolith.</p></div>
+    <div><h3>Skins swap one part</h3><p>Every skin keeps the same silhouette and changes one thing: the head, the object or the edge. Collectible skins stay recognisable and fair.</p></div>
+  </section>
+
+  <footer>HAM · Home's a Maze. Concepts for discussion. Music by Rere Aiyemomi.</footer>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const state = { room: 'red', pose: 'idle', edge: new THREE.Color('#8ff4ff') };
+
+// Black body, edge glow from the angle to the camera.
+function rimMaterial({ base = 0x050407, power = 4.2, strength = 1.05, opacity = 1, additive = false } = {}) {
+  return new THREE.ShaderMaterial({
+    uniforms: { uBase: { value: new THREE.Color(base) }, uRim: { value: state.edge }, uPow: { value: power }, uStr: { value: strength }, uOp: { value: opacity } },
+    vertexShader: `varying vec3 vN; varying vec3 vV;
+      void main(){ vec4 mv = modelViewMatrix * vec4(position,1.); vN = normalize(normalMatrix*normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix*mv; }`,
+    fragmentShader: `uniform vec3 uBase; uniform vec3 uRim; uniform float uPow; uniform float uStr; uniform float uOp; varying vec3 vN; varying vec3 vV;
+      void main(){ float f = pow(1. - max(dot(normalize(vN), normalize(vV)), 0.), uPow);
+        vec3 c = uBase + uRim * f * uStr; gl_FragColor = vec4(c, ${additive ? 'f * uOp' : 'uOp'}); }`,
+    transparent: opacity < 1 || additive, depthWrite: !additive, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+  });
+}
+// Thin bright shell drawn behind the body: the crisp outline.
+function hullMaterial(width = 0.0055, opacity = 1) {
+  return new THREE.ShaderMaterial({
+    uniforms: { uRim: { value: state.edge }, uW: { value: width }, uOp: { value: opacity } },
+    vertexShader: `uniform float uW; void main(){ gl_Position = projectionMatrix*modelViewMatrix*vec4(position + normal*uW, 1.); }`,
+    fragmentShader: `uniform vec3 uRim; uniform float uOp; void main(){ gl_FragColor = vec4(uRim*0.95, uOp); }`,
+    side: THREE.BackSide, transparent: opacity < 1, depthWrite: opacity >= 1,
+  });
+}
+
+// A tall, slightly lanky figure built from capsules, with pivots for the limbs.
+function figure(bodyMat, hullMat, { head = true } = {}) {
+  const g = new THREE.Group(), parts = {};
+  const add = (parent, geo, y = 0, x = 0) => {
+    const m = new THREE.Mesh(geo, bodyMat); m.position.set(x, y, 0); parent.add(m);
+    if (hullMat) { const h = new THREE.Mesh(geo, hullMat); m.add(h); }
+    return m;
+  };
+  const hips = new THREE.Group(); hips.position.y = 1.0; g.add(hips); parts.hips = hips;
+  const torso = new THREE.Group(); hips.add(torso); parts.torso = torso;
+  add(torso, new THREE.CapsuleGeometry(0.2, 0.46, 8, 20), 0.36);
+  add(torso, new THREE.CapsuleGeometry(0.06, 0.1, 4, 12), 0.76); // neck
+  if (head) parts.head = add(torso, new THREE.SphereGeometry(0.155, 32, 20), 0.95);
+  const limb = (r, len) => new THREE.CapsuleGeometry(r, len, 6, 14);
+  for (const s of [-1, 1]) {
+    const sh = new THREE.Group(); sh.position.set(0.27 * s, 0.66, 0); torso.add(sh);
+    const upper = add(sh, limb(0.062, 0.3), -0.2); upper.rotation.z = 0.08 * s;
+    const el = new THREE.Group(); el.position.y = -0.38; sh.add(el);
+    add(el, limb(0.055, 0.28), -0.17);
+    parts[s < 0 ? 'armL' : 'armR'] = sh; parts[s < 0 ? 'elL' : 'elR'] = el;
+    const hip = new THREE.Group(); hip.position.set(0.11 * s, -0.02, 0); hips.add(hip);
+    add(hip, limb(0.082, 0.36), -0.25);
+    const kn = new THREE.Group(); kn.position.y = -0.46; hip.add(kn);
+    add(kn, limb(0.07, 0.36), -0.24);
+    parts[s < 0 ? 'legL' : 'legR'] = hip; parts[s < 0 ? 'knL' : 'knR'] = kn;
+  }
+  g.userData.parts = parts;
+  return g;
+}
+function animate(fig, t, pose) {
+  const p = fig.userData.parts;
+  if (pose === 'run') {
+    const w = t * 9, s = Math.sin(w);
+    p.legL.rotation.x = s * 0.75; p.legR.rotation.x = -s * 0.75;
+    p.knL.rotation.x = Math.max(0, -Math.cos(w)) * 1.2 + 0.15; p.knR.rotation.x = Math.max(0, Math.cos(w)) * 1.2 + 0.15;
+    p.armL.rotation.x = -s * 0.7; p.armR.rotation.x = s * 0.7; p.elL.rotation.x = p.elR.rotation.x = -0.9;
+    p.hips.position.y = 0.98 + Math.abs(Math.cos(w)) * 0.06; p.torso.rotation.x = 0.16;
+  } else {
+    const b = Math.sin(t * 1.6);
+    for (const k of ['legL', 'legR', 'knL', 'knR']) p[k].rotation.x = 0;
+    p.armL.rotation.x = p.armR.rotation.x = b * 0.03; p.elL.rotation.x = p.elR.rotation.x = -0.08;
+    p.hips.position.y = 1.0 + b * 0.008; p.torso.rotation.x = 0.02;
+  }
+}
+
+// Rooms: the art's red room, or the game's cream walls under a pale sky.
+function buildRoom(kind) {
+  const g = new THREE.Group();
+  if (kind === 'red') {
+    const wall = new THREE.MeshStandardMaterial({ color: 0xa3141b, roughness: 0.95 });
+    const floor = new THREE.MeshStandardMaterial({ color: 0x5e0b10, roughness: 0.8 });
+    const f = new THREE.Mesh(new THREE.PlaneGeometry(14, 14), floor); f.rotation.x = -Math.PI / 2; g.add(f);
+    const back = new THREE.Mesh(new THREE.PlaneGeometry(14, 8), wall); back.position.set(0, 4, -3.2); g.add(back);
+    const side = new THREE.Mesh(new THREE.PlaneGeometry(14, 8), wall); side.position.set(-3.4, 4, 0); side.rotation.y = Math.PI / 2; g.add(side);
+    g.add(new THREE.HemisphereLight(0xff8a8a, 0x2a0306, 1.1));
+    const key = new THREE.SpotLight(0xffd2c4, 40, 14, 0.7, 0.6); key.position.set(2.5, 6, 3); g.add(key, key.target);
+    g.userData.bg = 0x3a0508; g.userData.fog = null;
+  } else {
+    const wallM = new THREE.MeshStandardMaterial({ color: 0xf1e8dc, roughness: 0.9 });
+    const f = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshStandardMaterial({ color: 0xc79bb0, roughness: 0.9 }));
+    f.rotation.x = -Math.PI / 2; g.add(f);
+    for (const [x, z, w, d] of [[-3.2, -2, 1.4, 12], [3.2, -4, 1.4, 6], [0, -6.5, 8, 1.4]]) {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(w, 7, d), wallM); b.position.set(x, 3.5, z); g.add(b);
+    }
+    g.add(new THREE.HemisphereLight(0xc4d2ff, 0x6a5470, 1.6));
+    const sun = new THREE.DirectionalLight(0xfff3e8, 1.6); sun.position.set(4, 8, 5); g.add(sun);
+    g.userData.bg = 0xb9cbe8; g.userData.fog = new THREE.Fog(0xb9cbe8, 6, 30);
+  }
+  return g;
+}
+
+function pastelHead() {
+  const m = new THREE.ShaderMaterial({
+    uniforms: { uT: { value: 0 } },
+    vertexShader: `varying vec3 vP; varying vec3 vN; varying vec3 vV; void main(){ vP = position; vec4 mv = modelViewMatrix*vec4(position,1.); vN = normalize(normalMatrix*normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix*mv; }`,
+    fragmentShader: `uniform float uT; varying vec3 vP; varying vec3 vN; varying vec3 vV;
+      void main(){ vec3 pink = vec3(1., .55, .74), lilac = vec3(.68, .6, 1.), peach = vec3(1., .72, .5), mint = vec3(.5, .93, .88);
+        float a = vP.y * 2.6 + sin(uT*.6 + vP.x*5.) * .35;
+        vec3 c = mix(mix(peach, pink, smoothstep(-.6, .1, a)), mix(lilac, mint, smoothstep(.2, 1., a)), smoothstep(-.1, .6, a));
+        float f = pow(1. - max(dot(normalize(vN), normalize(vV)), 0.), 1.6);
+        gl_FragColor = vec4(c * (0.5 + .18*f), 1.); }`,
+  });
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 48, 32), m);
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(0.34, 32, 20), new THREE.MeshBasicMaterial({ color: 0xffd7e6, transparent: true, opacity: 0.07, depthWrite: false }));
+  head.add(halo);
+  return head;
+}
+
+const stages = [];
+const pmremCache = new WeakMap();
+for (const el of document.querySelectorAll('.stage')) {
+  const kind = el.dataset.kind;
+  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
+  el.prepend(renderer.domElement);
+  renderer.domElement.setAttribute('aria-label', `3D preview of the ${el.closest('.card').querySelector('h2').textContent} rival`);
+  renderer.domElement.setAttribute('role', 'img');
+  const scene = new THREE.Scene();
+  const env = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+  const camera = new THREE.PerspectiveCamera(30, 1.25, 0.1, 100);
+  camera.position.set(2.1, 1.5, 4.0);
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.target.set(0, 1.2, 0); controls.enableZoom = false; controls.enablePan = false;
+  controls.minPolarAngle = 1.0; controls.maxPolarAngle = 1.75; controls.enableDamping = true;
+  controls.autoRotate = !reduce; controls.autoRotateSpeed = 0.9; controls.update();
+
+  const actor = new THREE.Group(); scene.add(actor);
+  const figs = [];
+  let head = null, shard = null;
+  if (kind === 'outline') {
+    figs.push(figure(rimMaterial(), hullMaterial()));
+  } else if (kind === 'soft') {
+    figs.push(figure(rimMaterial({ power: 3.2, strength: 0.9 }), hullMaterial(0.008), { head: false }));
+    head = pastelHead(); head.position.set(0, 2.12, 0); actor.add(head);
+  } else if (kind === 'prism') {
+    const f = figure(rimMaterial(), hullMaterial()); figs.push(f);
+    const irid = new THREE.MeshPhysicalMaterial({ color: 0xffffff, metalness: 1, roughness: 0.12, iridescence: 1, iridescenceIOR: 1.7, iridescenceThicknessRange: [120, 900], envMap: env, envMapIntensity: 0.8 });
+    const visor = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.035, 16, 48, Math.PI * 1.1), irid);
+    visor.rotation.set(0, Math.PI * 0.95, Math.PI * 0.5); visor.position.set(0, 0.97, 0.02);
+    visor.scale.set(1, 1.05, 1); f.userData.parts.torso.add(visor);
+    shard = new THREE.Mesh(new THREE.OctahedronGeometry(0.16, 0), irid); shard.scale.set(0.7, 1.4, 0.7); actor.add(shard);
+  } else {
+    // ghost: edges only, with two fading echoes behind it
+    for (let i = 0; i < 3; i++) {
+      const fig = figure(rimMaterial({ power: 2.2, strength: 1.8, opacity: 0.9 / (1 + i * 1.6), additive: true }), null);
+      fig.userData.echo = i; figs.push(fig);
+    }
+  }
+  for (const f of figs) actor.add(f);
+
+  const composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.42, 0.35, 0.78);
+  composer.addPass(bloom); composer.addPass(new OutputPass());
+
+  const s = { el, kind, renderer, scene, camera, controls, composer, bloom, actor, figs, head, shard, room: null, visible: true };
+  stages.push(s);
+  new IntersectionObserver(([e]) => { s.visible = e.isIntersecting; }).observe(el);
+  new ResizeObserver(() => size(s)).observe(el);
+  size(s);
+}
+function size(s) {
+  const w = s.el.clientWidth, h = s.el.clientHeight;
+  if (!w || !h) return;
+  s.renderer.setSize(w, h, false); s.composer.setSize(w, h);
+  s.camera.aspect = w / h; s.camera.updateProjectionMatrix();
+}
+function setRoom(kind) {
+  for (const s of stages) {
+    if (s.room) s.scene.remove(s.room);
+    s.room = buildRoom(kind); s.scene.add(s.room);
+    s.scene.background = new THREE.Color(s.room.userData.bg); s.scene.fog = s.room.userData.fog;
+    s.bloom.threshold = kind === 'maze' ? 0.92 : 0.78;
+  }
+}
+setRoom('red');
+
+const clock = new THREE.Clock();
+function frame() {
+  const t = clock.getElapsedTime();
+  for (const s of stages) {
+    if (!s.visible) continue;
+    for (const f of s.figs) {
+      const i = f.userData.echo || 0;
+      animate(f, reduce ? 0 : t - i * 0.09, state.pose);
+      f.position.z = s.kind === 'ghost' && state.pose === 'run' ? -i * 0.42 : -i * 0.12;
+      f.visible = !(s.kind === 'ghost' && state.pose !== 'run' && i > 0);
+    }
+    if (s.head) { s.head.position.y = 2.1 + (reduce ? 0 : Math.sin(t * 1.3) * 0.05); s.head.material.uniforms.uT.value = t; }
+    if (s.shard) {
+      const a = reduce ? 0.6 : t * 1.8;
+      s.shard.position.set(0.5 + Math.cos(a) * 0.22, 1.05 + Math.sin(t * 2.2) * 0.05, Math.sin(a) * 0.22);
+      s.shard.rotation.y = t * 1.4;
+    }
+    s.controls.update();
+    s.composer.render();
+  }
+  requestAnimationFrame(frame);
+}
+frame();
+
+function seg(id, key, apply) {
+  const box = document.getElementById(id);
+  box.addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    for (const x of box.querySelectorAll('button')) x.setAttribute('aria-pressed', String(x === b));
+    apply(b.dataset.v);
+  });
+}
+seg('room', 'room', (v) => { state.room = v; setRoom(v); });
+seg('pose', 'pose', (v) => { state.pose = v; });
+seg('edge', 'edge', (v) => { state.edge.set(v); });
+</script>

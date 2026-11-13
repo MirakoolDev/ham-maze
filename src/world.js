@@ -228,7 +228,9 @@ export function buildWorld(scene, maze) {
   const moteGeo = new THREE.BufferGeometry(); moteGeo.setAttribute('position', new THREE.BufferAttribute(mp, 3));
   const motes = new THREE.Points(moteGeo, new THREE.PointsMaterial({ color: new THREE.Color(1.7, 1.15, 0.8), size: 0.08, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false }));
   motes.frustumCulled = false; scene.add(motes);
-  const glow = new THREE.PointLight(0xff9450, 30, 22, 1.6);
+  // kept tight to the goal room: point lights aren't blocked by walls, so a long reach here bled
+  // warm light straight through into neighbouring corridors. CELL (~7) is one room's width.
+  const glow = new THREE.PointLight(0xff9450, 16, CELL * 1.35, 2.2);
   glow.position.set(gc.x, 3, gc.z);
   scene.add(glow);
   const goalBox = { x0: gc.x - 1.5, x1: gc.x + 1.5, z0: gc.z - 1.5, z1: gc.z + 1.5, h: MONO_H };
