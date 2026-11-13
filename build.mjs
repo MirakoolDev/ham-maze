@@ -1,5 +1,5 @@
 // Dev:   node build.mjs --dev   -> serves www/ on http://localhost:5173 with rebuild on save
-// Build: node build.mjs         -> dist/index.html, one self-contained file (JS + CSS inlined), and dist/admin.html
+// Build: node build.mjs         -> dist/index.html (self-contained), dist/admin.html, dist/deploy.html
 import * as esbuild from 'esbuild';
 import fs from 'node:fs';
 
@@ -13,10 +13,11 @@ if (dev) {
   const writeHtml = () => fs.writeFileSync('www/index.html',
     fill(fs.readFileSync('src/index.html', 'utf8'), '<link rel="stylesheet" href="ui.css">', '<script src="main.js"></script>'));
   const writeAdmin = () => fs.writeFileSync('www/admin.html', fill(fs.readFileSync('src/admin.html', 'utf8'), '', '<script src="admin.js"></script>'));
-  writeHtml(); writeAdmin();
+  const writeDeploy = () => fs.writeFileSync('www/deploy.html', fill(fs.readFileSync('src/deploy.html', 'utf8'), '', '<script src="deploy.js"></script>'));
+  writeHtml(); writeAdmin(); writeDeploy();
   const ctx = await esbuild.context({
-    entryPoints: [{ in: 'src/boot.js', out: 'main' }, 'src/ui.css', 'src/admin.js'], bundle: true, outdir: 'www', format: 'iife', sourcemap: true, logLevel: 'info', loader,
-    plugins: [{ name: 'html', setup(b) { b.onEnd(() => { writeHtml(); writeAdmin(); }); } }],
+    entryPoints: [{ in: 'src/boot.js', out: 'main' }, 'src/ui.css', 'src/admin.js', 'src/deploy.js'], bundle: true, outdir: 'www', format: 'iife', sourcemap: true, logLevel: 'info', loader,
+    plugins: [{ name: 'html', setup(b) { b.onEnd(() => { writeHtml(); writeAdmin(); writeDeploy(); }); } }],
   });
   await ctx.watch();
   const { port } = await ctx.serve({ servedir: 'www', port: 5173 });
@@ -40,5 +41,9 @@ if (dev) {
   const ra = await esbuild.build({ entryPoints: ['src/admin.js'], bundle: true, minify: true, format: 'iife', write: false, legalComments: 'none', target: 'es2020' });
   const ajs = ra.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
   fs.writeFileSync('dist/admin.html', fill(fs.readFileSync('src/admin.html', 'utf8'), '', `<script>\n${ajs}\n</script>`));
-  for (const f of ['dist/index.html', 'dist/artifact.html', 'dist/admin.html']) console.log(`${f}  ${(fs.statSync(f).size / 1024).toFixed(0)} KB`);
+  // deploy sandbox: connect a wallet, sign and send the contract deploy transaction yourself (served at /deploy)
+  const rd = await esbuild.build({ entryPoints: ['src/deploy.js'], bundle: true, minify: true, format: 'iife', write: false, legalComments: 'none', target: 'es2020' });
+  const djs = rd.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
+  fs.writeFileSync('dist/deploy.html', fill(fs.readFileSync('src/deploy.html', 'utf8'), '', `<script>\n${djs}\n</script>`));
+  for (const f of ['dist/index.html', 'dist/artifact.html', 'dist/admin.html', 'dist/deploy.html']) console.log(`${f}  ${(fs.statSync(f).size / 1024).toFixed(0)} KB`);
 }

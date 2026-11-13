@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HAM — Deploy</title>
+<style>
+  :root { --ink:#2a2733; --bone:#f3efe4; --muted:#8d89a0; --line:rgba(42,39,51,.14); --accent:#e0708a; --good:#3f9a62; --bad:#c84949; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ink); color: var(--bone); font: 15px/1.5 'Segoe UI', system-ui, sans-serif; }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 40px 20px 80px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 28px; font-size: 13px; }
+  .card { background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin-bottom: 18px; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; margin: 0 0 14px; color: var(--muted); }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 4px; }
+  label:first-child { margin-top: 0; }
+  input { width: 100%; background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; color: var(--bone); font: 13px/1.3 ui-monospace, monospace; }
+  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .row { display: flex; gap: 10px; }
+  .row > div { flex: 1; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .grid4 label { margin-top: 0; }
+  button { font: 600 14px/1 'Segoe UI', sans-serif; border: 0; border-radius: 10px; padding: 13px 18px; cursor: pointer; width: 100%; }
+  .primary { background: var(--accent); color: #fff; }
+  .primary:disabled { opacity: .5; cursor: default; }
+  .ghost { background: transparent; border: 1px solid var(--line); color: var(--bone); }
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 5px 10px; border-radius: 999px; background: rgba(255,255,255,.07); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .dot.on { background: var(--good); }
+  .status { margin-top: 12px; font-size: 13px; min-height: 1.2em; }
+  .status.bad { color: var(--bad); }
+  .status.ok { color: var(--good); }
+  .addr-box { word-break: break-all; font: 13px ui-monospace, monospace; background: rgba(255,255,255,.06); border-radius: 8px; padding: 10px; margin-top: 10px; }
+  .note { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  a { color: var(--accent); }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Deploy HamDailyRun</h1>
+  <p class="sub">Signs and sends the deploy transaction from your own wallet. No private key ever touches this page — MetaMask (or any injected wallet) holds the keys and you approve the transaction yourself.</p>
+
+  <div class="card">
+    <h2>Wallet</h2>
+    <div class="pill"><span class="dot" id="dot"></span><span id="netLabel">Not connected</span></div>
+    <button class="ghost" id="connectBtn" style="margin-top:12px">Connect wallet</button>
+    <p class="status" id="walletStatus"></p>
+  </div>
+
+  <div class="card">
+    <h2>Roles</h2>
+    <label for="owner">Owner (admin wallet — can change settings, pause, set roles)</label>
+    <input id="owner" placeholder="0x…">
+    <label for="referee">Referee (signs run scores — this server's key)</label>
+    <input id="referee" value="0x5a65548B00b2014147B4f6B508aE4fB52FF7Eab8">
+    <label for="treasury">Treasury (receives the 20% backer share)</label>
+    <input id="treasury" placeholder="0x…">
+    <label for="fee">Entry fee (ETH, ≈ $1 on testnet is nominal)</label>
+    <input id="fee" value="0.0003">
+  </div>
+
+  <div class="card">
+    <h2>Starting maze settings</h2>
+    <div class="grid4">
+      <div><label for="mazeSize">Maze size</label><input id="mazeSize" value="12"></div>
+      <div><label for="cellSize">Cell size</label><input id="cellSize" value="7"></div>
+      <div><label for="sentries">Sentries</label><input id="sentries" value="8"></div>
+      <div><label for="sentryHealth">Sentry HP</label><input id="sentryHealth" value="60"></div>
+      <div><label for="sentryDamage">Sentry dmg</label><input id="sentryDamage" value="13"></div>
+      <div><label for="playerHealth">Player HP</label><input id="playerHealth" value="100"></div>
+      <div><label for="magSize">Mag size</label><input id="magSize" value="30"></div>
+      <div><label for="loops">Loops</label><input id="loops" value="0"></div>
+    </div>
+    <p class="note">These can all be changed later from the admin page — this is just the day-one config.</p>
+  </div>
+
+  <button class="primary" id="deployBtn" disabled>Connect your wallet first</button>
+  <p class="status" id="deployStatus"></p>
+  <div id="result" class="hidden">
+    <div class="addr-box"><b>Contract:</b> <span id="addrOut"></span></div>
+    <p class="note">Send me this address and I'll wire it into <code>src/config.js</code>.</p>
+    <p class="note" id="explorerLink"></p>
+  </div>
+</div>
+<!--JS-->
+</body>
+</html>
