@@ -286,3 +286,21 @@ kbd { font: 500 11px/1 var(--f-label); color: #5b5866; background: #fff; border:
 .t-btn { font: 500 13px/1 var(--f-label); letter-spacing: .02em; border-color: rgba(255, 250, 242, .7); background: rgba(42, 39, 51, .25); }
 .t-btn.active { background: rgba(255, 143, 166, .35); border-color: var(--signal); color: #fff; }
 .t-pause { border-radius: 12px; }
+
+/* ── pot, chain picker and run status ── */
+.m-pot { margin-top: clamp(16px, 3vh, 26px); padding: 14px 16px; border-radius: 14px; background: rgba(42, 39, 51, .38); color: var(--bone); display: grid; gap: 6px; }
+.m-pot[hidden] { display: none; }
+.m-pot-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.m-pot-k { font: 500 12px/1 var(--f-label); letter-spacing: .04em; opacity: .85; }
+.m-pot-v { font: 400 26px/1.1 var(--f-display); color: var(--cream); }
+.m-chain { font: 500 12px/1 var(--f-label); background: rgba(255, 250, 242, .12); color: var(--bone); border: 1px solid rgba(255, 250, 242, .28); border-radius: 8px; padding: 6px 8px; max-width: 60%; }
+.m-chain option { color: #2a2733; }
+.m-podium { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; font: 500 13px/1.35 var(--f-label); font-variant-numeric: tabular-nums; }
+.m-podium li { display: flex; justify-content: space-between; gap: 8px; }
+.m-status { min-height: 1.2em; margin: 10px 0 0; font: 500 13px/1.45 var(--f-label); color: var(--bone); }
+.m-status:empty { display: none; }
+.m-status[data-kind="bad"] { color: #ffc2c2; }
+.m-status[data-kind="ok"] { color: #cdf3dc; }
+.m-points dd { color: var(--cream); }
+.m-breakdown { margin: 8px 0 0; font: 500 12px/1.4 var(--f-label); opacity: .85; }
+.m-breakdown:empty { display: none; }

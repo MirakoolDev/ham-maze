@@ -1,8 +1,8 @@
 // HAM admin page. Sign in with a wallet (a free signature, checked against the contract's owner), then edit the
 // game settings and economy stored in HamDailyRun. Every write is an owner-only transaction, so the contract is the
 // real gate; the sign-in just keeps the page closed to everyone else.
-import { BrowserProvider, JsonRpcProvider, Contract, formatEther, parseEther, verifyMessage, isAddress, getAddress, ZeroAddress } from 'ethers';
-import { CHAIN, FIELDS, DEFAULTS } from './config.js';
+import { BrowserProvider, JsonRpcProvider, Contract, formatEther, parseEther, formatUnits, parseUnits, verifyMessage, isAddress, getAddress, ZeroAddress } from 'ethers';
+import { CHAIN, CHAINS, CHAIN_KEY, setChain, FIELDS, DEFAULTS } from './config.js';
 import { generateMaze, dailySeed } from './maze.js';
 
 const CFG_T = 'tuple(uint8 mazeSize,uint8 cellSize,uint8 sentries,uint8 sentryHealth,uint8 sentryDamage,uint8 playerHealth,uint8 magSize,uint8 loops)';
@@ -11,13 +11,16 @@ const ABI = [
   'function holderToken() view returns (address)', 'function entryFee() view returns (uint256)', 'function paused() view returns (bool)',
   'function treasuryOwed() view returns (uint256)', 'function currentDay() view returns (uint256)', 'function nextConfigDay() view returns (uint256)',
   `function configFor(uint256) view returns (${CFG_T})`,
-  'function dayInfo(uint256) view returns (uint256 pot, uint256 unclaimed, uint256 settledAt, uint256 entries, address[3] top, uint32[3] topTime)',
+  'function dayInfo(uint256) view returns (uint256 pot, uint256 unclaimed, uint256 settledAt, uint256 entries, address[3] top, uint32[3] topPoints, uint32[3] topTime)',
+  'function boosters() view returns (tuple(address token, uint96 minBalance, uint16 bps)[])',
+  'function setBoosters(tuple(address token, uint96 minBalance, uint16 bps)[] list)',
   `function setConfig(${CFG_T} config_, bool immediate)`, 'function setEntryFee(uint256)', 'function setPaused(bool)',
   'function setHolderToken(address)', 'function setReferee(address)', 'function setTreasury(address)',
   'function settle(uint256)', 'function withdrawTreasury()',
 ];
 const CHAIN_HEX = '0x' + CHAIN.id.toString(16);
-const SESSION_KEY = 'ham.admin.session', CONTRACT_KEY = 'ham.admin.contract';
+const SESSION_KEY = 'ham.admin.session', CONTRACT_KEY = 'ham.admin.contract.' + CHAIN_KEY;
+const TOKEN_ABI = ['function decimals() view returns (uint8)', 'function symbol() view returns (string)'];
 const $ = (id) => document.getElementById(id);
 const store = { get: (k, s = localStorage) => { try { return s.getItem(k); } catch { return null; } }, set: (k, v, s = localStorage) => { try { s.setItem(k, v); } catch {} } };
 
@@ -37,7 +40,7 @@ async function connect() {
   try { await provider.send('wallet_switchEthereumChain', [{ chainId: CHAIN_HEX }]); }
   catch (e) {
     if (e?.error?.code === 4902 || e?.code === 4902 || /unrecognized|not added/i.test(e?.message || '')) {
-      await provider.send('wallet_addEthereumChain', [{ chainId: CHAIN_HEX, chainName: 'Robinhood Chain', rpcUrls: [CHAIN.rpc], nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, blockExplorerUrls: [CHAIN.explorer] }]);
+      await provider.send('wallet_addEthereumChain', [{ chainId: CHAIN_HEX, chainName: CHAIN.name, rpcUrls: [CHAIN.rpc], nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, blockExplorerUrls: [CHAIN.explorer] }]);
     } else throw e;
   }
   provider = new BrowserProvider(window.ethereum, 'any');
@@ -162,10 +165,33 @@ async function refresh() {
     $('dEntries').textContent = String(info.entries);
     $('dTreasury').textContent = `${Number(formatEther(owed)).toFixed(4)} ETH`;
     $('dNext').textContent = next > 0n ? (next > day ? 'Tomorrow' : 'Active') : 'None';
-    const rows = info.top.map((a, i) => (a === ZeroAddress ? '' : `<tr><td>${i + 1}</td><td class="addr">${short(a)}</td><td>${(Number(info.topTime[i]) / 1000).toFixed(2)} s</td></tr>`)).join('');
-    $('topRows').innerHTML = rows || '<tr><td colspan="3" class="note">No finished runs yet.</td></tr>';
+    const rows = info.top.map((a, i) => (a === ZeroAddress ? '' : `<tr><td>${i + 1}</td><td class="addr">${short(a)}</td><td>${Number(info.topPoints[i]).toLocaleString('en-US')}</td><td>${(Number(info.topTime[i]) / 1000).toFixed(2)} s</td></tr>`)).join('');
+    $('topRows').innerHTML = rows || '<tr><td colspan="4" class="note">No finished runs yet.</td></tr>';
+    const list = await c.boosters();
+    const lines = await Promise.all(list.map(async (b) => {
+      const dec = await tokenDecimals(b.token);
+      return `${b.token} ${formatUnits(b.minBalance, dec)} ${Number(b.bps) / 100}`;
+    }));
+    $('boostIn').value = lines.join('\n');
     say(ds, '');
   } catch (e) { say(ds, 'Could not read the contract: ' + (e.shortMessage || e.message), 'bad'); }
+}
+
+async function tokenDecimals(token) {
+  try { return Number(await new Contract(token, TOKEN_ABI, new JsonRpcProvider(CHAIN.rpc, CHAIN.id, { staticNetwork: true })).decimals()); }
+  catch { return 0; } // NFTs have no decimals: the minimum is a count
+}
+/** "0xToken 100000 10" per line: token, minimum held (in whole tokens), bonus percent. */
+async function parseBoosters(text) {
+  const out = [];
+  for (const raw of text.split(/\n/).map((l) => l.trim()).filter(Boolean)) {
+    const [tok, min, pct] = raw.split(/[\s,]+/);
+    if (!isAddress(tok)) throw new Error(`Not an address: ${tok}`);
+    const bps = Math.round(Number(pct) * 100);
+    if (!(bps > 0 && bps <= 5000)) throw new Error(`Bonus must be between 0.01% and 50%: ${pct}`);
+    out.push({ token: getAddress(tok), minBalance: parseUnits(String(min || '1'), await tokenDecimals(tok)), bps });
+  }
+  return out;
 }
 
 // ── contract writes ──────────────────────────────────────────────────────────
@@ -206,12 +232,15 @@ document.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click
       case 'treasury': return send(st, 'Treasury', (c) => c.setTreasury(addr('treasuryIn')));
       case 'pause': return send(st, $('pauseBtn').dataset.paused ? 'Reopen entries' : 'Pause entries', (c) => c.setPaused(!$('pauseBtn').dataset.paused));
       case 'settle': return send(st, 'Settle yesterday', async (c) => c.settle((await c.currentDay()) - 1n));
+      case 'boosters': return send(st, 'Point boosters', async (c) => c.setBoosters(await parseBoosters($('boostIn').value)));
       case 'withdraw': return send(st, 'Send treasury', (c) => c.withdrawTreasury());
     }
   } catch (e) { say(st, e.message, 'bad'); }
 }));
 
 // ── start ────────────────────────────────────────────────────────────────────
+for (const [k, ch] of Object.entries(CHAINS)) $('chainSel').add(new Option(ch.name, k, false, k === CHAIN_KEY));
+$('chainSel').addEventListener('change', () => setChain($('chainSel').value));
 buildFields(); draw();
 try {
   const s = JSON.parse(store.get(SESSION_KEY, sessionStorage) || 'null');

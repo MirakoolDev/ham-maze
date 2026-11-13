@@ -48,8 +48,13 @@ contract HamDailyRunTest is Test {
     }
 
     // ── helpers ──
+    // A run's points in these tests: faster is more (pts = 10_000_000 / seconds-ish), so lower t still wins.
+    function pts(uint32 t) internal pure returns (uint32) {
+        return uint32(1_000_000_000 / uint256(t));
+    }
+
     function sign(uint256 d, address p, uint32 attempt, uint32 t) internal view returns (bytes memory) {
-        bytes32 h = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", run.runDigest(d, p, attempt, t)));
+        bytes32 h = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", run.runDigest(d, p, attempt, pts(t), t)));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(refereeKey, h);
         return abi.encodePacked(r, s, v);
     }
@@ -57,16 +62,16 @@ contract HamDailyRunTest is Test {
     function play(address p, uint32 t) internal returns (uint32 attempt) {
         vm.startPrank(p);
         attempt = run.enter{value: FEE}(address(0));
-        run.submitRun(day, attempt, t, sign(day, p, attempt, t));
+        run.submitRun(day, attempt, pts(t), t, sign(day, p, attempt, t));
         vm.stopPrank();
     }
 
     function top() internal view returns (address[3] memory t, uint32[3] memory times) {
-        (,,,, t, times) = run.dayInfo(day);
+        (,,,, t,, times) = run.dayInfo(day);
     }
 
     function pot(uint256 d) internal view returns (uint256 p) {
-        (p,,,,,) = run.dayInfo(d);
+        (p,,,,,,) = run.dayInfo(d);
     }
 
     function settleDay() internal {
@@ -100,7 +105,7 @@ contract HamDailyRunTest is Test {
         run.enter{value: FEE}(address(0));
         bytes memory sig = sign(day, alice, a, 60_000);
         vm.prank(alice);
-        run.submitRun(day, a, 60_000, sig); // still works
+        run.submitRun(day, a, pts(60_000), 60_000, sig); // still works
     }
 
     function test_FreeRunForHolderOncePerDay() public {
@@ -141,6 +146,7 @@ contract HamDailyRunTest is Test {
         (t, times) = top();
         assertEq(times[0], 60_000);
         assertEq(run.bestTime(day, alice), 60_000);
+        assertEq(run.bestPoints(day, alice), pts(60_000));
     }
 
     function test_TieKeepsEarlierRunAhead() public {
@@ -156,16 +162,16 @@ contract HamDailyRunTest is Test {
         uint32 a = run.enter{value: FEE}(address(0));
         bytes memory sig = sign(day, alice, a, 60_000);
         vm.expectRevert(HamDailyRun.BadSignature.selector);
-        run.submitRun(day, a, 50_000, sig); // a faster time than was signed
+        run.submitRun(day, a, pts(50_000), 50_000, sig); // a faster time than was signed
         vm.stopPrank();
         vm.prank(bob); // someone else's signature
         vm.expectRevert(HamDailyRun.BadAttempt.selector);
-        run.submitRun(day, a, 60_000, sig);
+        run.submitRun(day, a, pts(60_000), 60_000, sig);
         vm.prank(bob);
         run.enter{value: FEE}(address(0));
         vm.prank(bob);
         vm.expectRevert(HamDailyRun.BadSignature.selector);
-        run.submitRun(day, a, 60_000, sig);
+        run.submitRun(day, a, pts(60_000), 60_000, sig);
     }
 
     function test_AttemptCannotBeReusedOrSkipped() public {
@@ -173,11 +179,11 @@ contract HamDailyRunTest is Test {
         uint32 a = run.enter{value: FEE}(address(0));
         bytes memory sig = sign(day, alice, a, 60_000);
         bytes memory next = sign(day, alice, a + 1, 50_000);
-        run.submitRun(day, a, 60_000, sig);
+        run.submitRun(day, a, pts(60_000), 60_000, sig);
         vm.expectRevert(HamDailyRun.AttemptUsed.selector);
-        run.submitRun(day, a, 60_000, sig);
+        run.submitRun(day, a, pts(60_000), 60_000, sig);
         vm.expectRevert(HamDailyRun.BadAttempt.selector);
-        run.submitRun(day, a + 1, 50_000, next);
+        run.submitRun(day, a + 1, pts(50_000), 50_000, next);
         vm.stopPrank();
     }
 
@@ -187,7 +193,7 @@ contract HamDailyRunTest is Test {
         bytes memory sig = sign(day, alice, a, 60_000);
         vm.warp((day + 1) * 1 days + 10 minutes); // inside the grace period
         vm.prank(alice);
-        run.submitRun(day, a, 60_000, sig);
+        run.submitRun(day, a, pts(60_000), 60_000, sig);
 
         vm.prank(bob);
         uint32 b = run.enter{value: FEE}(address(0)); // this lands on the new day
@@ -195,7 +201,7 @@ contract HamDailyRunTest is Test {
         vm.warp((day + 1) * 1 days + 15 minutes);
         vm.prank(alice);
         vm.expectRevert(HamDailyRun.DayClosed.selector);
-        run.submitRun(day, a, 60_000, sig);
+        run.submitRun(day, a, pts(60_000), 60_000, sig);
         b;
     }
 
@@ -238,7 +244,7 @@ contract HamDailyRunTest is Test {
         nft.mint(alice);
         vm.startPrank(alice);
         uint32 a = run.enter{value: FEE}(dave); // dave referred alice
-        run.submitRun(day, a, 60_000, sign(day, alice, a, 60_000));
+        run.submitRun(day, a, pts(60_000), 60_000, sign(day, alice, a, 60_000));
         vm.stopPrank();
         for (uint256 i; i < 9; ++i) play(bob, uint32(70_000 + i)); // grow the pot
         uint256 p = pot(day);
@@ -310,7 +316,7 @@ contract HamDailyRunTest is Test {
         uint32 a = run.enter{value: FEE}(dave);
         bytes memory sig = sign(day, alice, a, 60_000);
         vm.prank(alice);
-        run.submitRun(day, a, 60_000, sig);
+        run.submitRun(day, a, pts(60_000), 60_000, sig);
         settleDay();
         uint256 owed = run.treasuryOwed();
         run.withdrawTreasury();
@@ -393,7 +399,7 @@ contract HamDailyRunTest is Test {
             vm.startPrank(p);
             uint32 a = run.enter{value: FEE}(ref);
             uint32 t = uint32(30_000 + uint256(keccak256(abi.encode(seed, i, "t"))) % 100_000);
-            run.submitRun(day, a, t, sign(day, p, a, t));
+            run.submitRun(day, a, pts(t), t, sign(day, p, a, t));
             vm.stopPrank();
         }
         settleDay();
@@ -405,7 +411,53 @@ contract HamDailyRunTest is Test {
     }
 
     function _info(uint256 d) internal view returns (uint256, uint256, uint256, uint256, address[3] memory, uint32[3] memory) {
-        (uint256 p, uint256 u, uint256 s, uint256 e, address[3] memory t, uint32[3] memory tt) = run.dayInfo(d);
+        (uint256 p, uint256 u, uint256 s, uint256 e, address[3] memory t,, uint32[3] memory tt) = run.dayInfo(d);
         return (p, s, u, e, t, tt);
+    }
+
+    // ── points and boosters ──
+    function test_ForgedPointsRejected() public {
+        vm.prank(alice);
+        uint32 a = run.enter{value: FEE}(address(0));
+        bytes memory sig = sign(day, alice, a, 60_000);
+        vm.prank(alice);
+        vm.expectRevert(HamDailyRun.BadSignature.selector);
+        run.submitRun(day, a, pts(60_000) + 1, 60_000, sig); // more points than were signed
+    }
+
+    function test_BestScoringRunCounts() public {
+        play(alice, 80_000);
+        play(alice, 60_000);
+        play(alice, 70_000); // worse than her best, ignored
+        assertEq(run.bestPoints(day, alice), pts(60_000));
+        assertEq(run.bestTime(day, alice), 60_000);
+    }
+
+    function test_BoosterMultipliesPoints() public {
+        MockNFT pfwa = new MockNFT();
+        HamDailyRun.Booster[] memory list = new HamDailyRun.Booster[](2);
+        list[0] = HamDailyRun.Booster({token: address(pfwa), minBalance: 1, bps: 1000}); // +10%
+        list[1] = HamDailyRun.Booster({token: address(nft), minBalance: 1, bps: 500}); // +5%
+        vm.prank(owner);
+        run.setBoosters(list);
+        pfwa.mint(bob);
+        nft.mint(bob);
+        assertEq(run.boostOf(bob), 1500);
+        play(alice, 60_000); // no boost
+        play(bob, 66_000); // slower, but +15% points puts him ahead
+        (address[3] memory t,) = top();
+        assertEq(t[0], bob);
+        assertEq(run.bestPoints(day, bob), uint32(uint256(pts(66_000)) * 11_500 / 10_000));
+    }
+
+    function test_BoosterBounds() public {
+        HamDailyRun.Booster[] memory list = new HamDailyRun.Booster[](1);
+        list[0] = HamDailyRun.Booster({token: address(nft), minBalance: 1, bps: 6000});
+        vm.prank(owner);
+        vm.expectRevert(HamDailyRun.BadBooster.selector);
+        run.setBoosters(list);
+        vm.prank(alice);
+        vm.expectRevert(HamDailyRun.NotOwner.selector);
+        run.setBoosters(new HamDailyRun.Booster[](0));
     }
 }

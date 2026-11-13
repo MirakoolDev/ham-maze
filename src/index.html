@@ -58,12 +58,19 @@
             <li><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7.5"/><path d="M12 1.5v5M12 17.5v5M1.5 12h5M17.5 12h5"/></svg><span>Sentry machines patrol the corridors. Aim for the eye.</span></li>
             <li><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M12 7v5.5l3.5 2"/></svg><span>Come back tomorrow for a new challenge.</span></li>
           </ul>
+          <div class="m-pot" hidden>
+            <div class="m-pot-row"><span class="m-pot-k">Today&rsquo;s pot</span><select class="m-chain" aria-label="Chain"></select></div>
+            <b class="m-pot-v">&ndash;</b>
+            <ol class="m-podium"></ol>
+          </div>
           <div class="m-actions">
+            <button class="btn primary" data-act="play-pot" hidden>Play for the pot</button>
             <button class="btn primary" data-act="deploy">Enter the maze</button>
             <button class="btn" data-act="settings">Settings</button>
             <button class="btn" data-act="controls">Controls</button>
           </div>
-          <p class="m-note">Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>, look with the mouse, click to fire, right-click to aim. <kbd>Esc</kbd> pauses.</p>
+          <p class="m-status m-title-status" role="status"></p>
+          <p class="m-note">Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>, look with the mouse, click to fire, right-click to aim. <kbd>Esc</kbd> pauses.<br>Music by Rere Aiyemomi.</p>
         </div>
       </section>
 
@@ -82,13 +89,16 @@
         <div class="m-k">Maze No. <span data-f="seed">0</span></div>
         <h2 class="m-h">Monolith found</h2>
         <dl class="m-stats">
+          <div class="m-points"><dt>Points</dt><dd data-f="points">0</dd></div>
           <div><dt>Time</dt><dd data-f="time">0:00.00</dd></div>
           <div><dt>Machines destroyed</dt><dd data-f="kills">0</dd></div>
           <div><dt>Accuracy</dt><dd data-f="acc">0%</dd></div>
           <div><dt>Distance walked</dt><dd data-f="walked">0 m</dd></div>
           <div><dt>Retries</dt><dd data-f="retries">0</dd></div>
         </dl>
-        <div class="m-actions col"><button class="btn primary" data-act="again">Run it again</button></div>
+        <p class="m-breakdown" data-f="breakdown"></p>
+        <p class="m-status m-run-status" role="status"></p>
+        <div class="m-actions col"><button class="btn" data-act="submit-run" hidden>Try recording again</button><button class="btn primary" data-act="again">Run it again</button></div>
       </section>
 
       <section class="m-screen m-card m-dead" data-s="dead" aria-label="Down">

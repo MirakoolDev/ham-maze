@@ -1,13 +1,28 @@
-// Game settings. The live values come from the HamDailyRun contract on Robinhood Chain (set from the admin page);
-// until it is deployed, or if the chain does not answer in time, the defaults below are used.
+// Game settings and chains. The live settings come from the HamDailyRun contract on the selected chain (set from the
+// admin page); until it is deployed, or if the chain does not answer in time, the defaults below are used.
 // ?preview&mazeSize=16&cellSize=9... overrides them locally (the admin page's preview link), and such runs never count.
+// ?chain=aurora-testnet picks the chain (remembered for next time).
 
-export const CHAIN = {
-  id: 4663,
-  rpc: 'https://rpc.mainnet.chain.robinhood.com',
-  explorer: 'https://explorer.chain.robinhood.com',
-  contract: '', // HamDailyRun address, filled in after deployment
+// The same contract is deployed on each chain; each has its own pot and leaderboard. Fill in `contract` after deploying.
+export const CHAINS = {
+  'aurora-testnet': { id: 1313161555, name: 'Aurora Testnet', rpc: 'https://testnet.aurora.dev', explorer: 'https://explorer.testnet.aurora.dev', contract: '', testnet: true },
+  aurora: { id: 1313161554, name: 'Aurora', rpc: 'https://mainnet.aurora.dev', explorer: 'https://explorer.aurora.dev', contract: '' },
+  robinhood: { id: 4663, name: 'Robinhood Chain', rpc: 'https://rpc.mainnet.chain.robinhood.com', explorer: 'https://explorer.chain.robinhood.com', contract: '' },
 };
+export const DEFAULT_CHAIN = 'aurora-testnet';
+
+function pickChain() {
+  let k = null;
+  try { k = new URLSearchParams(location.search).get('chain'); } catch {}
+  try { if (k && CHAINS[k]) localStorage.setItem('ham.chain', k); else k = localStorage.getItem('ham.chain'); } catch {}
+  return CHAINS[k] ? k : DEFAULT_CHAIN;
+}
+export const CHAIN_KEY = typeof location === 'undefined' ? DEFAULT_CHAIN : pickChain();
+export const CHAIN = CHAINS[CHAIN_KEY];
+export function setChain(key) {
+  try { localStorage.setItem('ham.chain', key); } catch {}
+  const u = new URL(location.href); u.searchParams.set('chain', key); location.href = u.toString();
+}
 
 // Same order and bounds as HamDailyRun.GameConfig.
 export const FIELDS = [
@@ -24,7 +39,7 @@ export const FIELDS = [
 export const DEFAULTS = Object.fromEntries(FIELDS.map((f) => [f.key, f.def]));
 export const CFG = { ...DEFAULTS, source: 'default', preview: false };
 
-const clampAll = (c) => {
+export const clampConfig = (c) => {
   for (const f of FIELDS) c[f.key] = Math.max(f.min, Math.min(f.max, Math.round(Number(c[f.key]) || f.def)));
   return c;
 };
@@ -53,6 +68,6 @@ export async function loadConfig() {
     const c = await readChainConfig();
     if (c) { Object.assign(CFG, c); CFG.source = 'chain'; }
   }
-  clampAll(CFG);
+  clampConfig(CFG);
   return CFG;
 }

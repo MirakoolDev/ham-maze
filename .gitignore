@@ -6,3 +6,5 @@ design/royale.html
 contracts/out/
 contracts/cache/
 contracts/broadcast/
+.env.local
+.e2e

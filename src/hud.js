@@ -86,7 +86,11 @@ export function createHud({ magSize = 30 } = {}) {
     show(on) { hud.classList.toggle('on', on); if (on) sizeCompass(); },
     setSeed(seed) { fields('seed', String(seed)); },
     message(text, secs = 3) { msg.textContent = text; msg.classList.add('on'); msgTimer = secs; },
-    debrief({ time, walked, retries, kills, acc }) {
+    debrief({ time, walked, retries, kills, acc, score }) {
+      if (score) {
+        fields('points', score.total.toLocaleString('en-US'));
+        fields('breakdown', `Speed ${score.time.toLocaleString('en-US')} · Route ${score.route.toLocaleString('en-US')} · Sentries ${score.sentries.toLocaleString('en-US')}${score.rivals ? ` · Rivals ${score.rivals.toLocaleString('en-US')}` : ''}`);
+      }
       fields('time', fmtTime(time)); fields('walked', `${Math.round(walked)} m`); fields('retries', String(retries));
       fields('kills', String(kills)); fields('acc', `${Math.round(acc * 100)}%`);
     },

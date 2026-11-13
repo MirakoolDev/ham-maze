@@ -54,13 +54,15 @@ td.addr { font-family: ui-monospace, monospace; font-size: 12px; }
 .full { grid-column: 1 / -1; }
 @media (max-width: 900px) { .grid { grid-template-columns: minmax(0, 1fr); } .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .row { grid-template-columns: 100px minmax(0, 1fr) 56px; } }
 [hidden] { display: none !important; }
+textarea { width: 100%; font: 500 12px/1.5 ui-monospace, monospace; background: inherit; color: inherit; border: 1px solid rgba(255,255,255,.18); border-radius: 10px; padding: 8px 10px; resize: vertical; }
+#chainSel { padding: 6px 10px; border-radius: 999px; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <div class="brand"><b>HAM</b><span>Admin</span></div>
-    <div class="inline"><span class="pill" id="netPill">Not connected</span><button class="ghost" id="walletBtn" type="button">Connect wallet</button></div>
+    <div class="inline"><select id="chainSel" aria-label="Chain" class="ghost"></select><span class="pill" id="netPill">Not connected</span><button class="ghost" id="walletBtn" type="button">Connect wallet</button></div>
   </header>
 
   <section class="gate" id="gate">
@@ -110,6 +112,7 @@ td.addr { font-family: ui-monospace, monospace; font-size: 12px; }
         <div class="stack"><span class="label">Holder NFT (free run + 10% bonus)</span><div class="inline"><input type="text" id="holderIn" placeholder="0x… or empty to turn off" spellcheck="false"><button class="ghost" data-act="holder" type="button">Save</button></div></div>
         <div class="stack"><span class="label">Referee (signs run times)</span><div class="inline"><input type="text" id="refereeIn" spellcheck="false"><button class="ghost" data-act="referee" type="button">Save</button></div></div>
         <div class="stack"><span class="label">Treasury</span><div class="inline"><input type="text" id="treasuryIn" spellcheck="false"><button class="ghost" data-act="treasury" type="button">Save</button></div></div>
+        <div class="stack"><span class="label">Point boosters, one per line: token, minimum held, bonus %. Up to 4, 50% total. Example for $PFWA: 0xa934bA4F59070149d37A93F8A002Af79BAe35563 100000 10</span><textarea id="boostIn" rows="3" spellcheck="false" placeholder="0x… 100000 10"></textarea><div class="inline"><button class="ghost" data-act="boosters" type="button">Save boosters</button></div></div>
         <div class="inline"><span class="label">Entries</span><span class="pill" id="pausedPill">Open</span><button class="ghost" data-act="pause" type="button" id="pauseBtn">Pause entries</button></div>
         <div class="status" id="ecoStatus" role="status"></div>
       </section>
@@ -122,7 +125,7 @@ td.addr { font-family: ui-monospace, monospace; font-size: 12px; }
           <div><span class="label">Treasury owed</span><b id="dTreasury">-</b></div>
           <div><span class="label">Next config</span><b id="dNext">-</b></div>
         </div>
-        <table><thead><tr><th>#</th><th>Player</th><th>Time</th></tr></thead><tbody id="topRows"><tr><td colspan="3" class="note">No finished runs yet.</td></tr></tbody></table>
+        <table><thead><tr><th>#</th><th>Player</th><th>Points</th><th>Time</th></tr></thead><tbody id="topRows"><tr><td colspan="4" class="note">No finished runs yet.</td></tr></tbody></table>
         <div class="inline"><button class="ghost" data-act="settle" type="button">Settle yesterday</button><button class="ghost" data-act="withdraw" type="button">Send treasury</button><button class="ghost" id="refresh" type="button">Refresh</button></div>
         <div class="status" id="dayStatus" role="status"></div>
       </section>

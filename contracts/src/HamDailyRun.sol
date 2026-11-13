@@ -6,20 +6,25 @@ interface IBalanceOf {
 }
 
 /// @title HamDailyRun
-/// @notice The pot for HAM (Home's a Maze), a daily first-person maze run on Robinhood Chain.
+/// @notice The pot for HAM (Home's a Maze), a daily first-person maze run. Deployed on Robinhood Chain
+/// and on Aurora (NEAR's EVM); each chain has its own pot and leaderboard.
 ///
 /// Everyone runs the same maze each UTC day. A run costs `entryFee` in ETH, and the whole fee goes
 /// into that day's pot. Holders of `holderToken` (an ERC-721 or ERC-20; any balance counts) also
 /// get one free run a day.
 ///
-/// The game client cannot be trusted with times, so a run only counts once the referee (the
-/// game's replay server) has replayed its input log and signed the finish time. The player
-/// submits that signature here. Each paid or free run is one numbered attempt and can carry one
-/// signed time. A player's best time is what ranks.
+/// Runs are scored in points: a fast finish, a short route, sentries destroyed and rivals beaten all
+/// add up. The game client cannot be trusted, so a run only counts once the referee (the game's
+/// server) has checked it and signed its points and finish time. The player submits that signature
+/// here. Each paid or free run is one numbered attempt and can carry one signed result; you can run as
+/// often as you like and your best-scoring run is what ranks.
+///
+/// Boosters: holding a listed token (for example 100,000 $PFWA, or a HAM NFT) multiplies the points
+/// of a run when it is submitted, up to MAX_BOOST_BPS in total.
 ///
 /// Days run 00:00 to 00:00 UTC. Runs from a day can still be submitted for SETTLE_DELAY after it
 /// ends, then anyone can settle it:
-///   1st 40%, 2nd 20%, 3rd 10%  to the top three times, claimable for CLAIM_WINDOW
+///   1st 40%, 2nd 20%, 3rd 10%  to the top three scores, claimable for CLAIM_WINDOW
 ///   20%                        treasury (meant for the FundingWorks backers), which first pays the holder bonus (+10% of a holder's
 ///                              prize) and referral rewards (5% of a referred winner's prize)
 ///   10% + any unawarded place  rolls into the current day's pot
@@ -39,7 +44,9 @@ contract HamDailyRun {
     uint256 public constant SETTLE_DELAY = 15 minutes;
     uint256 public constant CLAIM_WINDOW = 7 days;
     uint256 public constant MAX_ENTRY_FEE = 1 ether;
-    bytes32 public constant RUN_TAG = keccak256("HAM_RUN_V1");
+    bytes32 public constant RUN_TAG = keccak256("HAM_RUN_V2");
+    uint256 public constant MAX_BOOSTERS = 4;
+    uint256 public constant MAX_BOOST_BPS = 5000; // boosters add at most +50% points
 
     // ── Game settings, read by the game and the referee ────────────────────────
     struct GameConfig {
@@ -59,7 +66,15 @@ contract HamDailyRun {
         uint64 settledAt; // 0 = not settled
         uint32 entries;
         address[3] top;
-        uint32[3] topTime; // milliseconds
+        uint32[3] topPoints; // boosted points, highest first
+        uint32[3] topTime; // milliseconds, for display and tie-breaks
+    }
+
+    /// Holding at least `minBalance` of `token` adds `bps` to a run's points (10000 = +100%).
+    struct Booster {
+        address token;
+        uint96 minBalance;
+        uint16 bps;
     }
 
     // ── State ───────────────────────────────────────────────────────────────────
@@ -79,7 +94,9 @@ contract HamDailyRun {
     mapping(uint256 => mapping(address => uint32)) public attempts; // runs bought (paid + free) per day
     mapping(uint256 => mapping(address => mapping(uint32 => bool))) public attemptUsed;
     mapping(uint256 => mapping(address => bool)) public freeRunUsed;
-    mapping(uint256 => mapping(address => uint32)) public bestTime; // ms, 0 = no finished run
+    mapping(uint256 => mapping(address => uint32)) public bestPoints; // 0 = no finished run
+    mapping(uint256 => mapping(address => uint32)) public bestTime; // ms of the best-scoring run
+    Booster[] internal _boosters;
     mapping(uint256 => mapping(address => uint256)) public prizeOf; // claimable prize
     mapping(address => bool) public joined;
     mapping(address => address) public referrerOf;
@@ -90,7 +107,8 @@ contract HamDailyRun {
 
     // ── Events ──────────────────────────────────────────────────────────────────
     event Entered(uint256 indexed day, address indexed player, uint32 attempt, bool free, uint256 paid);
-    event RunSubmitted(uint256 indexed day, address indexed player, uint32 attempt, uint32 timeMs, bool best);
+    event RunSubmitted(uint256 indexed day, address indexed player, uint32 attempt, uint32 points, uint32 boosted, uint32 timeMs, bool best);
+    event BoostersSet(Booster[] boosters);
     event PotSeeded(uint256 indexed day, address indexed from, uint256 amount);
     event DaySettled(uint256 indexed day, address[3] top, uint256[3] prize, uint256 treasury, uint256 rollover);
     event PrizeClaimed(uint256 indexed day, address indexed player, uint256 amount);
@@ -132,6 +150,7 @@ contract HamDailyRun {
     error ZeroAddress();
     error FeeTooHigh();
     error TransferFailed();
+    error BadBooster();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -184,10 +203,33 @@ contract HamDailyRun {
     function dayInfo(uint256 day)
         external
         view
-        returns (uint256 pot, uint256 unclaimed, uint256 settledAt, uint256 entries, address[3] memory top, uint32[3] memory topTime)
+        returns (
+            uint256 pot,
+            uint256 unclaimed,
+            uint256 settledAt,
+            uint256 entries,
+            address[3] memory top,
+            uint32[3] memory topPoints,
+            uint32[3] memory topTime
+        )
     {
         Day storage d = _days[day];
-        return (d.pot, d.unclaimed, d.settledAt, d.entries, d.top, d.topTime);
+        return (d.pot, d.unclaimed, d.settledAt, d.entries, d.top, d.topPoints, d.topTime);
+    }
+
+    function boosters() external view returns (Booster[] memory) {
+        return _boosters;
+    }
+
+    /// @notice The points boost a player gets right now, in bps (10000 = +100%).
+    function boostOf(address player) public view returns (uint256 bps) {
+        for (uint256 i; i < _boosters.length; ++i) {
+            Booster memory b = _boosters[i];
+            try IBalanceOf(b.token).balanceOf(player) returns (uint256 bal) {
+                if (bal >= b.minBalance && bal > 0) bps += b.bps;
+            } catch {}
+        }
+        if (bps > MAX_BOOST_BPS) bps = MAX_BOOST_BPS;
     }
 
     function isHolder(address player) public view returns (bool) {
@@ -201,8 +243,8 @@ contract HamDailyRun {
     }
 
     /// @notice The message the referee signs for a run (then signed as an Ethereum signed message).
-    function runDigest(uint256 day, address player, uint32 attempt, uint32 timeMs) public view returns (bytes32) {
-        return keccak256(abi.encode(RUN_TAG, block.chainid, address(this), day, player, attempt, timeMs));
+    function runDigest(uint256 day, address player, uint32 attempt, uint32 points, uint32 timeMs) public view returns (bytes32) {
+        return keccak256(abi.encode(RUN_TAG, block.chainid, address(this), day, player, attempt, points, timeMs));
     }
 
     // ── Playing ─────────────────────────────────────────────────────────────────
@@ -229,23 +271,26 @@ contract HamDailyRun {
 
     /// @notice Record a finished run with the referee's signature over `runDigest`.
     /// Runs from today, or from yesterday until SETTLE_DELAY after midnight, are accepted.
-    function submitRun(uint256 day, uint32 attempt, uint32 timeMs, bytes calldata signature) external {
+    function submitRun(uint256 day, uint32 attempt, uint32 points, uint32 timeMs, bytes calldata signature) external {
         uint256 today = currentDay();
         if (day != today && !(day + 1 == today && block.timestamp < today * 1 days + SETTLE_DELAY)) revert DayClosed();
         if (_days[day].settledAt != 0) revert DayClosed();
         if (attempt >= attempts[day][msg.sender]) revert BadAttempt();
         if (attemptUsed[day][msg.sender][attempt]) revert AttemptUsed();
-        if (timeMs == 0) revert BadTime();
-        if (_recover(_ethSigned(runDigest(day, msg.sender, attempt, timeMs)), signature) != referee) revert BadSignature();
+        if (timeMs == 0 || points == 0) revert BadTime();
+        if (_recover(_ethSigned(runDigest(day, msg.sender, attempt, points, timeMs)), signature) != referee) revert BadSignature();
         attemptUsed[day][msg.sender][attempt] = true;
 
-        uint32 prev = bestTime[day][msg.sender];
-        bool best = prev == 0 || timeMs < prev;
+        uint256 b = uint256(points) * (BPS + boostOf(msg.sender)) / BPS;
+        uint32 boosted = b > type(uint32).max ? type(uint32).max : uint32(b);
+        uint32 prev = bestPoints[day][msg.sender];
+        bool best = boosted > prev;
         if (best) {
+            bestPoints[day][msg.sender] = boosted;
             bestTime[day][msg.sender] = timeMs;
-            _rank(_days[day], msg.sender, timeMs);
+            _rank(_days[day], msg.sender, boosted, timeMs);
         }
-        emit RunSubmitted(day, msg.sender, attempt, timeMs, best);
+        emit RunSubmitted(day, msg.sender, attempt, points, boosted, timeMs, best);
     }
 
     /// @notice Add ETH to a day's pot (today or later), e.g. a sponsor top-up.
@@ -384,6 +429,17 @@ contract HamDailyRun {
         emit HolderTokenSet(token);
     }
 
+    /// @notice Replace the points boosters (at most MAX_BOOSTERS). An empty list turns boosting off.
+    function setBoosters(Booster[] calldata list) external onlyOwner {
+        if (list.length > MAX_BOOSTERS) revert BadBooster();
+        delete _boosters;
+        for (uint256 i; i < list.length; ++i) {
+            if (list[i].token == address(0) || list[i].bps == 0 || list[i].bps > MAX_BOOST_BPS) revert BadBooster();
+            _boosters.push(list[i]);
+        }
+        emit BoostersSet(list);
+    }
+
     /// @notice Pausing stops new entries only; submitting, settling and claiming keep working.
     function setPaused(bool paused_) external onlyOwner {
         paused = paused_;
@@ -419,27 +475,34 @@ contract HamDailyRun {
         _days[day].entries += 1;
     }
 
-    /// @dev Keeps the top three sorted by time. Only called when `player` improved their best,
-    /// so taking them out and reinserting them is safe. Ties keep the earlier time ahead.
-    function _rank(Day storage d, address player, uint32 timeMs) internal {
+    /// @dev Keeps the top three sorted by points (then by the faster time). Only called when `player`
+    /// improved their best, so taking them out and reinserting them is safe. Full ties keep the earlier run ahead.
+    function _rank(Day storage d, address player, uint32 points, uint32 timeMs) internal {
         for (uint256 i; i < 3; ++i) {
             if (d.top[i] == player) {
                 for (uint256 j = i; j < 2; ++j) {
                     d.top[j] = d.top[j + 1];
+                    d.topPoints[j] = d.topPoints[j + 1];
                     d.topTime[j] = d.topTime[j + 1];
                 }
                 d.top[2] = address(0);
+                d.topPoints[2] = 0;
                 d.topTime[2] = 0;
                 break;
             }
         }
         for (uint256 i; i < 3; ++i) {
-            if (d.top[i] == address(0) || timeMs < d.topTime[i]) {
+            if (
+                d.top[i] == address(0) || points > d.topPoints[i]
+                    || (points == d.topPoints[i] && timeMs < d.topTime[i])
+            ) {
                 for (uint256 j = 2; j > i; --j) {
                     d.top[j] = d.top[j - 1];
+                    d.topPoints[j] = d.topPoints[j - 1];
                     d.topTime[j] = d.topTime[j - 1];
                 }
                 d.top[i] = player;
+                d.topPoints[i] = points;
                 d.topTime[i] = timeMs;
                 return;
             }

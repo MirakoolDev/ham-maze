@@ -14,6 +14,9 @@ import { createSettings } from './settings.js';
 import { installUiAssets, urls } from './assets.js';
 import { CFG } from './config.js';
 import { setCellSize, CELL } from './world.js';
+import { CHAINS, CHAIN_KEY, setChain } from './config.js';
+import { chain } from './chain.js';
+import { scoreRun, shortestMetres } from './score.js';
 
 // Size and difficulty come from the admin settings (defaults match the Unity scene: 12 x 12 cells of 7 m, 8 sentries).
 const MAZE_W = CFG.mazeSize, MAZE_D = CFG.mazeSize, DRONES = CFG.sentries;
@@ -50,6 +53,7 @@ scene.environment = envMap; scene.environmentIntensity = 0.12;
 const seed = dailySeed();
 const maze = generateMaze(MAZE_W, MAZE_D, seed, CFG.loops);
 const world = buildWorld(scene, maze);
+const SHORTEST = shortestMetres(maze, CELL); // metres from spawn to the monolith, for the route score
 const effects = createEffects(scene);
 const audio = createAudio();
 const input = createInput(canvas);
@@ -117,9 +121,76 @@ function resume() {
 function complete() {
   setMode('complete'); state.timerOn = false; input.unlock();
   audio.win(); world.celebrate();
-  const stats = { time: state.elapsed, walked: player.walked, retries: state.retries, kills: enemies.kills, acc: weapon.shots ? weapon.hits / weapon.shots : 0 };
-  setTimeout(() => { hud.debrief(stats); hud.show(false); hud.setScreen('complete'); }, 2200);
+  const run = { timeMs: Math.round(state.elapsed * 1000), walked: player.walked, kills: enemies.kills, rivals: 0 };
+  const score = scoreRun(run, SHORTEST);
+  const stats = { time: state.elapsed, walked: player.walked, retries: state.retries, kills: enemies.kills, acc: weapon.shots ? weapon.hits / weapon.shots : 0, score };
+  lastRun = run; pendingSigned = null;
+  setTimeout(() => {
+    hud.debrief(stats); hud.show(false); hud.setScreen('complete');
+    if (ticket) recordRun();
+    else setStatus(runStatus, chain.enabled() && !CFG.preview ? 'Practice run, so this score stays here. Play for the pot to put it on-chain.' : '');
+  }, 2200);
 }
+
+// ── paid runs: pay to enter, the referee checks the finished run, the score is recorded on-chain ──
+let ticket = null, lastRun = null, pendingSigned = null;
+const $q = (s) => document.querySelector(s);
+const potBox = $q('.m-pot'), potBtn = $q('[data-act="play-pot"]'), practiceBtn = $q('[data-act="deploy"]');
+const titleStatus = $q('.m-title-status'), runStatus = $q('.m-run-status'), retrySubmit = $q('[data-act="submit-run"]');
+const setStatus = (el, msg, kind = '') => { el.textContent = msg; el.dataset.kind = kind; };
+const errText = (e) => (e?.code === 'ACTION_REJECTED' || e?.code === 4001 ? 'You cancelled it in your wallet.' : e?.shortMessage || e?.reason || e?.message || String(e));
+
+const chainSel = $q('.m-chain');
+for (const [k, c] of Object.entries(CHAINS)) chainSel.add(new Option(c.name + (c.contract ? '' : ' (soon)'), k, false, k === CHAIN_KEY));
+chainSel.addEventListener('change', () => setChain(chainSel.value));
+potBox.hidden = CFG.preview;
+
+async function refreshPot() {
+  const v = potBox.querySelector('.m-pot-v'), list = potBox.querySelector('.m-podium');
+  if (!chain.enabled()) { v.textContent = 'Not live yet'; list.innerHTML = ''; return; }
+  try {
+    const t = await chain.today();
+    v.textContent = `${Number(t.pot).toFixed(4)} ETH`;
+    list.innerHTML = t.top.length
+      ? t.top.map((p, i) => `<li><span>${i + 1}. ${chain.short(p.who)}</span><span>${p.points.toLocaleString('en-US')} pts</span></li>`).join('')
+      : `<li><span>No scores yet today. ${t.entries} run${t.entries === 1 ? '' : 's'} so far.</span></li>`;
+    potBtn.textContent = `Play for the pot · ${Number(t.fee)} ETH`;
+  } catch { v.textContent = 'Could not reach the chain'; }
+}
+if (chain.enabled() && !CFG.preview) {
+  potBtn.hidden = false; practiceBtn.classList.remove('primary'); practiceBtn.textContent = 'Practice run';
+  refreshPot();
+} else refreshPot();
+
+async function recordRun() {
+  retrySubmit.hidden = true;
+  try {
+    if (!pendingSigned) { setStatus(runStatus, 'Checking your run with the referee…'); pendingSigned = await chain.check(ticket, lastRun); }
+    setStatus(runStatus, `The referee signed ${pendingSigned.points.toLocaleString('en-US')} points. Confirm in your wallet to record them on ${chain.info.name}…`);
+    const out = await chain.submit(pendingSigned);
+    const boosted = out.boosted > pendingSigned.points ? ` (boosted to ${out.boosted.toLocaleString('en-US')})` : '';
+    setStatus(runStatus, `Recorded on ${chain.info.name}: ${pendingSigned.points.toLocaleString('en-US')} points${boosted}. ${out.best ? 'That is your best today.' : 'Your best today is still higher.'}`, 'ok');
+    ticket = null; pendingSigned = null; refreshPot();
+  } catch (e) {
+    setStatus(runStatus, errText(e), 'bad');
+    retrySubmit.hidden = !/wallet|network|timeout|fetch|referee answered 5/i.test(errText(e)) && !pendingSigned;
+  }
+}
+hud.on('submit-run', () => { if (ticket && lastRun) recordRun(); });
+hud.on('play-pot', async () => {
+  if (ticket) { state.retries = 0; startRun(); return; } // paid already, run not finished yet
+  potBtn.disabled = true;
+  try {
+    setStatus(titleStatus, 'Connect your wallet…');
+    await chain.connect();
+    setStatus(titleStatus, 'Confirm the entry in your wallet…');
+    ticket = await chain.enter();
+    setStatus(titleStatus, `Paid. This is your run ${ticket.attempt + 1} today; retries are free until you reach the monolith.`, 'ok');
+    potBtn.textContent = 'Continue your paid run';
+    state.retries = 0; startRun();
+  } catch (e) { setStatus(titleStatus, errText(e), 'bad'); }
+  finally { potBtn.disabled = false; }
+});
 function die() {
   setMode('dead'); input.unlock();
   hud.dead({ time: state.elapsed, kills: enemies.kills });
@@ -133,7 +204,7 @@ hud.on('deploy', () => { state.retries = 0; startRun(); });
 hud.on('resume', resume);
 hud.on('restart', () => { state.retries++; startRun(); });
 hud.on('retry', () => { state.retries++; startRun(); });
-hud.on('again', () => { state.retries = 0; startRun(); });
+hud.on('again', () => { if (chain.enabled() && !CFG.preview) { toTitle(); refreshPot(); } else { state.retries = 0; startRun(); } });
 hud.on('quit', toTitle);
 hud.on('settings', () => settings.open('settings'));
 hud.on('controls', () => settings.open('controls'));
