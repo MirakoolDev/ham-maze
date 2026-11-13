@@ -8,7 +8,7 @@ const ABI = [
   'function currentDay() view returns (uint256)',
   'function enter(address referrer) payable returns (uint32)',
   'function submitRun(uint256 day, uint32 attempt, uint32 points, uint32 timeMs, bytes signature)',
-  'function dayInfo(uint256) view returns (uint256 pot, uint256 unclaimed, uint256 settledAt, uint256 entries, address[3] top, uint32[3] topPoints, uint32[3] topTime)',
+  'function dayInfo(uint256) view returns (uint256 pot, uint256 unclaimed, uint256 settledAt, uint256 entryCount, address[3] top, uint32[3] topPoints, uint32[3] topTime)',
   'function bestPoints(uint256,address) view returns (uint32)',
   'function boostOf(address) view returns (uint256)',
   'event Entered(uint256 indexed day, address indexed player, uint32 attempt, bool free, uint256 paid)',
@@ -50,7 +50,7 @@ export const chain = {
     const day = await k.currentDay();
     const [info, fee] = await Promise.all([k.dayInfo(day), k.entryFee()]);
     return {
-      day: Number(day), fee: formatEther(fee), pot: formatEther(info.pot), entries: Number(info.entries),
+      day: Number(day), fee: formatEther(fee), pot: formatEther(info.pot), entries: Number(info.entryCount),
       top: info.top.map((a, i) => ({ who: a, points: Number(info.topPoints[i]), timeMs: Number(info.topTime[i]) })).filter((t) => t.who !== ZeroAddress),
     };
   },

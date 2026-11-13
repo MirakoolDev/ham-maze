@@ -11,7 +11,7 @@ const ABI = [
   'function holderToken() view returns (address)', 'function entryFee() view returns (uint256)', 'function paused() view returns (bool)',
   'function treasuryOwed() view returns (uint256)', 'function currentDay() view returns (uint256)', 'function nextConfigDay() view returns (uint256)',
   `function configFor(uint256) view returns (${CFG_T})`,
-  'function dayInfo(uint256) view returns (uint256 pot, uint256 unclaimed, uint256 settledAt, uint256 entries, address[3] top, uint32[3] topPoints, uint32[3] topTime)',
+  'function dayInfo(uint256) view returns (uint256 pot, uint256 unclaimed, uint256 settledAt, uint256 entryCount, address[3] top, uint32[3] topPoints, uint32[3] topTime)',
   'function boosters() view returns (tuple(address token, uint96 minBalance, uint16 bps)[])',
   'function setBoosters(tuple(address token, uint96 minBalance, uint16 bps)[] list)',
   `function setConfig(${CFG_T} config_, bool immediate)`, 'function setEntryFee(uint256)', 'function setPaused(bool)',
@@ -162,7 +162,7 @@ async function refresh() {
     $('pausedPill').textContent = paused ? 'Paused' : 'Open'; $('pausedPill').classList.toggle('on', !paused);
     $('pauseBtn').textContent = paused ? 'Reopen entries' : 'Pause entries'; $('pauseBtn').dataset.paused = paused ? '1' : '';
     $('dPot').textContent = `${Number(formatEther(info.pot)).toFixed(4)} ETH`;
-    $('dEntries').textContent = String(info.entries);
+    $('dEntries').textContent = String(info.entryCount);
     $('dTreasury').textContent = `${Number(formatEther(owed)).toFixed(4)} ETH`;
     $('dNext').textContent = next > 0n ? (next > day ? 'Tomorrow' : 'Active') : 'None';
     const rows = info.top.map((a, i) => (a === ZeroAddress ? '' : `<tr><td>${i + 1}</td><td class="addr">${short(a)}</td><td>${Number(info.topPoints[i]).toLocaleString('en-US')}</td><td>${(Number(info.topTime[i]) / 1000).toFixed(2)} s</td></tr>`)).join('');
