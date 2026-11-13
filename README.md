@@ -18,7 +18,7 @@ The game reads the live settings from the contract on load (`src/config.js`, set
 
 ## Contracts
 
-`contracts/` is a Foundry project. `HamDailyRun.sol` holds the daily pot: paid runs, a free run for holders, referee-signed times, top-3 payout (50/20/10), 10% treasury (which pays the holder bonus and referral rewards), 10% rollover, 7-day claims and sweeps.
+`contracts/` is a Foundry project. `HamDailyRun.sol` holds the daily pot: paid runs, a free run for holders, referee-signed times, top-3 payout (40/20/10), 20% treasury for the FundingWorks backers (which first pays the holder bonus and referral rewards), 10% rollover, 7-day claims and sweeps.
 
 ```
 cd contracts

@@ -19,8 +19,8 @@ interface IBalanceOf {
 ///
 /// Days run 00:00 to 00:00 UTC. Runs from a day can still be submitted for SETTLE_DELAY after it
 /// ends, then anyone can settle it:
-///   1st 50%, 2nd 20%, 3rd 10%  to the top three times, claimable for CLAIM_WINDOW
-///   10%                        treasury, which first pays the holder bonus (+10% of a holder's
+///   1st 40%, 2nd 20%, 3rd 10%  to the top three times, claimable for CLAIM_WINDOW
+///   20%                        treasury (meant for the FundingWorks backers), which first pays the holder bonus (+10% of a holder's
 ///                              prize) and referral rewards (5% of a referred winner's prize)
 ///   10% + any unawarded place  rolls into the current day's pot
 /// Prizes not claimed in time can be swept back into the current pot by anyone.
@@ -30,10 +30,10 @@ interface IBalanceOf {
 contract HamDailyRun {
     // ── Constants ───────────────────────────────────────────────────────────────
     uint256 public constant BPS = 10_000;
-    uint256 public constant FIRST_BPS = 5000;
+    uint256 public constant FIRST_BPS = 4000;
     uint256 public constant SECOND_BPS = 2000;
     uint256 public constant THIRD_BPS = 1000;
-    uint256 public constant TREASURY_BPS = 1000; // the remaining 1000 rolls over
+    uint256 public constant TREASURY_BPS = 2000; // the remaining 1000 rolls over
     uint256 public constant HOLDER_BONUS_BPS = 1000; // +10% of a holder's prize, from the treasury share
     uint256 public constant REFERRAL_BPS = 500; // 5% of a referred winner's prize, from the treasury share
     uint256 public constant SETTLE_DELAY = 15 minutes;

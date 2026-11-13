@@ -207,12 +207,12 @@ contract HamDailyRunTest is Test {
         play(dave, 90_000);
         uint256 p = pot(day); // 4 entries
         settleDay();
-        assertEq(run.prizeOf(day, alice), p * 5000 / 10_000);
+        assertEq(run.prizeOf(day, alice), p * 4000 / 10_000);
         assertEq(run.prizeOf(day, bob), p * 2000 / 10_000);
         assertEq(run.prizeOf(day, carol), p * 1000 / 10_000);
         assertEq(run.prizeOf(day, dave), 0);
-        assertEq(run.treasuryOwed(), p * 1000 / 10_000);
-        assertEq(pot(day + 1), p - p * 9000 / 10_000);
+        assertEq(run.treasuryOwed(), p * 2000 / 10_000);
+        assertEq(pot(day + 1), p - p * 4000 / 10_000 - p * 2000 / 10_000 - p * 1000 / 10_000 - p * 2000 / 10_000);
         vm.expectRevert(HamDailyRun.AlreadySettled.selector);
         run.settle(day);
     }
@@ -228,8 +228,8 @@ contract HamDailyRunTest is Test {
         play(alice, 60_000);
         uint256 p = pot(day);
         settleDay();
-        assertEq(run.prizeOf(day, alice), p / 2);
-        assertEq(pot(day + 1), p - p / 2 - p / 10);
+        assertEq(run.prizeOf(day, alice), p * 4000 / 10_000);
+        assertEq(pot(day + 1), p - p * 4000 / 10_000 - p * 2000 / 10_000);
     }
 
     function test_HolderBonusAndReferralComeFromTreasury() public {
@@ -243,14 +243,14 @@ contract HamDailyRunTest is Test {
         for (uint256 i; i < 9; ++i) play(bob, uint32(70_000 + i)); // grow the pot
         uint256 p = pot(day);
         settleDay();
-        uint256 first = p / 2;
+        uint256 first = p * 4000 / 10_000;
         uint256 bonus = first / 10;
         uint256 prize = first + bonus;
         uint256 reward = prize * 500 / 10_000;
         assertEq(run.referrerOf(alice), dave);
         assertEq(run.prizeOf(day, alice), prize);
         assertEq(run.referralOwed(dave), reward);
-        assertEq(run.treasuryOwed(), p / 10 - bonus - reward);
+        assertEq(run.treasuryOwed(), p * 2000 / 10_000 - bonus - reward);
     }
 
     function test_ReferrerRules() public {
@@ -283,7 +283,7 @@ contract HamDailyRunTest is Test {
         uint256 before = alice.balance;
         vm.prank(alice);
         run.claim(day);
-        assertEq(alice.balance - before, p / 2);
+        assertEq(alice.balance - before, p * 4000 / 10_000);
         vm.prank(alice);
         vm.expectRevert(HamDailyRun.NothingToClaim.selector);
         run.claim(day);
@@ -299,7 +299,7 @@ contract HamDailyRunTest is Test {
         uint256 today = run.currentDay();
         uint256 potBefore = pot(today);
         run.sweep(day);
-        assertEq(pot(today) - potBefore, p / 2);
+        assertEq(pot(today) - potBefore, p * 4000 / 10_000);
         vm.prank(alice);
         vm.expectRevert(HamDailyRun.ClaimClosed.selector);
         run.claim(day);
