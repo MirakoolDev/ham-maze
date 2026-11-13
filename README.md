@@ -8,6 +8,8 @@ Music by **Rere Aiyemomi**.
 
 HAM's on-chain game runs on **Aurora**, the Ethereum-compatible chain that runs as a smart contract on NEAR. Every paid entry, every recorded score and the daily payout are Aurora transactions settled by NEAR validators.
 
+**Live on Aurora Testnet:** [`0xa05A8D95a26c7CD12d4Ae26CBbE8906c92FA1869`](https://explorer.testnet.aurora.dev/address/0xa05A8D95a26c7CD12d4Ae26CBbE8906c92FA1869), source verified on the explorer.
+
 | What | Where |
 | --- | --- |
 | Daily pot, entries, scores, payouts | `contracts/src/HamDailyRun.sol`, deployed to Aurora Testnet (chain 1313161555) |
@@ -16,6 +18,7 @@ HAM's on-chain game runs on **Aurora**, the Ethereum-compatible chain that runs 
 | Referee that checks a run and signs its points | `api/referee.js` (Vercel function) |
 | Shared points formula and cheat checks | `src/score.js` |
 | Owner settings page | `/admin` (`src/admin.js`) |
+| Deploy sandbox — connect your own wallet and sign | `/deploy` (`src/deploy.js`) |
 
 **Other chains (disclosure).** The same contract is set up to also run on Robinhood Chain (chain 4663), with a switch in the game and admin page. That deployment is part of the wider project and is not part of this NEAR hackathon entry. Only the Aurora/NEAR integration above is submitted for judging.
 
@@ -42,6 +45,10 @@ Practice runs need no wallet. To play for the pot you need a wallet on Aurora Te
 
 ### Deploy the contract
 
+Easiest: open `/deploy` in a browser with a wallet extension. It connects your wallet, switches to Aurora Testnet, and lets you sign and send the deploy transaction yourself — no private key ever touches the page.
+
+Or from the CLI:
+
 ```
 cd contracts
 forge test
@@ -49,7 +56,13 @@ HAM_OWNER=0x… HAM_REFEREE=0x… HAM_TREASURY=0x… HAM_ENTRY_FEE=3000000000000
   forge script script/Deploy.s.sol --rpc-url https://testnet.aurora.dev --broadcast --account <keystore>
 ```
 
-Put the deployed address in `CHAINS['aurora-testnet'].contract` in `src/config.js` (or the `HAM_CONTRACT_AURORA_TESTNET` env var for the referee). Then set `REFEREE_KEY` in Vercel and deploy (`vercel.json`: build `npm run build`, output `dist`).
+Either way, put the deployed address in `CHAINS['aurora-testnet'].contract` in `src/config.js` (or the `HAM_CONTRACT_AURORA_TESTNET` env var for the referee).
+
+### Deploy the site (Vercel)
+
+1. Import this repo in Vercel. It auto-detects `vercel.json` (`buildCommand: npm run build`, `outputDirectory: dist`) — no framework preset needed.
+2. Add one environment variable: `REFEREE_KEY`, the private key in `.env.local` (never commit that file). This is what signs run scores server-side at `/api/referee`.
+3. Deploy. The game, `/admin` and `/deploy` are all static pages built into `dist/`; the referee runs as a Vercel serverless function at `/api/referee`.
 
 ## Admin page
 
