@@ -186,7 +186,10 @@ export function buildWorld(scene, maze) {
   const sc = sun.shadow.camera, r = Math.max(W, D) * CELL * 0.62;
   sc.left = -r; sc.right = r; sc.top = r; sc.bottom = -r; sc.near = 10; sc.far = 320;
   sun.shadow.mapSize.set(2048, 2048);
-  sun.shadow.bias = -0.0002; sun.shadow.normalBias = 0.012; sun.shadow.radius = 3;
+  // normalBias has to clear one shadow-map texel (~2r/2048) or inside corners self-shadow a fake dark
+  // wedge where a wall is nearly edge-on to the sun. One whole maze in one map is coarse, so this needs
+  // real headroom, not just a hair above zero.
+  sun.shadow.bias = -0.0003; sun.shadow.normalBias = Math.max(0.05, (2 * r) / 2048 * 1.5); sun.shadow.radius = 2;
   scene.add(sun, sun.target);
 
   // Goal monolith: a 3 m square shaft of translucent orange glass, MONO_H tall so it shows over the walls from anywhere.
