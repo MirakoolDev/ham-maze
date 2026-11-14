@@ -2,13 +2,20 @@
 
 A first-person maze shooter for the browser. One maze a day, the same for everyone: find the orange monolith, get past the sentries, and score as many points as you can. Pay a small fee in ETH to play for the day's pot; the top three runs split it.
 
+**Play it:** https://ham-maze.vercel.app
+
 Music by **Rere Aiyemomi**.
 
 ## Built on NEAR (Aurora)
 
 HAM's on-chain game runs on **Aurora**, the Ethereum-compatible chain that runs as a smart contract on NEAR. Every paid entry, every recorded score and the daily payout are Aurora transactions settled by NEAR validators.
 
-**Live on Aurora Testnet:** [`0xa05A8D95a26c7CD12d4Ae26CBbE8906c92FA1869`](https://explorer.testnet.aurora.dev/address/0xa05A8D95a26c7CD12d4Ae26CBbE8906c92FA1869), source verified on the explorer.
+**Contracts, live on Aurora Testnet, source verified on the explorer:**
+
+| Contract | Address | Explorer |
+| --- | --- | --- |
+| `HamDailyRun` | `0xa05A8D95a26c7CD12d4Ae26CBbE8906c92FA1869` | [View](https://explorer.testnet.aurora.dev/address/0xa05A8D95a26c7CD12d4Ae26CBbE8906c92FA1869) |
+| `HamPowerUp` | `0xe28b8E86028dED8D25b6B3800027032da37922a1` | [View](https://explorer.testnet.aurora.dev/address/0xe28b8E86028dED8D25b6B3800027032da37922a1) |
 
 | What | Where |
 | --- | --- |
@@ -103,7 +110,7 @@ Deploy it from `/deploy` alongside the main contract, then register it as a boos
 
 ## Credits
 
-- Game and art direction: MirakoolDev
+- Game design, mechanics, art direction and contracts: **Miracle Otugo**
 - Music: **Rere Aiyemomi**
 - The game's code was written with help from Claude (Anthropic).
 
