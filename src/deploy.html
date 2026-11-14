@@ -3,7 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HAM — Deploy</title>
+<title>HAM Deploy</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="favicon-180.png">
 <style>
   :root { --ink:#2a2733; --bone:#f3efe4; --muted:#8d89a0; --line:rgba(42,39,51,.14); --accent:#e0708a; --good:#3f9a62; --bad:#c84949; }
   * { box-sizing: border-box; }
@@ -41,15 +43,15 @@
 <body>
 <div class="wrap">
   <h1>Deploy HamDailyRun</h1>
-  <p class="sub">Signs and sends the deploy transaction from your own wallet. No private key ever touches this page — MetaMask (or any injected wallet) holds the keys and you approve the transaction yourself.</p>
+  <p class="sub">Signs and sends the deploy transaction from your own wallet. No private key ever touches this page. MetaMask (or any injected wallet) holds the keys and you approve the transaction yourself.</p>
 
   <div class="card">
     <h2>Wallet</h2>
     <label for="netSel">Chain</label>
     <select id="netSel">
-      <option value="aurora-testnet" selected>Aurora Testnet — test ETH, no real funds</option>
-      <option value="aurora">Aurora Mainnet — real ETH, real pot, real payouts</option>
-      <option value="robinhood">Robinhood Chain — real ETH, real pot, real payouts</option>
+      <option value="aurora-testnet" selected>Aurora Testnet (test ETH, no real funds)</option>
+      <option value="aurora">Aurora Mainnet (real ETH, real pot, real payouts)</option>
+      <option value="robinhood">Robinhood Chain (real ETH, real pot, real payouts)</option>
     </select>
     <p class="note" id="mainnetWarn" style="color:var(--bad)"></p>
     <div class="pill" style="margin-top:10px"><span class="dot" id="dot"></span><span id="netLabel">Not connected</span></div>
@@ -59,9 +61,9 @@
 
   <div class="card">
     <h2>Roles</h2>
-    <label for="owner">Owner (admin wallet — can change settings, pause, set roles)</label>
+    <label for="owner">Owner (admin wallet: can change settings, pause, set roles)</label>
     <input id="owner" placeholder="0x…">
-    <label for="referee">Referee (signs run scores — this server's key)</label>
+    <label for="referee">Referee (signs run scores, this server's key)</label>
     <input id="referee" value="0x5a65548B00b2014147B4f6B508aE4fB52FF7Eab8">
     <label for="treasury">Treasury (receives the 20% backer share)</label>
     <input id="treasury" placeholder="0x…">
@@ -81,7 +83,7 @@
       <div><label for="magSize">Mag size</label><input id="magSize" value="30"></div>
       <div><label for="loops">Loops</label><input id="loops" value="0"></div>
     </div>
-    <p class="note">These can all be changed later from the admin page — this is just the day-one config.</p>
+    <p class="note">These can all be changed later from the admin page. This is just the day-one config.</p>
   </div>
 
   <label id="confirmRow" class="hidden" style="display:flex;align-items:flex-start;gap:8px;margin-bottom:14px;font-size:13px;color:var(--bone)">

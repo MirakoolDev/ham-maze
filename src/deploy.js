@@ -1,5 +1,5 @@
 // Sandbox page: connect your own wallet, sign and send the HamDailyRun deploy transaction.
-// No private key is ever read or stored here — the wallet extension signs, this page only builds the transaction.
+// No private key is ever read or stored here. The wallet extension signs; this page only builds the transaction.
 import { BrowserProvider, ContractFactory, parseEther, isAddress, getAddress } from 'ethers';
 import { CHAINS } from './config.js';
 import artifact from './contract-artifact.json';
@@ -16,7 +16,7 @@ function onChainChange() {
   $('dot').classList.remove('on');
   $('netLabel').textContent = 'Not connected';
   $('connectBtn').textContent = 'Connect wallet'; $('connectBtn').disabled = false;
-  $('mainnetWarn').textContent = isMainnet() ? `This is ${net().name} — a live mainnet. Deploying here costs real ETH for gas, and the pot it starts collecting is real money.` : '';
+  $('mainnetWarn').textContent = isMainnet() ? `This is ${net().name}, a live mainnet. Deploying here costs real ETH for gas, and the pot it starts collecting is real money.` : '';
   $('confirmRow').classList.toggle('hidden', !isMainnet());
   $('mainnetConfirm').checked = false;
   refreshDeployButton();

@@ -14,6 +14,8 @@ if (dev) {
     fill(fs.readFileSync('src/index.html', 'utf8'), '<link rel="stylesheet" href="ui.css">', '<script src="main.js"></script>'));
   const writeAdmin = () => fs.writeFileSync('www/admin.html', fill(fs.readFileSync('src/admin.html', 'utf8'), '', '<script src="admin.js"></script>'));
   const writeDeploy = () => fs.writeFileSync('www/deploy.html', fill(fs.readFileSync('src/deploy.html', 'utf8'), '', '<script src="deploy.js"></script>'));
+  fs.copyFileSync('assets/favicon.png', 'www/favicon.png');
+  fs.copyFileSync('assets/favicon-180.png', 'www/favicon-180.png');
   writeHtml(); writeAdmin(); writeDeploy();
   const ctx = await esbuild.context({
     entryPoints: [{ in: 'src/boot.js', out: 'main' }, 'src/ui.css', 'src/admin.js', 'src/deploy.js'], bundle: true, outdir: 'www', format: 'iife', sourcemap: true, logLevel: 'info', loader,
@@ -29,6 +31,8 @@ if (dev) {
   const js = r.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
   const css = fs.readFileSync('src/ui.css', 'utf8');
   fs.mkdirSync('dist', { recursive: true });
+  fs.copyFileSync('assets/favicon.png', 'dist/favicon.png');
+  fs.copyFileSync('assets/favicon-180.png', 'dist/favicon-180.png');
   const full = fill(tpl, `<style>\n${css}\n</style>`, `<script>\n${js}\n</script>`);
   fs.writeFileSync('dist/index.html', full); // self-hosting (your own site)
   // claude.ai artifact: the host supplies the document skeleton, so drop ours.

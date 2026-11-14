@@ -1,4 +1,4 @@
-// POST /api/referee — checks a finished run and signs its points for HamDailyRun.submitRun.
+// POST /api/referee: checks a finished run and signs its points for HamDailyRun.submitRun.
 // Body: { chain, player, day, attempt, run: { timeMs, walked, kills, rivals } }
 // The referee rebuilds the day's maze from the seed and the on-chain settings, computes the shortest route itself,
 // rejects runs that are physically impossible, scores the run with the shared formula and signs that score.
