@@ -139,7 +139,16 @@ const potBox = $q('.m-pot'), potBtn = $q('[data-act="play-pot"]'), practiceBtn =
 const powerupBox = $q('.m-powerup'), powerupK = $q('.m-powerup-k'), mintBtn = $q('[data-act="mint-powerup"]');
 const titleStatus = $q('.m-title-status'), runStatus = $q('.m-run-status'), retrySubmit = $q('[data-act="submit-run"]');
 const setStatus = (el, msg, kind = '') => { el.textContent = msg; el.dataset.kind = kind; };
-const errText = (e) => (e?.code === 'ACTION_REJECTED' || e?.code === 4001 ? 'You cancelled it in your wallet.' : e?.shortMessage || e?.reason || e?.message || String(e));
+const errText = (e) => {
+  if (e?.code === 'ACTION_REJECTED' || e?.code === 4001) return 'You cancelled it in your wallet.';
+  const raw = e?.shortMessage || e?.reason || e?.message || String(e);
+  // "missing revert data" / "insufficient funds" / OutOfFund: the wallet has no reason string for this, but
+  // it almost always means the connected wallet does not have enough ETH to cover the fee plus gas.
+  if (/missing revert data|insufficient funds|outoffund/i.test(raw)) {
+    return `Your wallet doesn't have enough ${chain.info.testnet ? 'testnet ' : ''}ETH for this (the fee plus gas).${chain.info.testnet ? ' Get more from the Aurora faucet: aurora.dev/faucet' : ''}`;
+  }
+  return raw;
+};
 
 const chainSel = $q('.m-chain');
 for (const [k, c] of Object.entries(CHAINS)) chainSel.add(new Option(c.name + (c.contract ? '' : ' (soon)'), k, false, k === CHAIN_KEY));
