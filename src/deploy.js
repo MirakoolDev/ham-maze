@@ -1,18 +1,35 @@
-// Sandbox page: connect your own wallet, sign and send the HamDailyRun deploy transaction on Aurora Testnet.
+// Sandbox page: connect your own wallet, sign and send the HamDailyRun deploy transaction.
 // No private key is ever read or stored here — the wallet extension signs, this page only builds the transaction.
 import { BrowserProvider, ContractFactory, parseEther, isAddress, getAddress } from 'ethers';
 import { CHAINS } from './config.js';
 import artifact from './contract-artifact.json';
 
-const NET = CHAINS['aurora-testnet'];
-const HEX = '0x' + NET.id.toString(16);
 const $ = (id) => document.getElementById(id);
 const say = (el, msg, kind = '') => { el.textContent = msg; el.className = 'status ' + kind; };
+const net = () => CHAINS[$('netSel').value];
+const isMainnet = () => $('netSel').value !== 'aurora-testnet';
 
 let signer = null, account = null;
 
+function onChainChange() {
+  signer = null; account = null;
+  $('dot').classList.remove('on');
+  $('netLabel').textContent = 'Not connected';
+  $('connectBtn').textContent = 'Connect wallet'; $('connectBtn').disabled = false;
+  $('mainnetWarn').textContent = isMainnet() ? `This is ${net().name} — a live mainnet. Deploying here costs real ETH for gas, and the pot it starts collecting is real money.` : '';
+  $('confirmRow').classList.toggle('hidden', !isMainnet());
+  $('mainnetConfirm').checked = false;
+  refreshDeployButton();
+}
+function refreshDeployButton() {
+  const ready = !!signer && (!isMainnet() || $('mainnetConfirm').checked);
+  $('deployBtn').disabled = !ready;
+  $('deployBtn').textContent = !signer ? 'Connect your wallet first' : (isMainnet() && !$('mainnetConfirm').checked) ? 'Check the box above to continue' : 'Deploy HamDailyRun';
+}
+
 async function connect() {
   if (!window.ethereum) { say($('walletStatus'), 'No wallet found. Open this page in a browser with MetaMask (or another injected wallet) installed.', 'bad'); return; }
+  const NET = net(), HEX = '0x' + NET.id.toString(16);
   try {
     say($('walletStatus'), 'Connecting…');
     let provider = new BrowserProvider(window.ethereum, 'any');
@@ -33,7 +50,7 @@ async function connect() {
     $('connectBtn').disabled = true;
     if (!$('owner').value) $('owner').value = account;
     if (!$('treasury').value) $('treasury').value = account;
-    $('deployBtn').disabled = false; $('deployBtn').textContent = 'Deploy HamDailyRun';
+    refreshDeployButton();
     say($('walletStatus'), '', '');
   } catch (e) {
     say($('walletStatus'), e?.code === 'ACTION_REJECTED' || e?.code === 4001 ? 'You declined the connection in your wallet.' : (e?.shortMessage || e?.message || String(e)), 'bad');
@@ -43,6 +60,8 @@ async function connect() {
 async function deploy() {
   const addr = (id) => { const v = $(id).value.trim(); if (!isAddress(v)) throw new Error(`"${$(id).previousElementSibling.textContent}" is not a valid address.`); return getAddress(v); };
   const num = (id) => { const v = Number($(id).value); if (!Number.isInteger(v) || v < 0 || v > 255) throw new Error(`"${$(id).previousElementSibling.textContent}" must be a whole number from 0 to 255.`); return v; };
+  if (isMainnet() && !$('mainnetConfirm').checked) return; // belt and braces - the button is disabled for this already
+  const NET = net();
   $('deployBtn').disabled = true;
   try {
     const owner = addr('owner'), referee = addr('referee'), treasury = addr('treasury');
@@ -56,15 +75,18 @@ async function deploy() {
     const a = await contract.getAddress();
     const tx = contract.deploymentTransaction();
     say($('deployStatus'), 'Deployed.', 'ok');
-    $('addrOut').textContent = a;
+    $('addrOut').textContent = `${a} on ${NET.name}`;
     $('explorerLink').innerHTML = tx ? `<a href="${NET.explorer}/tx/${tx.hash}" target="_blank" rel="noopener">View the deploy transaction</a>` : '';
     $('result').classList.remove('hidden');
   } catch (e) {
     say($('deployStatus'), e?.code === 'ACTION_REJECTED' || e?.code === 4001 ? 'You declined the transaction in your wallet.' : (e?.shortMessage || e?.reason || e?.message || String(e)), 'bad');
   } finally {
-    $('deployBtn').disabled = false; $('deployBtn').textContent = 'Deploy HamDailyRun';
+    refreshDeployButton();
   }
 }
 
+$('netSel').addEventListener('change', onChainChange);
+$('mainnetConfirm').addEventListener('change', refreshDeployButton);
 $('connectBtn').addEventListener('click', connect);
 $('deployBtn').addEventListener('click', deploy);
+onChainChange();

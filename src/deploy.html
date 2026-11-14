@@ -15,8 +15,9 @@
   .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; margin: 0 0 14px; color: var(--muted); }
   label { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 4px; }
   label:first-child { margin-top: 0; }
-  input { width: 100%; background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; color: var(--bone); font: 13px/1.3 ui-monospace, monospace; }
-  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  input, select { width: 100%; background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; color: var(--bone); font: 13px/1.3 ui-monospace, monospace; }
+  select option { color: #000; }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
   .row { display: flex; gap: 10px; }
   .row > div { flex: 1; }
   .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
@@ -44,7 +45,14 @@
 
   <div class="card">
     <h2>Wallet</h2>
-    <div class="pill"><span class="dot" id="dot"></span><span id="netLabel">Not connected</span></div>
+    <label for="netSel">Chain</label>
+    <select id="netSel">
+      <option value="aurora-testnet" selected>Aurora Testnet — test ETH, no real funds</option>
+      <option value="aurora">Aurora Mainnet — real ETH, real pot, real payouts</option>
+      <option value="robinhood">Robinhood Chain — real ETH, real pot, real payouts</option>
+    </select>
+    <p class="note" id="mainnetWarn" style="color:var(--bad)"></p>
+    <div class="pill" style="margin-top:10px"><span class="dot" id="dot"></span><span id="netLabel">Not connected</span></div>
     <button class="ghost" id="connectBtn" style="margin-top:12px">Connect wallet</button>
     <p class="status" id="walletStatus"></p>
   </div>
@@ -76,6 +84,10 @@
     <p class="note">These can all be changed later from the admin page — this is just the day-one config.</p>
   </div>
 
+  <label id="confirmRow" class="hidden" style="display:flex;align-items:flex-start;gap:8px;margin-bottom:14px;font-size:13px;color:var(--bone)">
+    <input type="checkbox" id="mainnetConfirm" style="width:auto;margin-top:3px">
+    <span>I understand this deploys to a live mainnet. Gas is real ETH, and once live, entry fees and the pot are real funds from real players.</span>
+  </label>
   <button class="primary" id="deployBtn" disabled>Connect your wallet first</button>
   <p class="status" id="deployStatus"></p>
   <div id="result" class="hidden">
