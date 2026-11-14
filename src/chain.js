@@ -90,6 +90,20 @@ export const chain = {
     };
   },
 
+  /**
+   * Checks the connected wallet actually has enough for `need` plus a small gas cushion before
+   * sending anything, and throws our own plain message instead of letting it hit the chain and
+   * come back as a wallet's opaque "missing revert data" / "insufficient funds" with no reason.
+   */
+  async _checkBalance(need = 0n) {
+    const have = await this.signer.provider.getBalance(this.account);
+    const GAS_CUSHION = 50000000000000n; // 0.00005 ETH: generous for Aurora's low gas, just a floor check
+    if (have < need + GAS_CUSHION) {
+      const short = need > 0n ? `${formatEther(need)} ETH plus gas` : 'enough ETH for gas';
+      throw new Error(`Your wallet only has ${formatEther(have)} ETH on ${CHAIN.name}, which isn't enough (needs ${short}).${CHAIN.testnet ? ' Get more from the Aurora faucet: aurora.dev/faucet' : ''}`);
+    }
+  },
+
   /** Pay for one run. Returns the ticket { day, attempt } the run will be recorded against. */
   async enter() {
     await this.connect(); // cheap if already connected and on the right chain; fixes it otherwise
@@ -98,6 +112,7 @@ export const chain = {
     try { ref = new URLSearchParams(location.search).get('ref'); } catch {}
     const referrer = ref && isAddress(ref) ? getAddress(ref) : ZeroAddress;
     const fee = await k.entryFee();
+    await this._checkBalance(fee);
     const tx = await k.enter(referrer, { value: fee });
     const rc = await tx.wait();
     for (const log of rc.logs) {
@@ -120,6 +135,7 @@ export const chain = {
   /** Record the signed run on-chain. Returns { boosted, best, tx }. */
   async submit(signed) {
     await this.connect(); // the wallet may have drifted chain/account since enter()
+    await this._checkBalance();
     const k = new Contract(CHAIN.contract, ABI, this.signer);
     const tx = await k.submitRun(signed.day, signed.attempt, signed.points, signed.timeMs, signed.signature);
     const rc = await tx.wait();
@@ -145,6 +161,7 @@ export const chain = {
   /** Mint the power-up NFT. Free; one per wallet. Returns the tx hash. */
   async mintPowerup() {
     await this.connect();
+    await this._checkBalance();
     const k = new Contract(CHAIN.powerup, NFT_ABI, this.signer);
     const tx = await k.mint();
     const rc = await tx.wait();
