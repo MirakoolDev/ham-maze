@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HAM Leaderboard</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="favicon-180.png">
+<style>
+  :root { --ink:#2a2733; --bone:#f3efe4; --muted:#8d89a0; --line:rgba(42,39,51,.14); --accent:#e0708a; --cream:#f6e4b4; --good:#3f9a62; --bad:#c84949; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ink); color: var(--bone); font: 15px/1.5 'Segoe UI', system-ui, sans-serif; }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 36px 20px 80px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+  h1 { font-size: 22px; margin: 0; }
+  .sub { color: var(--muted); margin: 0 0 26px; font-size: 13px; }
+  select { font: 600 12px/1 'Segoe UI', sans-serif; background: rgba(255,255,255,.07); color: var(--bone); border: 1px solid var(--line); border-radius: 999px; padding: 7px 12px; }
+  select option { color: #000; }
+  .card { background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin-bottom: 16px; }
+  .pot-row { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  .pot-k { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+  .pot-v { font-size: 34px; font-weight: 700; color: var(--cream); }
+  .meta { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+  th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 0 8px 10px; font-weight: 500; }
+  th:last-child, td:last-child { text-align: right; }
+  td { padding: 12px 8px; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  td.rank { font-weight: 700; color: var(--cream); width: 32px; }
+  td.who { font: 13px ui-monospace, monospace; }
+  .empty { text-align: center; color: var(--muted); padding: 28px 8px; }
+  .refreshing { opacity: .5; }
+  .status { font-size: 12px; color: var(--muted); margin-top: 10px; }
+  .status.bad { color: var(--bad); }
+  a.back { color: var(--accent); font-size: 13px; text-decoration: none; }
+  a.back:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Leaderboard</h1>
+    <select id="netSel"></select>
+  </header>
+  <p class="sub">The top 3 scores for today's maze. Resets at midnight UTC. <a class="back" href="/">&larr; Back to the game</a></p>
+
+  <div class="card">
+    <div class="pot-row">
+      <div><div class="pot-k">Today&rsquo;s pot</div><div class="pot-v" id="potV">&ndash;</div></div>
+      <div class="meta" id="metaV"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <table id="table" hidden>
+      <thead><tr><th>#</th><th>Player</th><th>Points</th><th>Time</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="emptyV">Loading…</div>
+  </div>
+  <p class="status" id="statusV"></p>
+</div>
+<!--JS-->
+</body>
+</html>

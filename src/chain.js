@@ -38,19 +38,44 @@ export const chain = {
 
   reader() { return new Contract(CHAIN.contract, ABI, new JsonRpcProvider(CHAIN.rpc, CHAIN.id, { staticNetwork: true })); },
 
+  // Connecting again (another run, another day) reuses this instead of re-prompting the wallet
+  // every time: same provider, same account, as long as nothing actually needs fixing.
+  _eth: null,
+
+  /** True once connect() has run and the wallet is still on the right chain and account. */
+  async _stillGood() {
+    if (!this._eth || !this.signer || !this.account) return false;
+    try {
+      const [chainIdHex, accounts] = await Promise.all([
+        this._eth.request({ method: 'eth_chainId' }),
+        this._eth.request({ method: 'eth_accounts' }),
+      ]);
+      return chainIdHex?.toLowerCase() === HEX.toLowerCase() && accounts[0]?.toLowerCase() === this.account.toLowerCase();
+    } catch { return false; }
+  },
+
   async connect() {
-    const eth = await pickProvider();
+    if (await this._stillGood()) return this.account; // no wallet popup: already connected, right chain
+    const eth = this._eth || await pickProvider();
     let provider = new BrowserProvider(eth, 'any');
-    const [acc] = await provider.send('eth_requestAccounts', []);
-    try { await provider.send('wallet_switchEthereumChain', [{ chainId: HEX }]); }
-    catch (e) {
-      if (e?.error?.code === 4902 || e?.code === 4902 || /unrecognized|not added|unknown chain/i.test(e?.message || '')) {
-        await provider.send('wallet_addEthereumChain', [{ chainId: HEX, chainName: CHAIN.name, rpcUrls: [CHAIN.rpc], nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, blockExplorerUrls: [CHAIN.explorer] }]);
-      } else throw e;
+    // Silent first (no popup) - eth_requestAccounts re-prompts in some wallets even when already
+    // permitted, which is exactly the "asks me to connect again for every run" friction.
+    let accounts = await eth.request({ method: 'eth_accounts' }).catch(() => []);
+    let acc = accounts[0];
+    if (!acc) [acc] = await provider.send('eth_requestAccounts', []);
+    const chainIdHex = await eth.request({ method: 'eth_chainId' }).catch(() => null);
+    if (chainIdHex?.toLowerCase() !== HEX.toLowerCase()) {
+      try { await provider.send('wallet_switchEthereumChain', [{ chainId: HEX }]); }
+      catch (e) {
+        if (e?.error?.code === 4902 || e?.code === 4902 || /unrecognized|not added|unknown chain/i.test(e?.message || '')) {
+          await provider.send('wallet_addEthereumChain', [{ chainId: HEX, chainName: CHAIN.name, rpcUrls: [CHAIN.rpc], nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, blockExplorerUrls: [CHAIN.explorer] }]);
+        } else throw e;
+      }
     }
     provider = new BrowserProvider(eth, 'any');
     this.signer = await provider.getSigner();
     this.account = getAddress(acc);
+    this._eth = eth;
     return this.account;
   },
 
@@ -67,7 +92,7 @@ export const chain = {
 
   /** Pay for one run. Returns the ticket { day, attempt } the run will be recorded against. */
   async enter() {
-    if (!this.signer) await this.connect();
+    await this.connect(); // cheap if already connected and on the right chain; fixes it otherwise
     const k = new Contract(CHAIN.contract, ABI, this.signer);
     let ref = null;
     try { ref = new URLSearchParams(location.search).get('ref'); } catch {}
@@ -94,6 +119,7 @@ export const chain = {
 
   /** Record the signed run on-chain. Returns { boosted, best, tx }. */
   async submit(signed) {
+    await this.connect(); // the wallet may have drifted chain/account since enter()
     const k = new Contract(CHAIN.contract, ABI, this.signer);
     const tx = await k.submitRun(signed.day, signed.attempt, signed.points, signed.timeMs, signed.signature);
     const rc = await tx.wait();
@@ -118,7 +144,7 @@ export const chain = {
 
   /** Mint the power-up NFT. Free; one per wallet. Returns the tx hash. */
   async mintPowerup() {
-    if (!this.signer) await this.connect();
+    await this.connect();
     const k = new Contract(CHAIN.powerup, NFT_ABI, this.signer);
     const tx = await k.mint();
     const rc = await tx.wait();
