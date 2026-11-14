@@ -304,3 +304,7 @@ kbd { font: 500 11px/1 var(--f-label); color: #5b5866; background: #fff; border:
 .m-points dd { color: var(--cream); }
 .m-breakdown { margin: 8px 0 0; font: 500 12px/1.4 var(--f-label); opacity: .85; }
 .m-breakdown:empty { display: none; }
+.m-powerup { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; padding-top: 10px; border-top: 1px solid rgba(255, 250, 242, .14); }
+.m-powerup[hidden] { display: none; }
+.m-powerup-k { font: 500 12px/1.35 var(--f-label); color: var(--bone); flex: 1; }
+.btn.small { font-size: 12px; letter-spacing: .08em; padding: 8px 14px; flex: none; }

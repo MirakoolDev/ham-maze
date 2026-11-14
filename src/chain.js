@@ -15,6 +15,14 @@ const ABI = [
   'event Entered(uint256 indexed day, address indexed player, uint32 attempt, bool free, uint256 paid)',
   'event RunSubmitted(uint256 indexed day, address indexed player, uint32 attempt, uint32 points, uint32 boosted, uint32 timeMs, bool best)',
 ];
+const NFT_ABI = [
+  'function mint() returns (uint256)',
+  'function balanceOf(address) view returns (uint256)',
+  'function totalSupply() view returns (uint256)',
+  'function MAX_SUPPLY() view returns (uint256)',
+  'error AlreadyMinted()',
+  'error SoldOut()',
+];
 // The referee runs as a Vercel function; on the local dev server (port 5173) it runs beside it on 5174.
 const API = typeof location !== 'undefined' && location.port === '5173' ? `${location.protocol}//${location.hostname}:5174` : '';
 const HEX = '0x' + CHAIN.id.toString(16);
@@ -24,6 +32,7 @@ export const chain = {
   key: CHAIN_KEY, info: CHAIN, account: null, signer: null,
   enabled: () => !!CHAIN.contract,
   hasWallet: () => typeof window !== 'undefined' && !!window.ethereum,
+  powerupEnabled: () => !!CHAIN.powerup,
   short,
   explorerTx: (h) => `${CHAIN.explorer}/tx/${h}`,
 
@@ -92,5 +101,27 @@ export const chain = {
       try { const ev = k.interface.parseLog(log); if (ev?.name === 'RunSubmitted') return { boosted: Number(ev.args.boosted), best: ev.args.best, tx: tx.hash }; } catch {}
     }
     return { boosted: signed.points, best: false, tx: tx.hash };
+  },
+
+  /** Whether `account` already holds the power-up NFT, read-only, no wallet needed. */
+  async powerupOwned(account) {
+    const k = new Contract(CHAIN.powerup, NFT_ABI, new JsonRpcProvider(CHAIN.rpc, CHAIN.id, { staticNetwork: true }));
+    return (await k.balanceOf(account)) > 0n;
+  },
+
+  /** How many of the power-up NFT are left, read-only, no wallet needed. */
+  async powerupSupply() {
+    const k = new Contract(CHAIN.powerup, NFT_ABI, new JsonRpcProvider(CHAIN.rpc, CHAIN.id, { staticNetwork: true }));
+    const [total, max] = await Promise.all([k.totalSupply(), k.MAX_SUPPLY()]);
+    return { total: Number(total), max: Number(max) };
+  },
+
+  /** Mint the power-up NFT. Free; one per wallet. Returns the tx hash. */
+  async mintPowerup() {
+    if (!this.signer) await this.connect();
+    const k = new Contract(CHAIN.powerup, NFT_ABI, this.signer);
+    const tx = await k.mint();
+    const rc = await tx.wait();
+    return rc.hash;
   },
 };

@@ -136,6 +136,7 @@ function complete() {
 let ticket = null, lastRun = null, pendingSigned = null;
 const $q = (s) => document.querySelector(s);
 const potBox = $q('.m-pot'), potBtn = $q('[data-act="play-pot"]'), practiceBtn = $q('[data-act="deploy"]');
+const powerupBox = $q('.m-powerup'), powerupK = $q('.m-powerup-k'), mintBtn = $q('[data-act="mint-powerup"]');
 const titleStatus = $q('.m-title-status'), runStatus = $q('.m-run-status'), retrySubmit = $q('[data-act="submit-run"]');
 const setStatus = (el, msg, kind = '') => { el.textContent = msg; el.dataset.kind = kind; };
 const errText = (e) => (e?.code === 'ACTION_REJECTED' || e?.code === 4001 ? 'You cancelled it in your wallet.' : e?.shortMessage || e?.reason || e?.message || String(e));
@@ -156,7 +157,33 @@ async function refreshPot() {
       : `<li><span>No scores yet today. ${t.entries} run${t.entries === 1 ? '' : 's'} so far.</span></li>`;
     potBtn.textContent = `Play for the pot · ${Number(t.fee)} ETH`;
   } catch { v.textContent = 'Could not reach the chain'; }
+  refreshPowerup();
 }
+
+async function refreshPowerup() {
+  if (!chain.powerupEnabled()) { powerupBox.hidden = true; return; }
+  powerupBox.hidden = false;
+  try {
+    const owned = chain.account ? await chain.powerupOwned(chain.account) : false;
+    if (owned) { powerupK.textContent = 'You hold the power-up NFT. It boosts your points.'; mintBtn.hidden = true; return; }
+    mintBtn.hidden = false; mintBtn.disabled = false; mintBtn.textContent = 'Mint free';
+    const { total, max } = await chain.powerupSupply();
+    powerupK.textContent = total >= max
+      ? 'The power-up NFT has sold out.'
+      : `Free power-up NFT: boosts your points (${total.toLocaleString('en-US')}/${max.toLocaleString('en-US')} minted).`;
+    mintBtn.hidden = total >= max;
+  } catch { powerupK.textContent = 'Power-up NFT: could not reach the chain.'; mintBtn.hidden = true; }
+}
+hud.on('mint-powerup', async () => {
+  mintBtn.disabled = true; mintBtn.textContent = 'Minting…';
+  try {
+    await chain.mintPowerup();
+    await refreshPowerup();
+  } catch (e) {
+    powerupK.textContent = errText(e);
+    mintBtn.disabled = false; mintBtn.textContent = 'Mint free';
+  }
+});
 if (chain.enabled() && !CFG.preview) {
   potBtn.hidden = false; practiceBtn.classList.remove('primary'); practiceBtn.textContent = 'Practice run';
   refreshPot();
