@@ -300,8 +300,8 @@ function watchPerf(raw) {
   perf.n++; perf.sum += raw;
   if (perf.n < 120) return;
   const avg = perf.sum / perf.n; perf.n = perf.sum = 0;
-  const q = settings.get().quality;
-  if (avg > 0.024 && q !== 'low') {
+  const { quality: q, autoQuality } = settings.get();
+  if (autoQuality && avg > 0.024 && q !== 'low') {
     const next = q === 'high' ? 'medium' : 'low';
     settings.set({ quality: next });
     hud.message(`Graphics set to ${next} for smoother play (change in Settings)`, 4);
