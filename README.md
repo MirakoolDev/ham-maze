@@ -89,6 +89,8 @@ Nothing here custodies funds beyond a single day's pot and its 7-day claim windo
 
 ### HamPowerUp.sol: an NFT that does something
 
+**Live on Aurora Testnet:** [`0xe28b8E86028dED8D25b6B3800027032da37922a1`](https://explorer.testnet.aurora.dev/address/0xe28b8E86028dED8D25b6B3800027032da37922a1), source verified on the explorer.
+
 `mint()` is free, one per wallet, up to 500 total. Each one is a self contained ERC-721: `tokenURI` returns its metadata and art as an on-chain data URI (an inline SVG), so there is nothing hosted off-chain to go missing.
 
 Holding one is not just cosmetic. `HamDailyRun.boostOf()` reads `balanceOf(player)` on any registered booster token, and that function has the same signature on an ERC-721 as it does on an ERC-20 (both return a token count for an address). Registering `HamPowerUp` as a booster from `/admin`, minimum balance `1`, needs no change to `HamDailyRun.sol` at all: owning the NFT then measurably raises a player's points, and their share of a real daily pot, on every run.
