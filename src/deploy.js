@@ -4,6 +4,7 @@ import { BrowserProvider, ContractFactory, parseEther, isAddress, getAddress } f
 import { CHAINS } from './config.js';
 import artifact from './contract-artifact.json';
 import nftArtifact from './nft-artifact.json';
+import { pickProvider } from './wallet.js';
 
 const $ = (id) => document.getElementById(id);
 const say = (el, msg, kind = '') => { el.textContent = msg; el.className = 'status ' + kind; };
@@ -31,11 +32,11 @@ function refreshDeployButton() {
 }
 
 async function connect() {
-  if (!window.ethereum) { say($('walletStatus'), 'No wallet found. Open this page in a browser with MetaMask (or another injected wallet) installed.', 'bad'); return; }
   const NET = net(), HEX = '0x' + NET.id.toString(16);
   try {
     say($('walletStatus'), 'Connecting…');
-    let provider = new BrowserProvider(window.ethereum, 'any');
+    const eth = await pickProvider();
+    let provider = new BrowserProvider(eth, 'any');
     const [acc] = await provider.send('eth_requestAccounts', []);
     try {
       await provider.send('wallet_switchEthereumChain', [{ chainId: HEX }]);
@@ -44,7 +45,7 @@ async function connect() {
         await provider.send('wallet_addEthereumChain', [{ chainId: HEX, chainName: NET.name, rpcUrls: [NET.rpc], nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, blockExplorerUrls: [NET.explorer] }]);
       } else throw e;
     }
-    provider = new BrowserProvider(window.ethereum, 'any');
+    provider = new BrowserProvider(eth, 'any');
     signer = await provider.getSigner();
     account = getAddress(acc);
     $('dot').classList.add('on');

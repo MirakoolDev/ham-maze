@@ -4,6 +4,7 @@
 import { BrowserProvider, JsonRpcProvider, Contract, formatEther, parseEther, formatUnits, parseUnits, verifyMessage, isAddress, getAddress, ZeroAddress } from 'ethers';
 import { CHAIN, CHAINS, CHAIN_KEY, setChain, FIELDS, DEFAULTS } from './config.js';
 import { generateMaze, dailySeed } from './maze.js';
+import { pickProvider } from './wallet.js';
 
 const CFG_T = 'tuple(uint8 mazeSize,uint8 cellSize,uint8 sentries,uint8 sentryHealth,uint8 sentryDamage,uint8 playerHealth,uint8 magSize,uint8 loops)';
 const ABI = [
@@ -33,8 +34,8 @@ const say = (el, msg, kind = '') => { el.textContent = msg; el.className = 'stat
 
 // ── wallet ──────────────────────────────────────────────────────────────────
 async function connect() {
-  if (!window.ethereum) throw new Error('No wallet found. Install a browser wallet such as MetaMask or Rabby.');
-  provider = new BrowserProvider(window.ethereum, 'any');
+  const eth = await pickProvider();
+  provider = new BrowserProvider(eth, 'any');
   [account] = await provider.send('eth_requestAccounts', []);
   account = getAddress(account);
   try { await provider.send('wallet_switchEthereumChain', [{ chainId: CHAIN_HEX }]); }
@@ -43,10 +44,10 @@ async function connect() {
       await provider.send('wallet_addEthereumChain', [{ chainId: CHAIN_HEX, chainName: CHAIN.name, rpcUrls: [CHAIN.rpc], nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, blockExplorerUrls: [CHAIN.explorer] }]);
     } else throw e;
   }
-  provider = new BrowserProvider(window.ethereum, 'any');
+  provider = new BrowserProvider(eth, 'any');
   signer = await provider.getSigner();
   $('walletBtn').textContent = short(account);
-  $('netPill').textContent = 'Robinhood Chain'; $('netPill').classList.add('on');
+  $('netPill').textContent = CHAIN.name; $('netPill').classList.add('on');
 }
 
 async function signIn() {

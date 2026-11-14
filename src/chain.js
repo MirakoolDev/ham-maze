@@ -2,6 +2,7 @@
 // score. Practice runs never touch this.
 import { BrowserProvider, JsonRpcProvider, Contract, formatEther, isAddress, getAddress, ZeroAddress } from 'ethers';
 import { CHAIN, CHAIN_KEY } from './config.js';
+import { pickProvider } from './wallet.js';
 
 const ABI = [
   'function entryFee() view returns (uint256)',
@@ -29,8 +30,8 @@ export const chain = {
   reader() { return new Contract(CHAIN.contract, ABI, new JsonRpcProvider(CHAIN.rpc, CHAIN.id, { staticNetwork: true })); },
 
   async connect() {
-    if (!this.hasWallet()) throw new Error('No wallet found in this browser. Open the game in a wallet app\'s browser, or play a practice run.');
-    let provider = new BrowserProvider(window.ethereum, 'any');
+    const eth = await pickProvider();
+    let provider = new BrowserProvider(eth, 'any');
     const [acc] = await provider.send('eth_requestAccounts', []);
     try { await provider.send('wallet_switchEthereumChain', [{ chainId: HEX }]); }
     catch (e) {
@@ -38,7 +39,7 @@ export const chain = {
         await provider.send('wallet_addEthereumChain', [{ chainId: HEX, chainName: CHAIN.name, rpcUrls: [CHAIN.rpc], nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, blockExplorerUrls: [CHAIN.explorer] }]);
       } else throw e;
     }
-    provider = new BrowserProvider(window.ethereum, 'any');
+    provider = new BrowserProvider(eth, 'any');
     this.signer = await provider.getSigner();
     this.account = getAddress(acc);
     return this.account;
