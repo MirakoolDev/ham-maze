@@ -19,6 +19,7 @@ HAM's on-chain game runs on **Aurora**, the Ethereum-compatible chain that runs 
 | Shared points formula and cheat checks | `src/score.js` |
 | Owner settings page | `/admin` (`src/admin.js`) |
 | Deploy sandbox: connect your own wallet and sign | `/deploy` (`src/deploy.js`) |
+| NFT power-up, a free-mint booster | `contracts/src/HamPowerUp.sol` |
 
 **Other chains (disclosure).** The same contract is set up to also run on Robinhood Chain (chain 4663), with a switch in the game and admin page. That deployment is part of the wider project and is not part of this NEAR hackathon entry. Only the Aurora/NEAR integration above is submitted for judging.
 
@@ -85,6 +86,14 @@ One contract runs the whole daily game. A day is a UTC calendar day.
 - **Settings.** The owner can change the maze's settings, the entry fee, the holder token, the boosters, the referee address and the treasury address, and can pause new entries (submitting, settling and claiming keep working while paused). A settings change applies from the next UTC day, or immediately if nobody has entered the current day yet. Ownership transfers are two-step (the new owner has to accept).
 
 Nothing here custodies funds beyond a single day's pot and its 7-day claim window; the referee key never touches the chain (it only signs off chain, see "How a paid run works" above).
+
+### HamPowerUp.sol: an NFT that does something
+
+`mint()` is free, one per wallet, up to 500 total. Each one is a self contained ERC-721: `tokenURI` returns its metadata and art as an on-chain data URI (an inline SVG), so there is nothing hosted off-chain to go missing.
+
+Holding one is not just cosmetic. `HamDailyRun.boostOf()` reads `balanceOf(player)` on any registered booster token, and that function has the same signature on an ERC-721 as it does on an ERC-20 (both return a token count for an address). Registering `HamPowerUp` as a booster from `/admin`, minimum balance `1`, needs no change to `HamDailyRun.sol` at all: owning the NFT then measurably raises a player's points, and their share of a real daily pot, on every run.
+
+Deploy it from `/deploy` alongside the main contract, then register it as a booster from `/admin`.
 
 ## Built with
 

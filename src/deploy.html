@@ -38,6 +38,8 @@
   .note { color: var(--muted); font-size: 12px; margin-top: 6px; }
   a { color: var(--accent); }
   .hidden { display: none !important; }
+  .section-h { font-size: 15px; margin: 36px 0 4px; color: var(--bone); }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 32px 0 0; }
 </style>
 </head>
 <body>
@@ -96,6 +98,17 @@
     <div class="addr-box"><b>Contract:</b> <span id="addrOut"></span></div>
     <p class="note">Send me this address and I'll wire it into <code>src/config.js</code>.</p>
     <p class="note" id="explorerLink"></p>
+  </div>
+
+  <hr>
+  <h1 class="section-h">Deploy HamPowerUp (NFT)</h1>
+  <p class="sub">A free-mint NFT, one per wallet. Holding one plugs straight into HamDailyRun's booster system (no change to that contract needed) once you register it from the admin page.</p>
+  <button class="primary" id="deployNftBtn" disabled>Connect your wallet first</button>
+  <p class="status" id="deployNftStatus"></p>
+  <div id="nftResult" class="hidden">
+    <div class="addr-box"><b>Contract:</b> <span id="nftAddrOut"></span></div>
+    <p class="note">Add this as a booster from <code>/admin</code>: paste the address, <code>1</code> as the minimum held, and whatever bonus percent you want.</p>
+    <p class="note" id="nftExplorerLink"></p>
   </div>
 </div>
 <!--JS-->

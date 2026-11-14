@@ -3,6 +3,7 @@
 import { BrowserProvider, ContractFactory, parseEther, isAddress, getAddress } from 'ethers';
 import { CHAINS } from './config.js';
 import artifact from './contract-artifact.json';
+import nftArtifact from './nft-artifact.json';
 
 const $ = (id) => document.getElementById(id);
 const say = (el, msg, kind = '') => { el.textContent = msg; el.className = 'status ' + kind; };
@@ -25,6 +26,8 @@ function refreshDeployButton() {
   const ready = !!signer && (!isMainnet() || $('mainnetConfirm').checked);
   $('deployBtn').disabled = !ready;
   $('deployBtn').textContent = !signer ? 'Connect your wallet first' : (isMainnet() && !$('mainnetConfirm').checked) ? 'Check the box above to continue' : 'Deploy HamDailyRun';
+  $('deployNftBtn').disabled = !ready;
+  $('deployNftBtn').textContent = !signer ? 'Connect your wallet first' : (isMainnet() && !$('mainnetConfirm').checked) ? 'Check the box above to continue' : 'Deploy HamPowerUp';
 }
 
 async function connect() {
@@ -85,8 +88,32 @@ async function deploy() {
   }
 }
 
+async function deployNft() {
+  if (isMainnet() && !$('mainnetConfirm').checked) return; // belt and braces - the button is disabled for this already
+  const NET = net();
+  $('deployNftBtn').disabled = true;
+  try {
+    say($('deployNftStatus'), 'Confirm the deployment in your wallet…');
+    const factory = new ContractFactory(nftArtifact.abi, nftArtifact.bytecode, signer);
+    const contract = await factory.deploy();
+    say($('deployNftStatus'), 'Waiting for it to be mined…');
+    await contract.waitForDeployment();
+    const a = await contract.getAddress();
+    const tx = contract.deploymentTransaction();
+    say($('deployNftStatus'), 'Deployed.', 'ok');
+    $('nftAddrOut').textContent = `${a} on ${NET.name}`;
+    $('nftExplorerLink').innerHTML = tx ? `<a href="${NET.explorer}/tx/${tx.hash}" target="_blank" rel="noopener">View the deploy transaction</a>` : '';
+    $('nftResult').classList.remove('hidden');
+  } catch (e) {
+    say($('deployNftStatus'), e?.code === 'ACTION_REJECTED' || e?.code === 4001 ? 'You declined the transaction in your wallet.' : (e?.shortMessage || e?.reason || e?.message || String(e)), 'bad');
+  } finally {
+    refreshDeployButton();
+  }
+}
+
 $('netSel').addEventListener('change', onChainChange);
 $('mainnetConfirm').addEventListener('change', refreshDeployButton);
 $('connectBtn').addEventListener('click', connect);
 $('deployBtn').addEventListener('click', deploy);
+$('deployNftBtn').addEventListener('click', deployNft);
 onChainChange();
