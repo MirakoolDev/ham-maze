@@ -162,9 +162,12 @@ export function buildWorld(scene, maze) {
         float s = max(dot(d, sunDir), 0.0);
         c += vec3(1.0, 0.95, 0.88) * pow(s, 24.0) * 0.5;
         if (h > 0.0) { // a few thin high wisps, drifting slowly
-          vec2 p = d.xz / (h + 0.15) * vec2(0.5, 1.4) + vec2(uTime * 0.004, 0.0);
+          // dividing by (h + k) projects the sky dome onto a plane for the noise lookup; too small a k
+          // stretches that projection unevenly near the horizon, so the wisps look like blotches instead
+          // of smooth cloud - keep k large enough that the stretch stays gentle through the visible band.
+          vec2 p = d.xz / (h + 0.4) * vec2(0.5, 1.4) + vec2(uTime * 0.004, 0.0);
           float n = fbm(p);
-          c = mix(c, vec3(1.0, 0.98, 1.0) * 1.05, smoothstep(0.55, 0.8, n) * smoothstep(0.02, 0.25, h) * 0.45);
+          c = mix(c, vec3(1.0, 0.98, 1.0) * 1.05, smoothstep(0.6, 0.82, n) * smoothstep(0.02, 0.25, h) * 0.4);
         }
         c += vec3(1.0, 0.97, 0.9) * smoothstep(0.9993, 0.9997, s) * 8.0;
         c = mix(c, hor * 0.95, smoothstep(0.0, -0.1, h));
