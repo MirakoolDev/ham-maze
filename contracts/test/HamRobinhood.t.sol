@@ -12,6 +12,28 @@ contract MockNFT {
     }
 }
 
+contract MockPowerUp {
+    address public game;
+    mapping(address => uint32) public kills;
+    mapping(address => uint32) public mazesCompleted;
+
+    function setGame(address g) external {
+        game = g;
+    }
+
+    function recordRun(address player, uint32 k, bool completed) external {
+        require(msg.sender == game, "not game");
+        kills[player] += k;
+        if (completed) mazesCompleted[player] += 1;
+    }
+}
+
+contract RevertingPowerUp {
+    function recordRun(address, uint32, bool) external pure {
+        revert("nope");
+    }
+}
+
 contract HamRobinhoodTest is Test {
     HamRobinhood run;
     uint256 refereeKey = 0xA11CE;
@@ -44,19 +66,30 @@ contract HamRobinhoodTest is Test {
         return uint32(1_000_000_000 / uint256(t));
     }
 
-    function sign(address p, uint32 attempt, uint32 t) internal view returns (bytes memory) {
+    function sign(address p, uint32 attempt, uint32 t, uint32 kills, bool completed) internal view returns (bytes memory) {
         bytes32 h = keccak256(
-            abi.encodePacked("\x19Ethereum Signed Message:\n32", run.runDigest(day, p, attempt, pts(t), t))
+            abi.encodePacked(
+                "\x19Ethereum Signed Message:\n32", run.runDigest(day, p, attempt, pts(t), t, kills, completed)
+            )
         );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(refereeKey, h);
         return abi.encodePacked(r, s, v);
     }
 
+    // convenience overload: a plain finished run with a couple of kills
+    function sign(address p, uint32 attempt, uint32 t) internal view returns (bytes memory) {
+        return sign(p, attempt, t, 2, true);
+    }
+
     function play(address p, uint32 t) internal returns (uint256 tokenId) {
+        tokenId = play(p, t, address(0));
+    }
+
+    function play(address p, uint32 t, address referrer) internal returns (uint256 tokenId) {
         uint32 attempt = run.attempts(day, p);
         bytes memory sig = sign(p, attempt, t); // compute before prank: sign() itself calls out to the contract
         vm.prank(p);
-        tokenId = run.playRun{value: FEE}(pts(t), t, sig, address(0));
+        tokenId = run.playRun{value: FEE}(HamRobinhood.RunResult({points: pts(t), timeMs: t, kills: 2, completed: true}), sig, referrer);
     }
 
     // ── single-tx play ──────────────────────────────────────────────────────────
@@ -65,7 +98,7 @@ contract HamRobinhoodTest is Test {
         uint256 tokenId = play(alice, 100);
         assertEq(_pot(), potBefore + FEE, "fee went into the pot");
         assertEq(run.ownerOf(tokenId), alice, "score NFT minted to the player");
-        (uint64 d, address player, uint32 attempt, uint32 points,) = run.scores(tokenId);
+        (uint64 d, address player, uint32 attempt, uint32 points,,,) = run.scores(tokenId);
         assertEq(d, day);
         assertEq(player, alice);
         assertEq(attempt, 0);
@@ -84,7 +117,7 @@ contract HamRobinhoodTest is Test {
         bytes memory sig = sign(alice, attempt, 100);
         vm.prank(alice);
         vm.expectRevert(HamRobinhood.WrongFee.selector);
-        run.playRun{value: FEE - 1}(pts(100), 100, sig, address(0));
+        run.playRun{value: FEE - 1}(HamRobinhood.RunResult({points: pts(100), timeMs: 100, kills: 2, completed: true}), sig, address(0));
     }
 
     function test_badSignatureReverts() public {
@@ -92,7 +125,7 @@ contract HamRobinhoodTest is Test {
         bytes memory sig = sign(bob, attempt, 100); // signed for bob, played by alice
         vm.prank(alice);
         vm.expectRevert(HamRobinhood.BadSignature.selector);
-        run.playRun{value: FEE}(pts(100), 100, sig, address(0));
+        run.playRun{value: FEE}(HamRobinhood.RunResult({points: pts(100), timeMs: 100, kills: 2, completed: true}), sig, address(0));
     }
 
     // ── ranking and settling ────────────────────────────────────────────────────
@@ -213,14 +246,50 @@ contract HamRobinhoodTest is Test {
         uint32 attempt = run.attempts(day, alice);
         bytes memory sig1 = sign(alice, attempt, 100);
         vm.prank(alice);
-        run.playRun(pts(100), 100, sig1, address(0)); // no value sent
+        run.playRun(HamRobinhood.RunResult({points: pts(100), timeMs: 100, kills: 2, completed: true}), sig1, address(0)); // no value sent
 
         // second run same day is not free
         attempt = run.attempts(day, alice);
         bytes memory sig2 = sign(alice, attempt, 90);
         vm.prank(alice);
         vm.expectRevert(HamRobinhood.WrongFee.selector);
-        run.playRun(pts(90), 90, sig2, address(0));
+        run.playRun(HamRobinhood.RunResult({points: pts(90), timeMs: 90, kills: 2, completed: true}), sig2, address(0));
+    }
+
+    // ── crew bonus ───────────────────────────────────────────────────────────────
+    function test_crewBonusDoublesReferralOnceThreeReferredPlayToday() public {
+        address dave = makeAddr("dave");
+        vm.deal(dave, 10 ether);
+        play(alice, 500); // alice refers nobody, just needs a winning run
+        play(bob, 100, alice); // bob, carol, dave all referred by alice
+        play(carol, 150, alice);
+        play(dave, 200, alice);
+        assertEq(run.crewSize(day, alice), 3);
+
+        vm.warp(block.timestamp + 1 days + 16 minutes);
+        run.settle(day);
+        // bob ranked #1 (fastest of the referred three); referral reward should use the crew bps
+        uint256 reward = run.referralOwed(alice);
+        assertGt(reward, 0);
+    }
+
+    function test_powerUpIsNotifiedAfterARun() public {
+        MockPowerUp pu = new MockPowerUp();
+        pu.setGame(address(run));
+        vm.prank(owner);
+        run.setPowerUp(address(pu));
+
+        play(alice, 100);
+        assertEq(pu.kills(alice), 2);
+        assertEq(pu.mazesCompleted(alice), 1);
+    }
+
+    function test_revertingPowerUpNeverBlocksARun() public {
+        RevertingPowerUp pu = new RevertingPowerUp();
+        vm.prank(owner);
+        run.setPowerUp(address(pu));
+        // should not revert even though the power-up contract always reverts
+        play(alice, 100);
     }
 
     function _pot() internal view returns (uint256 pot) {
