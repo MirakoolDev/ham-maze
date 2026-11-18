@@ -42,7 +42,8 @@ contract HamRobinhood {
     uint256 public constant FIRST_BPS = 4000;
     uint256 public constant SECOND_BPS = 2000;
     uint256 public constant THIRD_BPS = 1000;
-    uint256 public constant TREASURY_BPS = 2000; // the remaining 1000 rolls over
+    uint256 public constant BACKERS_BPS = 1000; // fixed: campaign backers are paid first, never carved into
+    uint256 public constant TREASURY_BPS = 1000; // the $PFWA buyback; holder bonus and referrals come out of this. The remaining 1000 rolls over
     uint256 public constant HOLDER_BONUS_BPS = 1000;
     uint256 public constant REFERRAL_BPS = 500;
     uint256 public constant CREW_SIZE = 3; // referred players who played today, to unlock the crew bonus
@@ -111,6 +112,7 @@ contract HamRobinhood {
     address public pendingOwner;
     address public referee;
     address public treasury; // may route to a buyback vault for an existing token; this contract mints none
+    address public backers; // where the backers' 10% goes (a payout splitter for the campaign); starts as the treasury
     address public holderToken;
     address public powerUp; // optional: HamPowerUps, notified after each run
     address public scoreArt; // optional: HamScoreArt, which draws each Score from its run
@@ -136,6 +138,7 @@ contract HamRobinhood {
     mapping(address => address) public referrerOf;
     mapping(address => uint256) public referralOwed;
     uint256 public treasuryOwed;
+    uint256 public backersOwed;
 
     // crew bonus: a referrer whose referred players all play the same day unlocks a bigger cut
     mapping(uint256 => mapping(address => uint32)) public crewSize; // day => referrer => distinct referred players who played
@@ -171,6 +174,8 @@ contract HamRobinhood {
     event EntryFeeSet(uint256 fee);
     event RefereeSet(address referee);
     event TreasurySet(address treasury);
+    event BackersSet(address backers);
+    event BackersPaid(uint256 indexed day, uint256 amount);
     event HolderTokenSet(address token);
     event PausedSet(bool paused);
     event OwnershipTransferStarted(address indexed from, address indexed to);
@@ -235,6 +240,7 @@ contract HamRobinhood {
         owner = owner_;
         referee = referee_;
         treasury = treasury_;
+        backers = treasury_;
         entryFee = entryFee_;
         _config = config_;
         emit OwnershipTransferred(address(0), owner_);
@@ -401,9 +407,12 @@ contract HamRobinhood {
 
         uint256 pot = d.pot;
         uint256 treasuryShare = pot * TREASURY_BPS / BPS;
+        uint256 backersShare = pot * BACKERS_BPS / BPS;
         uint256[3] memory share = [pot * FIRST_BPS / BPS, pot * SECOND_BPS / BPS, pot * THIRD_BPS / BPS];
         uint256[3] memory prize;
-        uint256 rollover = pot - treasuryShare;
+        uint256 rollover = pot - treasuryShare - backersShare;
+        backersOwed += backersShare;
+        emit BackersPaid(day, backersShare);
         uint256 unclaimed;
 
         for (uint256 i; i < 3; ++i) {
@@ -505,12 +514,17 @@ contract HamRobinhood {
         emit ReferralClaimed(msg.sender, amount);
     }
 
+    /// @notice Anyone can push both shares out: the buyback half to `treasury`, the backers' half to `backers`.
     function withdrawTreasury() external nonReentrant {
         uint256 amount = treasuryOwed;
-        if (amount == 0) revert NothingToClaim();
+        uint256 toBackers = backersOwed;
+        if (amount + toBackers == 0) revert NothingToClaim();
         treasuryOwed = 0;
-        _send(treasury, amount);
+        backersOwed = 0;
+        if (amount != 0) _send(treasury, amount);
+        if (toBackers != 0) _send(backers, toBackers);
         emit TreasuryWithdrawn(treasury, amount);
+        emit TreasuryWithdrawn(backers, toBackers);
     }
 
     // ── HamScore: minimal ERC-721, one minted per played run ───────────────────
@@ -649,6 +663,13 @@ contract HamRobinhood {
         if (treasury_ == address(0)) revert ZeroAddress();
         treasury = treasury_;
         emit TreasurySet(treasury_);
+    }
+
+    /// @notice Where the backers' fixed 10% goes, e.g. a splitter that pays the campaign's backers.
+    function setBackers(address backers_) external onlyOwner {
+        if (backers_ == address(0)) revert ZeroAddress();
+        backers = backers_;
+        emit BackersSet(backers_);
     }
 
     function setHolderToken(address token) external onlyOwner {

@@ -149,6 +149,23 @@ contract HamRobinhoodTest is Test {
         assertGt(run.prizeOf(t1), 0);
     }
 
+    function test_backersGetAFixedTenPercentAndBuybackGetsTheOtherTen() public {
+        address splitter = makeAddr("backers");
+        vm.prank(owner);
+        run.setBackers(splitter);
+        play(alice, 100);
+        play(bob, 150);
+        play(carol, 200);
+        uint256 pot = _pot();
+        vm.warp(block.timestamp + 1 days + 16 minutes);
+        run.settle(day);
+        assertEq(run.backersOwed(), pot / 10, "backers: 10%, untouched by bonuses");
+        assertEq(run.treasuryOwed(), pot / 10, "buyback: 10% (no holder or referral carve-outs here)");
+        run.withdrawTreasury();
+        assertEq(splitter.balance, pot / 10);
+        assertEq(treasury.balance, pot / 10);
+    }
+
     // ── two-step claim: the Wenwin double-dip fix ──────────────────────────────
     function test_claimRequiresIntentThenDelay() public {
         uint256 t1 = play(alice, 100);
