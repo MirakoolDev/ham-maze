@@ -3,6 +3,7 @@ pragma solidity 0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 import {HamRobinhood} from "../src/HamRobinhood.sol";
+import {HamScoreArt} from "../src/HamScoreArt.sol";
 
 contract MockNFT {
     mapping(address => uint256) public balanceOf;
@@ -290,6 +291,29 @@ contract HamRobinhoodTest is Test {
         run.setPowerUp(address(pu));
         // should not revert even though the power-up contract always reverts
         play(alice, 100);
+    }
+
+    function test_scoreArtIsSealedUntilTheDayEnds() public {
+        HamScoreArt art = new HamScoreArt();
+        vm.prank(owner);
+        run.setScoreArt(address(art));
+        uint256 tokenId = play(alice, 100);
+
+        string memory live = run.tokenURI(tokenId);
+        vm.warp(block.timestamp + 6 hours); // still the same UTC day
+        assertEq(run.tokenURI(tokenId), live, "unchanged while the day is live");
+        vm.warp((day + 1) * 1 days); // 00:00 UTC
+        assertTrue(keccak256(bytes(run.tokenURI(tokenId))) != keccak256(bytes(live)), "develops at midnight");
+    }
+
+    function test_lockedScoreArtCannotBeSwapped() public {
+        HamScoreArt art = new HamScoreArt();
+        vm.startPrank(owner);
+        run.setScoreArt(address(art));
+        run.lockScoreArt();
+        vm.expectRevert(HamRobinhood.ArtLocked.selector);
+        run.setScoreArt(address(0));
+        vm.stopPrank();
     }
 
     function _pot() internal view returns (uint256 pot) {

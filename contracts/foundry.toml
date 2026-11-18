@@ -8,6 +8,8 @@ optimizer = true
 optimizer_runs = 200
 bytecode_hash = "none"
 remappings = ["forge-std/=lib/forge-std/src/"]
+# the art tests compare the contracts' SVGs with design/nft/ham-art.js output, and the deploy script uploads art
+fs_permissions = [{ access = "read", path = "./test/fixtures" }, { access = "read", path = "./art" }]
 
 [rpc_endpoints]
 robinhood = "https://rpc.mainnet.chain.robinhood.com"

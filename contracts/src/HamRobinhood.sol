@@ -5,8 +5,15 @@ interface IBalanceOf {
     function balanceOf(address account) external view returns (uint256);
 }
 
-interface IHamPowerUpMutable {
+interface IHamPowerUps {
     function recordRun(address player, uint32 kills, bool completed) external;
+}
+
+interface IHamScoreArt {
+    function render(uint256 tokenId, uint256 day, uint32 points, uint32 timeMs, uint32 kills, bool completed, bool isSealed)
+        external
+        pure
+        returns (string memory);
 }
 
 /// @title HamRobinhood
@@ -105,7 +112,9 @@ contract HamRobinhood {
     address public referee;
     address public treasury; // may route to a buyback vault for an existing token; this contract mints none
     address public holderToken;
-    address public powerUp; // optional: a HamPowerUpMutable-style NFT notified after each run
+    address public powerUp; // optional: HamPowerUps, notified after each run
+    address public scoreArt; // optional: HamScoreArt, which draws each Score from its run
+    bool public scoreArtLocked; // once set, the renderer can never be swapped
     uint256 public entryFee;
     bool public paused;
 
@@ -146,6 +155,8 @@ contract HamRobinhood {
     event RunPlayed(uint256 indexed day, address indexed player, uint32 attempt, uint256 tokenId, uint32 points, uint32 boosted, uint32 timeMs, bool paid);
     event CrewBonusUnlocked(uint256 indexed day, address indexed referrer, uint32 crewSize);
     event PowerUpSet(address powerUp);
+    event ScoreArtSet(address scoreArt);
+    event ScoreArtLocked();
     event BoostersSet(Booster[] boosters);
     event PotSeeded(uint256 indexed day, address indexed from, uint256 amount);
     event DaySettled(uint256 indexed day, uint256[3] topToken, uint256[3] prize, uint256 treasury, uint256 rollover);
@@ -197,6 +208,7 @@ contract HamRobinhood {
     error NotAuthorized();
     error NoSuchToken();
     error TokenFrozen();
+    error ArtLocked();
     error NotERC721Receiver();
 
     modifier onlyOwner() {
@@ -347,7 +359,7 @@ contract HamRobinhood {
     function _notifyPowerUp(address player, uint32 kills, bool completed) internal {
         address p = powerUp;
         if (p == address(0)) return;
-        try IHamPowerUpMutable(p).recordRun(player, kills, completed) {} catch {}
+        try IHamPowerUps(p).recordRun(player, kills, completed) {} catch {}
     }
 
     function _verifySignature(uint256 day, uint32 attempt, RunResult calldata r, bytes calldata signature) internal view {
@@ -564,12 +576,33 @@ contract HamRobinhood {
         return id == 0x01ffc9a7 || id == 0x80ac58cd || id == 0x5b5e139f;
     }
 
-    /// @notice Fully on-chain metadata: the run's day, points and time, and whether it placed.
+/// @notice Fully on-chain metadata. With HamScoreArt set, the image is the day's maze as far as
+    /// the run got. While the run's day is still live the image is sealed to the entrance corner, so
+    /// no Score shows walls of a maze people are still racing; it develops by itself after 00:00 UTC.
     function tokenURI(uint256 tokenId) external view returns (string memory) {
         ScoreRecord memory s = scores[tokenId];
         if (s.player == address(0)) revert NoSuchToken();
         string memory idStr = _toString(tokenId);
-        string memory svg = string.concat(
+        bool isSealed = block.timestamp < (uint256(s.day) + 1) * 1 days;
+        string memory svg = scoreArt != address(0)
+            ? IHamScoreArt(scoreArt).render(tokenId, s.day, s.points, s.timeMs, s.kills, s.completed, isSealed)
+            : _plainSvg(s, idStr);
+        string memory json = string.concat(
+            '{"name":"HAM Score #', idStr,
+            '","description":"A played run of HAM. Whoever holds this NFT claims its prize if it ranks top 3 for the day, not necessarily whoever played it.",',
+            '"image":"data:image/svg+xml;base64,', _base64(bytes(svg)), '",',
+            '"attributes":[{"trait_type":"Day","value":', _toString(s.day),
+            '},{"trait_type":"Points","value":', _toString(s.points),
+            '},{"trait_type":"Time (ms)","value":', _toString(s.timeMs),
+            '},{"trait_type":"Kills","value":', _toString(s.kills),
+            '},{"trait_type":"Completed","value":"', (s.completed ? "true" : "false"),
+            '"},{"trait_type":"Maze","value":"', (isSealed ? "Sealed" : "Developed"), '"}]}'
+        );
+        return string.concat("data:application/json;base64,", _base64(bytes(json)));
+    }
+
+    function _plainSvg(ScoreRecord memory s, string memory idStr) internal pure returns (string memory) {
+        return string.concat(
             '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">',
             '<rect width="200" height="200" rx="28" fill="#2a2733"/>',
             '<rect x="14" y="14" width="172" height="172" rx="20" fill="none" stroke="#9fe3ff" stroke-width="3"/>',
@@ -579,17 +612,6 @@ contract HamRobinhood {
             '<text x="100" y="178" font-family="monospace" font-size="11" fill="#fffaf2" text-anchor="middle" opacity="0.7">No. ', idStr, '</text>',
             '</svg>'
         );
-        string memory json = string.concat(
-            '{"name":"HAM Score #', idStr,
-            '","description":"A played run of HAM. Whoever holds this NFT claims its prize if it ranks top 3 for the day, not necessarily whoever played it.",',
-            '"image":"data:image/svg+xml;base64,', _base64(bytes(svg)), '",',
-            '"attributes":[{"trait_type":"Day","value":', _toString(s.day),
-            '},{"trait_type":"Points","value":', _toString(s.points),
-            '},{"trait_type":"Time (ms)","value":', _toString(s.timeMs),
-            '},{"trait_type":"Kills","value":', _toString(s.kills),
-            '},{"trait_type":"Completed","value":"', (s.completed ? "true" : "false"), '"}]}'
-        );
-        return string.concat("data:application/json;base64,", _base64(bytes(json)));
     }
 
     // ── Admin ───────────────────────────────────────────────────────────────────
@@ -639,6 +661,20 @@ contract HamRobinhood {
     function setPowerUp(address powerUp_) external onlyOwner {
         powerUp = powerUp_;
         emit PowerUpSet(powerUp_);
+    }
+
+    /// @notice The contract that draws Scores. Zero falls back to a plain card. Swappable until
+    /// `lockScoreArt`, after which the art can never change.
+    function setScoreArt(address scoreArt_) external onlyOwner {
+        if (scoreArtLocked) revert ArtLocked();
+        scoreArt = scoreArt_;
+        emit ScoreArtSet(scoreArt_);
+    }
+
+    function lockScoreArt() external onlyOwner {
+        if (scoreArt == address(0)) revert ZeroAddress();
+        scoreArtLocked = true;
+        emit ScoreArtLocked();
     }
 
     function setBoosters(Booster[] calldata list) external onlyOwner {

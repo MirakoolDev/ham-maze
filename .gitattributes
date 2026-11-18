@@ -1,0 +1,3 @@
+# byte-exact art: compared and uploaded as is, never line-ending converted
+contracts/art/** -text
+contracts/test/fixtures/** -text
