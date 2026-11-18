@@ -2,26 +2,33 @@
 pragma solidity 0.8.26;
 
 /// @title HamPowerUps
-/// @notice HAM's Power-Ups: tools you keep, like the Marker, Pulse, Blinker or Snare. Everyone starts
-/// a run with the free K-7 carbine, which is not an NFT. A Power-Up trades raw damage for one move with
-/// a few charges per run, so holding one gives you options rather than a win.
+/// @notice HAM's Power-Ups: guns you keep, like the Marker, Pulse, Blinker or Snare. Everyone starts
+/// a run with the free K-7 carbine, which is not an NFT.
 ///
-/// The lineup is data, not code: the owner adds kinds (name, rarity, supply cap, price) and uploads each
-/// kind's art, then calls `lock()`, after which no kind can be added and no art changed. Prices can still
-/// be changed after the lock, for new mints only.
+/// Every Power-Up is sold as a sealed pack, and every pack costs the same. The price starts low each
+/// day (about $1) and climbs one step every `stepEvery` seconds, then drops back at 00:00 UTC. There
+/// are 10,000 packs in all. You strip (open) a pack to see which gun is inside.
 ///
-/// A wallet carries one Power-Up into a run: its equipped token. HamRobinhood calls `recordRun` after
-/// each run, which counts runs and kills on that token. Nobody but `game` can write those stats.
+/// What a pack holds is drawn like a card from a shuffled deck: the lineup's caps add up to exactly
+/// 10,000, so each kind's chance is its share of what is still in the deck, and every pack can always
+/// be opened. The draw uses the hash of the block the pack was bought in, which nobody knows while
+/// buying, so a buyer cannot pick a good pack and a bot cannot re-roll by choosing when to open.
+/// A sealed pack cannot be transferred: once its block hash exists, anyone could read what is inside,
+/// and selling only the bad ones would cheat the buyer.
+///
+/// The lineup is data, not code: the owner adds kinds (name, rarity, cap) and uploads each kind's art
+/// and the pack art, then calls `lock()`. Sales open at the lock, after which no kind or art changes.
 contract HamPowerUps {
     string public constant name = "HAM Power-Ups";
     string public constant symbol = "HAMPU";
+    uint256 public constant MAX_PACKS = 10_000;
+    uint256 public constant MAX_PER_BUY = 20;
 
     struct Kind {
         string name;
         string rarity;
-        uint32 cap;
-        uint32 minted;
-        uint96 price;
+        uint32 cap; // how many of this kind are in the 10,000-pack deck
+        uint32 minted; // how many have come out of opened packs
         address head; // art before the per-token line, stored as contract code
         address tail; // art after it
     }
@@ -33,14 +40,24 @@ contract HamPowerUps {
 
     address public owner;
     address public game; // the only address allowed to call recordRun
-    bool public locked; // lineup and art frozen for good
+    bool public locked; // lineup and art frozen for good; sales open
+
+    // the price: basePrice at 00:00 UTC, plus `step` every `stepEvery` seconds through the day
+    uint96 public basePrice = 0.00055 ether; // about $1 at $1,800 ETH
+    uint96 public step = 0.0000275 ether; // 5% of the base
+    uint32 public stepEvery = 10 minutes;
 
     Kind[] internal _kinds; // kind id = index + 1
-    uint256 public totalSupply;
-    mapping(uint256 => uint256) public kindOf; // tokenId => kind id
+    address internal _packHead;
+    address internal _packTail;
+    uint256 public totalSupply; // packs sold
+    uint256 public opened;
+    mapping(uint256 => uint256) public kindOf; // tokenId => kind id, 0 = still sealed
+    mapping(uint256 => uint256) public boughtAt; // tokenId => block number it was bought in
+    mapping(uint256 => bytes32) public blockSeal; // block number => its hash, kept before it ages out
+    uint256 internal _lastBuyBlock;
     mapping(uint256 => Stats) public stats;
     mapping(address => uint256) public equipped; // wallet => tokenId it carries into runs, 0 = none
-    mapping(address => mapping(uint256 => bool)) public claimedFree; // wallet => kind => took a free one
 
     mapping(uint256 => address) private _owner;
     mapping(address => uint256) private _balance;
@@ -51,10 +68,11 @@ contract HamPowerUps {
     event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
     event Approval(address indexed owner, address indexed approved, uint256 indexed tokenId);
     event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
-    event KindAdded(uint256 indexed kind, string name, string rarity, uint32 cap, uint96 price);
-    event PriceSet(uint256 indexed kind, uint96 price);
-    event ArtSet(uint256 indexed kind, address head, address tail);
+    event KindAdded(uint256 indexed kind, string name, string rarity, uint32 cap);
+    event ArtSet(uint256 indexed kind, address head, address tail); // kind 0 = the pack
     event Locked();
+    event PricingSet(uint96 basePrice, uint96 step, uint32 stepEvery);
+    event PackOpened(uint256 indexed tokenId, address indexed holder, uint256 indexed kind);
     event Equipped(address indexed holder, uint256 indexed tokenId);
     event RunRecorded(uint256 indexed tokenId, uint32 runs, uint32 kills);
     event GameSet(address game);
@@ -64,10 +82,15 @@ contract HamPowerUps {
     error NotOwner();
     error NotGame();
     error IsLocked();
+    error NotOpenYet();
     error NoSuchKind();
     error SoldOut();
     error WrongPrice();
-    error AlreadyClaimed();
+    error BadCount();
+    error BadCaps();
+    error StillSealed();
+    error AlreadyOpened();
+    error TooSoon();
     error NotAuthorized();
     error ZeroAddress();
     error NoSuchToken();
@@ -99,29 +122,81 @@ contract HamPowerUps {
         emit OwnerSet(owner_);
     }
 
-    // ── minting and carrying ─────────────────────────────────────────────────────
-    /// @notice Buy one Power-Up of `kind` at its price. A free kind is limited to one per wallet.
-    /// Your first Power-Up is equipped automatically.
-    function mint(uint256 kind) external payable nonReentrant returns (uint256 tokenId) {
-        Kind storage k = _kind(kind);
-        if (k.minted >= k.cap) revert SoldOut();
-        if (msg.value != k.price) revert WrongPrice();
-        if (k.price == 0) {
-            if (claimedFree[msg.sender][kind]) revert AlreadyClaimed();
-            claimedFree[msg.sender][kind] = true;
+    // ── buying and opening ───────────────────────────────────────────────────────
+    /// @notice What one pack costs right now. Resets at 00:00 UTC.
+    function priceNow() public view returns (uint256) {
+        return uint256(basePrice) + uint256(step) * ((block.timestamp % 1 days) / stepEvery);
+    }
+
+    /// @notice Buy `count` sealed packs at today's current price. Anything paid over is sent back,
+    /// so a buyer can pay a little extra in case the price steps up before the transaction lands.
+    function buy(uint256 count) external payable nonReentrant returns (uint256 firstId) {
+        if (!locked) revert NotOpenYet();
+        if (count == 0 || count > MAX_PER_BUY) revert BadCount();
+        if (totalSupply + count > MAX_PACKS) revert SoldOut();
+        uint256 cost = priceNow() * count;
+        if (msg.value < cost) revert WrongPrice();
+        _keepSeal();
+        _lastBuyBlock = block.number;
+        firstId = totalSupply + 1;
+        for (uint256 i; i < count; ++i) {
+            uint256 tokenId = ++totalSupply;
+            boughtAt[tokenId] = block.number;
+            _owner[tokenId] = msg.sender;
+            emit Transfer(address(0), msg.sender, tokenId);
         }
-        k.minted += 1;
-        tokenId = ++totalSupply;
+        _balance[msg.sender] += count;
+        if (msg.value > cost) _send(msg.sender, msg.value - cost);
+    }
+
+    /// @notice Strip a pack you hold and see which gun is inside. Works from the block after you
+    /// bought it. Your first gun is equipped automatically.
+    function open(uint256 tokenId) external returns (uint256 kind) {
+        if (ownerOf(tokenId) != msg.sender) revert NotAuthorized();
+        if (kindOf[tokenId] != 0) revert AlreadyOpened();
+        uint256 bought = boughtAt[tokenId];
+        if (block.number <= bought) revert TooSoon();
+        _keepSeal();
+        bytes32 h = blockhash(bought);
+        if (h == 0) h = blockSeal[bought];
+        // Only if nobody touched this contract for the ~256 blocks after the purchase and the pack was
+        // left shut all that time: fall back to the latest block. Rare, and costs the opener waiting.
+        if (h == 0) h = blockhash(block.number - 1);
+        kind = _draw(uint256(keccak256(abi.encode(h, tokenId))));
         kindOf[tokenId] = kind;
-        _owner[tokenId] = msg.sender;
-        _balance[msg.sender] += 1;
-        emit Transfer(address(0), msg.sender, tokenId);
+        opened += 1;
+        emit PackOpened(tokenId, msg.sender, kind);
         if (equipped[msg.sender] == 0) _equip(msg.sender, tokenId);
     }
 
-    /// @notice Choose which of your Power-Ups you carry into runs.
+    /// @dev Remember the hash of the last block packs were bought in while it can still be read.
+    function _keepSeal() internal {
+        uint256 b = _lastBuyBlock;
+        if (b != 0 && b < block.number && blockSeal[b] == 0) {
+            bytes32 h = blockhash(b);
+            if (h != 0) blockSeal[b] = h;
+        }
+    }
+
+    /// @dev Deal one card from what is left of the deck.
+    function _draw(uint256 rnd) internal returns (uint256) {
+        uint256 r = rnd % (MAX_PACKS - opened);
+        for (uint256 i; i < _kinds.length; ++i) {
+            Kind storage k = _kinds[i];
+            uint256 left = k.cap - k.minted;
+            if (r < left) {
+                k.minted += 1;
+                return i + 1;
+            }
+            r -= left;
+        }
+        revert SoldOut(); // unreachable: the caps add up to MAX_PACKS
+    }
+
+    /// @notice Choose which of your opened guns you carry into runs.
     function equip(uint256 tokenId) external {
         if (ownerOf(tokenId) != msg.sender) revert NotAuthorized();
+        if (kindOf[tokenId] == 0) revert StillSealed();
         _equip(msg.sender, tokenId);
     }
 
@@ -148,34 +223,44 @@ contract HamPowerUps {
     }
 
     // ── the lineup ──────────────────────────────────────────────────────────────
-    function addKind(string calldata kindName, string calldata rarity, uint32 cap, uint96 price)
+    function addKind(string calldata kindName, string calldata rarity, uint32 cap)
         external
         onlyOwner
         unlocked
         returns (uint256 kind)
     {
-        _kinds.push(Kind({name: kindName, rarity: rarity, cap: cap, minted: 0, price: price, head: address(0), tail: address(0)}));
+        _kinds.push(Kind({name: kindName, rarity: rarity, cap: cap, minted: 0, head: address(0), tail: address(0)}));
         kind = _kinds.length;
-        emit KindAdded(kind, kindName, rarity, cap, price);
+        emit KindAdded(kind, kindName, rarity, cap);
     }
 
-    /// @notice Store a kind's art: the SVG before and after the per-token "NO. 12 · 40 RUNS" line.
+    /// @notice Store art: the SVG before and after the per-token line. Kind 0 is the sealed pack.
     function setArt(uint256 kind, bytes calldata head, bytes calldata tail) external onlyOwner unlocked {
-        Kind storage k = _kind(kind);
-        k.head = _store(head);
-        k.tail = _store(tail);
-        emit ArtSet(kind, k.head, k.tail);
+        address h = _store(head);
+        address t = _store(tail);
+        if (kind == 0) {
+            (_packHead, _packTail) = (h, t);
+        } else {
+            Kind storage k = _kind(kind);
+            (k.head, k.tail) = (h, t);
+        }
+        emit ArtSet(kind, h, t);
     }
 
-    /// @notice Freeze the lineup and the art forever.
+    /// @notice Freeze the lineup and the art forever, and open sales. The caps must add up to 10,000.
     function lock() external onlyOwner unlocked {
+        uint256 sum;
+        for (uint256 i; i < _kinds.length; ++i) sum += _kinds[i].cap;
+        if (sum != MAX_PACKS) revert BadCaps();
         locked = true;
         emit Locked();
     }
 
-    function setPrice(uint256 kind, uint96 price) external onlyOwner {
-        _kind(kind).price = price;
-        emit PriceSet(kind, price);
+    /// @notice Tune the daily price curve. Applies from the next purchase.
+    function setPricing(uint96 basePrice_, uint96 step_, uint32 stepEvery_) external onlyOwner {
+        if (stepEvery_ == 0) revert WrongPrice();
+        (basePrice, step, stepEvery) = (basePrice_, step_, stepEvery_);
+        emit PricingSet(basePrice_, step_, stepEvery_);
     }
 
     function kinds() external view returns (Kind[] memory) {
@@ -197,9 +282,13 @@ contract HamPowerUps {
     function withdraw(address to) external onlyOwner nonReentrant {
         if (to == address(0)) revert ZeroAddress();
         uint256 amount = address(this).balance;
+        _send(to, amount);
+        emit Withdrawn(to, amount);
+    }
+
+    function _send(address to, uint256 amount) internal {
         (bool ok,) = to.call{value: amount}("");
         if (!ok) revert TransferFailed();
-        emit Withdrawn(to, amount);
     }
 
     function _kind(uint256 kind) internal view returns (Kind storage) {
@@ -227,30 +316,61 @@ contract HamPowerUps {
     }
 
     // ── metadata ────────────────────────────────────────────────────────────────
-    /// @notice Fully on-chain: the kind's stored art with this token's number and run count.
+    /// @notice Fully on-chain. A sealed pack shows the pack art; an opened one shows its gun with
+    /// this token's number and run count.
     function tokenURI(uint256 tokenId) external view returns (string memory) {
         ownerOf(tokenId);
-        Kind storage k = _kinds[kindOf[tokenId] - 1];
-        Stats memory s = stats[tokenId];
         string memory idStr = _toString(tokenId);
-        string memory line = string.concat(
-            '<text x="560" y="76" text-anchor="end" font-size="11" font-weight="500" letter-spacing="2.6" opacity="0.72">NO. ',
-            idStr, " &#183; ", _toString(s.runs), " RUNS</text>"
-        );
+        string memory open_ =
+            '<text x="560" y="76" text-anchor="end" font-size="11" font-weight="500" letter-spacing="2.6" opacity="0.72">NO. ';
+        uint256 kind = kindOf[tokenId];
+        if (kind == 0) {
+            string memory pline = string.concat(open_, idStr, " OF 10,000</text>");
+            string memory psvg = _packHead == address(0)
+                ? _plain("Sealed pack", pline)
+                : string.concat(string(_load(_packHead)), pline, string(_load(_packTail)));
+            return _json(
+                string.concat("HAM Sealed pack #", idStr),
+                "A sealed HAM Power-Up pack. Strip it to see which gun is inside.",
+                psvg,
+                '{"trait_type":"Kind","value":"Sealed pack"}'
+            );
+        }
+        Kind storage k = _kinds[kind - 1];
+        Stats memory s = stats[tokenId];
+        string memory line = string.concat(open_, idStr, " &#183; ", _toString(s.runs), " RUNS</text>");
         string memory svg = k.head == address(0)
-            ? string.concat(
-                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600"><rect width="600" height="600" fill="#cfd2dc"/>',
-                '<g font-family="sans-serif" fill="#24222c"><text x="38" y="542" font-size="42">', k.name, "</text>", line, "</g></svg>"
-            )
+            ? _plain(k.name, line)
             : string.concat(string(_load(k.head)), line, string(_load(k.tail)));
+        return _json(
+            string.concat("HAM ", k.name, " #", idStr),
+            "A HAM Power-Up. Carry it into the daily maze for one extra move with a few charges per run.",
+            svg,
+            string.concat(
+                '{"trait_type":"Kind","value":"', k.name,
+                '"},{"trait_type":"Rarity","value":"', k.rarity,
+                '"},{"trait_type":"Runs","value":', _toString(s.runs),
+                '},{"trait_type":"Kills","value":', _toString(s.kills), "}"
+            )
+        );
+    }
+
+    function _plain(string memory title, string memory line) private pure returns (string memory) {
+        return string.concat(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600"><rect width="600" height="600" fill="#cfd2dc"/>',
+            '<g font-family="sans-serif" fill="#24222c"><text x="38" y="542" font-size="42">', title, "</text>", line, "</g></svg>"
+        );
+    }
+
+    function _json(string memory title, string memory desc, string memory svg, string memory attrs)
+        private
+        pure
+        returns (string memory)
+    {
         string memory json = string.concat(
-            '{"name":"HAM ', k.name, " #", idStr,
-            '","description":"A HAM Power-Up. Carry it into the daily maze for one extra move with a few charges per run.",',
-            '"image":"data:image/svg+xml;base64,', _base64(bytes(svg)), '",',
-            '"attributes":[{"trait_type":"Kind","value":"', k.name,
-            '"},{"trait_type":"Rarity","value":"', k.rarity,
-            '"},{"trait_type":"Runs","value":', _toString(s.runs),
-            '},{"trait_type":"Kills","value":', _toString(s.kills), "}]}"
+            '{"name":"', title, '","description":"', desc,
+            '","image":"data:image/svg+xml;base64,', _base64(bytes(svg)),
+            '","attributes":[', attrs, "]}"
         );
         return string.concat("data:application/json;base64,", _base64(bytes(json)));
     }
@@ -290,6 +410,7 @@ contract HamPowerUps {
     function transferFrom(address from, address to, uint256 tokenId) public {
         if (ownerOf(tokenId) != from) revert NotAuthorized();
         if (to == address(0)) revert ZeroAddress();
+        if (kindOf[tokenId] == 0) revert StillSealed();
         if (msg.sender != from && msg.sender != _approved[tokenId] && !_operator[from][msg.sender]) revert NotAuthorized();
         delete _approved[tokenId];
         _balance[from] -= 1;

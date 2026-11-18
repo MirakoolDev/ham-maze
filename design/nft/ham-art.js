@@ -536,5 +536,82 @@
   /** The fixed head and tail of a gun's art, around the per-token "NO. 12 · 40 RUNS" line. */
   const powerUpParts = (gun) => { const p = powerUpSVG({ gun, tokenId: 0, runs: 0, parts: true }); return { head: p[0], tail: p[2] }; };
 
-  window.HAMArt = { scoreSVG, powerUpSVG, powerUpParts, GUNS, scoreParts, ROOMS, roomOf, describe, seedFromDate, dateLabel, DotNetRandom, mix };
+  /** A sealed pack: every Power-Up is sold like this. A box wrapped in frosted film over the same plinth,
+      the monolith's orange glass glowing through it, and a pink tear strip to pull. Strip it to see the gun. */
+  function packSVG(o) {
+    const uid = o.uid || 'k', room = STUDIO, ACC = '#ff4f97';
+    const OX = 300, PY = 408, PH = 40, half = 96, C = Math.SQRT1_2, K = 0.5774;
+    const ip = (x, z, h = 0) => [OX + (x - z) * C, PY + (x + z) * C * K - h];
+    const P3 = (x, z, h = 0) => ip(x, z, PH + h);
+    const pp = (p) => `${f1(p[0])},${f1(p[1])}`;
+    const poly = (pts, attr) => `<polygon points="${pts.map(pp).join(' ')}" ${attr}/>`;
+    const topIso = (h = 0) => `translate(${OX} ${PY - PH - h}) scale(1 ${K}) rotate(45)`;
+    // a box from height h0 to h1: the two faces we see and its top
+    const cube = (x1, x2, z1, z2, h0, h1, z, x, top, attr = '') =>
+      poly([P3(x1, z2, h0), P3(x2, z2, h0), P3(x2, z2, h1), P3(x1, z2, h1)], `fill="${z}" ${attr}`) +
+      poly([P3(x2, z1, h0), P3(x2, z2, h0), P3(x2, z2, h1), P3(x2, z1, h1)], `fill="${x}" ${attr}`) +
+      poly([P3(x1, z1, h1), P3(x2, z1, h1), P3(x2, z2, h1), P3(x1, z2, h1)], `fill="${top}" ${attr}`);
+
+    const s = [];
+    s.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600"><defs>`);
+    s.push(`<linearGradient id="${uid}bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${room.top}"/><stop offset="1" stop-color="${room.bottom}"/></linearGradient>`);
+    s.push(`<linearGradient id="${uid}fz" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity="0.6"/><stop offset="1" stop-color="#cfe6fa" stop-opacity="0.5"/></linearGradient>`);
+    s.push(`<linearGradient id="${uid}fx" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity="0.56"/><stop offset="1" stop-color="#f8d2de" stop-opacity="0.48"/></linearGradient>`);
+    s.push(`<linearGradient id="${uid}sight" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#ff6a1f" stop-opacity="0.95"/><stop offset="1" stop-color="#ffc39a" stop-opacity="0.5"/></linearGradient>`);
+    s.push(`<linearGradient id="${uid}pearl" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8ff3ff" stop-opacity="0.4"/><stop offset="0.4" stop-color="#ffffff" stop-opacity="0"/><stop offset="0.65" stop-color="#ff8fd6" stop-opacity="0.35"/><stop offset="1" stop-color="#fff1a0" stop-opacity="0.4"/></linearGradient>`);
+    s.push(blurDefs(uid, [2, 4, 8, 14, 24]));
+    s.push(grain(uid, 91));
+    s.push('</defs>');
+    s.push(`<rect width="600" height="600" fill="url(#${uid}bg)"/>`);
+    s.push(`<ellipse cx="300" cy="${PY + 92}" rx="170" ry="20" fill="#000" opacity="0.2" filter="url(#${uid}b14)"/>`);
+
+    // the plinth, faced like the maze walls
+    const l = ip(-half, half), f = ip(half, half), r = ip(half, -half);
+    const lt = ip(-half, half, PH), ft = ip(half, half, PH), rt = ip(half, -half, PH), bt = ip(-half, -half, PH);
+    s.push(poly([l, f, ft, lt], `fill="#a9d0f3"`), poly([f, r, rt, ft], `fill="#f2b6c8"`), poly([lt, ft, rt, bt], `fill="#fbfaff"`));
+    s.push(`<path d="M${pp(lt)}L${pp(ft)}L${pp(rt)}" fill="none" stroke="#ffffff" stroke-width="1.2" opacity="0.9"/>`);
+    // its shadow and the orange light it throws down
+    s.push(`<ellipse transform="${topIso()}" cx="0" cy="0" rx="66" ry="66" fill="#3a2f45" opacity="0.16" filter="url(#${uid}b8)"/>`);
+    s.push(`<ellipse transform="${topIso()}" cx="0" cy="0" rx="40" ry="40" fill="#ff8a3d" opacity="0.28" filter="url(#${uid}b14)"/>`);
+
+    const B = 58, H0 = 74, H1 = 206, MID = 140;
+    // inside: the monolith's glass, glowing through the film
+    const core = P3(0, 0, MID);
+    s.push(`<ellipse cx="${f1(core[0])}" cy="${f1(core[1])}" rx="62" ry="88" fill="#ff7a2e" opacity="0.85" filter="url(#${uid}b24)"/>`);
+    s.push(cube(-12, 12, -12, 12, H0 + 16, H1 - 14, '#ff7a2e', '#ff9a5c', '#ffd2ad'));
+    // the film: translucent faces, pearl sheen, bright edges
+    s.push(cube(-B, B, -B, B, H0, H1, `url(#${uid}fz)`, `url(#${uid}fx)`, '#ffffff" fill-opacity="0.62'));
+    s.push(cube(-B, B, -B, B, H0, H1, `url(#${uid}pearl)`, `url(#${uid}pearl)`, `url(#${uid}pearl)`, 'style="mix-blend-mode:screen"'));
+    const e = (a, b) => `M${pp(a)}L${pp(b)}`;
+    s.push(`<path d="${e(P3(-B, B, H1), P3(B, B, H1))}${e(P3(B, B, H1), P3(B, -B, H1))}${e(P3(B, B, H0), P3(B, B, H1))}${e(P3(-B, -B, H1), P3(-B, B, H1))}${e(P3(-B, -B, H1), P3(B, -B, H1))}" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" opacity="0.95"/>`);
+    // creases where the film folds over the top
+    s.push(`<path d="${e(P3(-B + 10, B, H1), P3(0, 0, H1))}${e(P3(B, -B + 10, H1), P3(0, 0, H1))}" stroke="#d6dcec" stroke-width="1" opacity="0.8"/>`);
+
+    // the tear strip, all the way round, with its tab lifted at the front corner
+    const band = (h, w, attr) => `<path d="${e(P3(-B, B, h), P3(B, B, h))}L${pp(P3(B, -B, h))}" fill="none" stroke-width="${w}" ${attr}/>`;
+    s.push(`<g filter="url(#${uid}b4)" opacity="0.55">${band(MID, 12, `stroke="${ACC}"`)}</g>`);
+    s.push(band(MID, 8, `stroke="${ACC}"`), band(MID + 2.4, 1.6, `stroke="#ffffff" opacity="0.7"`));
+    const c = P3(B, B, MID);
+    s.push(`<path d="M${f1(c[0] - 2)},${f1(c[1] - 4)} q16,-2 26,10 q6,8 -2,14 l-6,-6 q2,-6 -6,-10 q-6,-2 -12,0 Z" fill="${ACC}" stroke="#ffffff" stroke-width="0.8"/>`);
+    s.push(`<circle cx="${f1(c[0] + 22)}" cy="${f1(c[1] + 16)}" r="10" fill="${ACC}" opacity="0.4" filter="url(#${uid}b8)"/>`);
+
+    s.push(`<rect width="600" height="600" filter="url(#${uid}n)"/>`);
+    s.push(`<g ${FONT} fill="${room.ink}">`);
+    s.push(`<text x="40" y="56" font-size="15" font-weight="600" letter-spacing="4.5">HAM</text>`);
+    s.push(`<text x="40" y="76" font-size="11" font-weight="500" letter-spacing="2.6" opacity="0.72">POWER-UP</text>`);
+    s.push(`<text x="560" y="56" text-anchor="end" font-size="13" font-weight="600" letter-spacing="3">SEALED</text>`);
+    s.push(SPLIT);
+    s.push(`<text x="560" y="76" text-anchor="end" font-size="11" font-weight="500" letter-spacing="2.6" opacity="0.72">NO. ${o.tokenId} OF 10,000</text>`);
+    s.push(SPLIT);
+    s.push(`<text x="38" y="542" font-size="42" font-weight="500" letter-spacing="-0.5">Sealed pack</text>`);
+    s.push(`<text x="40" y="568" font-size="10.5" font-weight="500" letter-spacing="2.2" opacity="0.78">STRIP IT TO SEE WHICH GUN IS INSIDE</text>`);
+    s.push(`<text x="560" y="542" text-anchor="end" font-size="10.5" font-weight="600" letter-spacing="2.2">ONE OF FIVE</text>`);
+    for (let i = 0; i < 5; i++) s.push(`<circle cx="${554 - i * 15}" cy="562" r="4.5" fill="none" stroke="${room.ink}" stroke-width="1.2"/>`);
+    s.push('</g></svg>');
+    const parts = s.join('').split(SPLIT);
+    return o.parts ? parts : parts.join('');
+  }
+  const packParts = () => { const p = packSVG({ tokenId: 0, parts: true }); return { head: p[0], tail: p[2] }; };
+
+  window.HAMArt = { scoreSVG, powerUpSVG, powerUpParts, packSVG, packParts, GUNS, scoreParts, ROOMS, roomOf, describe, seedFromDate, dateLabel, DotNetRandom, mix };
 })();

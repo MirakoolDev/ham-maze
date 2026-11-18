@@ -12,23 +12,27 @@ contract HamPowerUpsTest is Test {
     address bob = makeAddr("bob");
 
     string[5] keys = ["marker", "frost", "pulse", "blinker", "snare"];
+    uint256 constant DAY0 = 20_000 days; // a clean 00:00 UTC
 
     function setUp() public {
+        vm.warp(DAY0);
+        vm.roll(100);
         pu = new HamPowerUps(owner);
         vm.startPrank(owner);
         pu.setGame(game);
-        pu.addKind("Marker", "COMMON", 200, 0);
-        pu.addKind("Frost dart", "RARE", 100, 0.01 ether);
-        pu.addKind("Pulse", "RARE", 100, 0.01 ether);
-        pu.addKind("Blinker", "EPIC", 2, 0.05 ether);
-        pu.addKind("Snare", "EPIC", 50, 0.05 ether);
+        pu.addKind("Marker", "COMMON", 4000);
+        pu.addKind("Frost dart", "RARE", 2000);
+        pu.addKind("Pulse", "RARE", 2000);
+        pu.addKind("Blinker", "EPIC", 1000);
+        pu.addKind("Snare", "EPIC", 1000);
         vm.stopPrank();
-        vm.deal(alice, 10 ether);
-        vm.deal(bob, 10 ether);
+        vm.deal(alice, 100 ether);
+        vm.deal(bob, 100 ether);
     }
 
     function _uploadArt() internal {
         vm.startPrank(owner);
+        pu.setArt(0, bytes(vm.readFile("./art/pack.head.svg")), bytes(vm.readFile("./art/pack.tail.svg")));
         for (uint256 i; i < 5; ++i) {
             pu.setArt(
                 i + 1,
@@ -39,135 +43,246 @@ contract HamPowerUpsTest is Test {
         vm.stopPrank();
     }
 
-    function test_freeKindIsOncePerWallet() public {
-        vm.prank(alice);
-        pu.mint(1);
-        vm.prank(alice);
-        vm.expectRevert(HamPowerUps.AlreadyClaimed.selector);
-        pu.mint(1);
+    function _open() internal {
+        vm.prank(owner);
+        pu.lock();
     }
 
-    function test_paidKindNeedsExactPriceAndCanBeBoughtAgain() public {
+    function _buy(address who, uint256 count) internal returns (uint256 first) {
+        uint256 cost = pu.priceNow() * count;
+        vm.prank(who);
+        first = pu.buy{value: cost}(count);
+    }
+
+    function _openPack(address who, uint256 tokenId) internal returns (uint256 kind) {
+        vm.prank(who);
+        kind = pu.open(tokenId);
+    }
+
+    // ── sale ────────────────────────────────────────────────────────────────────
+    function test_noSalesBeforeTheLineupIsLocked() public {
+        vm.prank(alice);
+        vm.expectRevert(HamPowerUps.NotOpenYet.selector);
+        pu.buy{value: 1 ether}(1);
+    }
+
+    function test_lockNeedsTheCapsToAddUpToTenThousand() public {
+        HamPowerUps other = new HamPowerUps(owner);
+        vm.startPrank(owner);
+        other.addKind("Marker", "COMMON", 9999);
+        vm.expectRevert(HamPowerUps.BadCaps.selector);
+        other.lock();
+        other.addKind("Snare", "EPIC", 1);
+        other.lock();
+        vm.stopPrank();
+    }
+
+    function test_priceClimbsThroughTheDayAndResetsAtMidnight() public {
+        uint256 base = pu.basePrice();
+        uint256 step = pu.step();
+        assertEq(pu.priceNow(), base, "00:00 UTC");
+        vm.warp(DAY0 + 25 minutes);
+        assertEq(pu.priceNow(), base + 2 * step, "two 10-minute steps");
+        vm.warp(DAY0 + 1 days - 1);
+        assertEq(pu.priceNow(), base + 143 * step, "23:59");
+        vm.warp(DAY0 + 1 days);
+        assertEq(pu.priceNow(), base, "back down the next day");
+    }
+
+    function test_oneBuyCanTakeSeveralPacksAndOverpayIsReturned() public {
+        _open();
+        uint256 cost = pu.priceNow() * 3;
+        uint256 before = alice.balance;
+        vm.prank(alice);
+        pu.buy{value: cost + 0.01 ether}(3);
+        assertEq(before - alice.balance, cost);
+        assertEq(pu.balanceOf(alice), 3);
         vm.prank(alice);
         vm.expectRevert(HamPowerUps.WrongPrice.selector);
-        pu.mint{value: 0.001 ether}(2);
-        vm.startPrank(alice);
-        pu.mint{value: 0.01 ether}(2);
-        pu.mint{value: 0.01 ether}(2);
-        vm.stopPrank();
-        assertEq(pu.balanceOf(alice), 2);
-        assertEq(address(pu).balance, 0.02 ether);
+        pu.buy{value: cost / 3 - 1}(1);
     }
 
-    function test_capIsEnforced() public {
-        vm.prank(alice);
-        pu.mint{value: 0.05 ether}(4);
+    function test_cannotSellPastTenThousand() public {
+        _open();
+        vm.store(address(pu), bytes32(uint256(_slotOfTotalSupply())), bytes32(uint256(9_999)));
+        _buy(alice, 1);
         vm.prank(bob);
-        pu.mint{value: 0.05 ether}(4);
-        vm.prank(alice);
         vm.expectRevert(HamPowerUps.SoldOut.selector);
-        pu.mint{value: 0.05 ether}(4);
+        pu.buy{value: 1 ether}(1);
     }
 
-    function test_firstMintIsEquippedAndRunsCountOnIt() public {
-        vm.startPrank(alice);
-        uint256 marker = pu.mint(1);
-        uint256 pulse = pu.mint{value: 0.01 ether}(3);
-        vm.stopPrank();
-        assertEq(pu.equippedKind(alice), 1);
+    // ── opening ─────────────────────────────────────────────────────────────────
+    function test_openingWaitsForTheNextBlockThenRevealsAGun() public {
+        _open();
+        uint256 t = _buy(alice, 1);
+        vm.prank(alice);
+        vm.expectRevert(HamPowerUps.TooSoon.selector);
+        pu.open(t);
+        vm.roll(block.number + 1);
+        uint256 kind = _openPack(alice, t);
+        assertTrue(kind >= 1 && kind <= 5);
+        assertEq(pu.kindOf(t), kind);
+        assertEq(pu.equippedKind(alice), kind, "first gun is equipped");
+        vm.prank(alice);
+        vm.expectRevert(HamPowerUps.AlreadyOpened.selector);
+        pu.open(t);
+    }
+
+    function test_onlyTheHolderOpens() public {
+        _open();
+        uint256 t = _buy(alice, 1);
+        vm.roll(block.number + 1);
+        vm.prank(bob);
+        vm.expectRevert(HamPowerUps.NotAuthorized.selector);
+        pu.open(t);
+    }
+
+    function test_sealedPacksCannotMoveButOpenedGunsCan() public {
+        _open();
+        uint256 t = _buy(alice, 1);
+        vm.prank(alice);
+        vm.expectRevert(HamPowerUps.StillSealed.selector);
+        pu.transferFrom(alice, bob, t);
+        vm.roll(block.number + 1);
+        uint256 kind = _openPack(alice, t);
+        vm.prank(alice);
+        pu.transferFrom(alice, bob, t);
+        assertEq(pu.equippedKind(alice), 0);
+        assertEq(pu.equippedKind(bob), kind, "the buyer carries it if they had none");
+    }
+
+    function test_everyOpenedPackComesOutOfTheDeck() public {
+        _open();
+        _buy(alice, 20);
+        _buy(alice, 20);
+        vm.roll(block.number + 1);
+        for (uint256 t = 1; t <= 40; ++t) _openPack(alice, t);
+        HamPowerUps.Kind[] memory ks = pu.kinds();
+        uint256 sum;
+        for (uint256 i; i < ks.length; ++i) sum += ks[i].minted;
+        assertEq(sum, 40);
+        assertEq(pu.opened(), 40);
+    }
+
+    function test_hashIsKeptForPacksOpenedLate() public {
+        _open();
+        uint256 t = _buy(alice, 1);
+        uint256 boughtIn = block.number;
+        vm.roll(block.number + 1);
+        _buy(bob, 1); // any later purchase keeps the hash of alice's block
+        assertTrue(pu.blockSeal(boughtIn) == blockhash(boughtIn));
+        vm.roll(block.number + 1000); // far past the 256-block window
+        uint256 kind = _openPack(alice, t);
+        assertTrue(kind >= 1 && kind <= 5);
+    }
+
+    // ── carrying ────────────────────────────────────────────────────────────────
+    function test_runsCountOnTheEquippedGun() public {
+        _open();
+        _buy(alice, 2);
+        vm.roll(block.number + 1);
+        _openPack(alice, 1);
+        _openPack(alice, 2);
+        uint256 sealedOne = _buy(alice, 1);
+        vm.prank(alice);
+        vm.expectRevert(HamPowerUps.StillSealed.selector);
+        pu.equip(sealedOne);
 
         vm.prank(game);
         pu.recordRun(alice, 3, true);
         vm.prank(alice);
-        pu.equip(pulse);
+        pu.equip(2);
         vm.prank(game);
         pu.recordRun(alice, 5, false);
 
-        (uint32 runs, uint32 kills) = pu.stats(marker);
+        (uint32 runs, uint32 kills) = pu.stats(1);
         assertEq(runs, 1);
         assertEq(kills, 3);
-        (runs, kills) = pu.stats(pulse);
+        (runs, kills) = pu.stats(2);
         assertEq(runs, 1);
         assertEq(kills, 5);
-        assertEq(pu.equippedKind(alice), 3);
     }
 
     function test_onlyGameRecordsRuns() public {
-        vm.prank(alice);
-        pu.mint(1);
         vm.expectRevert(HamPowerUps.NotGame.selector);
         pu.recordRun(alice, 1, true);
     }
 
-    function test_selling_theEquippedOneUnequipsIt() public {
-        vm.prank(alice);
-        uint256 t = pu.mint(1);
-        vm.prank(alice);
-        pu.transferFrom(alice, bob, t);
-        assertEq(pu.equippedKind(alice), 0);
-        assertEq(pu.equippedKind(bob), 1, "the buyer carries it if they had none");
-    }
-
+    // ── owner ───────────────────────────────────────────────────────────────────
     function test_lockFreezesLineupAndArt() public {
         _uploadArt();
-        vm.prank(owner);
-        pu.lock();
+        _open();
         vm.startPrank(owner);
         vm.expectRevert(HamPowerUps.IsLocked.selector);
-        pu.addKind("Decoy", "RARE", 10, 0);
+        pu.addKind("Decoy", "RARE", 10);
         vm.expectRevert(HamPowerUps.IsLocked.selector);
         pu.setArt(1, "x", "y");
+        vm.expectRevert(HamPowerUps.IsLocked.selector);
+        pu.setArt(0, "x", "y");
+        pu.setPricing(0.001 ether, 0, 1 hours); // pricing stays tunable
         vm.stopPrank();
+        assertEq(pu.priceNow(), 0.001 ether);
     }
 
     function test_withdrawGoesWhereTheOwnerSays() public {
-        vm.prank(alice);
-        pu.mint{value: 0.05 ether}(5);
+        _open();
+        _buy(alice, 4);
         address vault = makeAddr("vault");
         vm.prank(owner);
         pu.withdraw(vault);
-        assertEq(vault.balance, 0.05 ether);
+        assertEq(vault.balance, pu.basePrice() * 4);
     }
 
-    /// @notice Token 7, a Marker carried on 12 runs, must draw exactly what ham-art.js draws.
+    // ── art ─────────────────────────────────────────────────────────────────────
+    /// @notice A sealed pack and each gun must draw exactly what ham-art.js draws.
     function test_artMatchesTheJsDrawing() public {
         _uploadArt();
-        for (uint256 i; i < 6; ++i) {
-            address who = makeAddr(string.concat("p", vm.toString(i)));
-            vm.deal(who, 1 ether);
-            vm.prank(who);
-            pu.mint{value: 0.01 ether}(2);
+        _open();
+        _buy(alice, 1);
+        assertEq(_image(pu.tokenURI(1)), vm.replace(vm.readFile("./test/fixtures/pack-7.svg"), "NO. 7 OF", "NO. 1 OF"));
+
+        _buy(alice, 20);
+        _buy(alice, 20);
+        _buy(alice, 20);
+        vm.roll(block.number + 1);
+        uint256[6] memory firstOf;
+        for (uint256 t = 1; t <= 61; ++t) {
+            uint256 kind = _openPack(alice, t);
+            if (firstOf[kind] == 0) firstOf[kind] = t;
         }
         for (uint256 kind = 1; kind <= 5; ++kind) {
-            // a fresh wallet per kind; token ids 7..11
-            address who = makeAddr(string.concat("k", vm.toString(kind)));
-            vm.deal(who, 1 ether);
-            (,,,, uint96 price,,) = _kindAt(kind);
-            vm.prank(who);
-            uint256 t = pu.mint{value: price}(kind);
+            uint256 t = firstOf[kind];
+            assertGt(t, 0, keys[kind - 1]);
+            vm.prank(alice);
+            pu.equip(t);
             for (uint256 r; r < 12; ++r) {
                 vm.prank(game);
-                pu.recordRun(who, 1, false);
+                pu.recordRun(alice, 1, false);
             }
-            string memory uri = pu.tokenURI(t);
             string memory want = vm.readFile(string.concat("./test/fixtures/powerup-", keys[kind - 1], "-7-12.svg"));
-            // the fixture is drawn as token 7; swap the number in for later tokens
             want = vm.replace(want, "NO. 7 &#183;", string.concat("NO. ", vm.toString(t), " &#183;"));
-            string memory json = string(vm.parseBytes(_b64Hex(uri, 29)));
-            assertTrue(vm.contains(json, '"trait_type":"Runs","value":12'));
-            string memory image = _between(json, "data:image/svg+xml;base64,", '"');
-            assertEq(string(vm.parseBytes(_b64HexStr(image))), want, keys[kind - 1]);
+            assertEq(_image(pu.tokenURI(t)), want, keys[kind - 1]);
         }
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────────
-    function _kindAt(uint256 kind)
-        internal
-        view
-        returns (string memory, string memory, uint32, uint32, uint96, address, address)
-    {
-        HamPowerUps.Kind memory k = pu.kinds()[kind - 1];
-        return (k.name, k.rarity, k.cap, k.minted, k.price, k.head, k.tail);
+    function _slotOfTotalSupply() internal returns (uint256 slot) {
+        // find totalSupply's storage slot by probing, so the test survives layout changes
+        uint256 before = pu.totalSupply();
+        for (slot = 0; slot < 30; ++slot) {
+            bytes32 old = vm.load(address(pu), bytes32(slot));
+            vm.store(address(pu), bytes32(slot), bytes32(uint256(424242)));
+            bool hit = pu.totalSupply() == 424242;
+            vm.store(address(pu), bytes32(slot), old);
+            if (hit) return slot;
+        }
+        assertEq(before, type(uint256).max, "slot not found");
+    }
+
+    function _image(string memory uri) internal pure returns (string memory) {
+        string memory json = string(vm.parseBytes(_b64Hex(uri, 29)));
+        string memory image = _between(json, "data:image/svg+xml;base64,", '"');
+        return string(vm.parseBytes(_b64HexStr(image)));
     }
 
     function _between(string memory s, string memory a, string memory b) internal pure returns (string memory) {

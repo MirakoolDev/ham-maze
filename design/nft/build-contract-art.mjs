@@ -520,4 +520,9 @@ for (const k of KINDS) {
   const expect = A.powerUpSVG({ gun: k, tokenId: 7, runs: 12 });
   out(`contracts/test/fixtures/powerup-${k}-7-12.svg`, expect);
 }
+// the sealed pack every Power-Up is sold in
+const pack = A.packParts();
+out('contracts/art/pack.head.svg', pack.head);
+out('contracts/art/pack.tail.svg', pack.tail);
+out('contracts/test/fixtures/pack-7.svg', A.packSVG({ tokenId: 7 }));
 console.log(`HamScoreArt.sol ${sol.length} chars, ${cases.length} Score cases, ${KINDS.length} Power-Up kinds`);

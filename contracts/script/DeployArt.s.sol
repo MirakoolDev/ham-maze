@@ -5,9 +5,11 @@ import {Script, console2} from "forge-std/Script.sol";
 import {HamScoreArt} from "../src/HamScoreArt.sol";
 import {HamPowerUps} from "../src/HamPowerUps.sol";
 
-/// Deploys the Score renderer and the Power-Up NFT, adds the lineup and uploads its art.
-/// It does not lock anything: check the art on a marketplace first, then call
-/// HamPowerUps.lock() and HamRobinhood.lockScoreArt() yourself.
+/// Deploys the Score renderer and the Power-Up packs, adds the lineup (caps add up to 10,000)
+/// and uploads the pack art and each gun's art. It does not lock anything: check the art on a
+/// marketplace first, then call HamPowerUps.lock() (which also opens pack sales) and
+/// HamRobinhood.lockScoreArt() yourself. Pack pricing starts at 0.00055 ETH, +5% of that every
+/// 10 minutes, reset daily; change it with HamPowerUps.setPricing.
 ///
 /// forge script script/DeployArt.s.sol --rpc-url robinhood --broadcast --account <keystore>
 /// Env: HAM_OWNER (must be the broadcasting account, so it can add kinds), HAM_GAME (HamRobinhood)
@@ -18,15 +20,15 @@ contract DeployArt is Script {
         string[5] memory keys = ["marker", "frost", "pulse", "blinker", "snare"];
         string[5] memory names = ["Marker", "Frost dart", "Pulse", "Blinker", "Snare"];
         string[5] memory rarity = ["COMMON", "RARE", "RARE", "EPIC", "EPIC"];
-        uint32[5] memory caps = [uint32(200), 100, 100, 50, 50];
+        uint32[5] memory caps = [uint32(4000), 2000, 2000, 1000, 1000];
 
         vm.startBroadcast();
         art = new HamScoreArt();
         pu = new HamPowerUps(owner);
         pu.setGame(game);
+        pu.setArt(0, bytes(vm.readFile("./art/pack.head.svg")), bytes(vm.readFile("./art/pack.tail.svg")));
         for (uint256 i; i < 5; ++i) {
-            // prices start at 0 (one free per wallet per kind); set real prices with setPrice
-            uint256 kind = pu.addKind(names[i], rarity[i], caps[i], 0);
+            uint256 kind = pu.addKind(names[i], rarity[i], caps[i]);
             pu.setArt(
                 kind,
                 bytes(vm.readFile(string.concat("./art/", keys[i], ".head.svg"))),
