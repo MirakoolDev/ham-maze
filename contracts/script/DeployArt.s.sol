@@ -8,8 +8,8 @@ import {HamPowerUps} from "../src/HamPowerUps.sol";
 /// Deploys the Score renderer and the Power-Up packs, adds the lineup (caps add up to 10,000)
 /// and uploads the pack art and each gun's art. It does not lock anything: check the art on a
 /// marketplace first, then call HamPowerUps.lock() (which also opens pack sales) and
-/// HamRobinhood.lockScoreArt() yourself. Pack pricing starts at 0.00055 ETH, +5% of that every
-/// 10 minutes, reset daily; change it with HamPowerUps.setPricing.
+/// HamRobinhood.lockScoreArt() yourself. Pack pricing starts each day at 0.00055 ETH and goes x10
+/// per 100 packs sold that day; change it with HamPowerUps.setPricing.
 ///
 /// forge script script/DeployArt.s.sol --rpc-url robinhood --broadcast --account <keystore>
 /// Env: HAM_OWNER (must be the broadcasting account, so it can add kinds), HAM_GAME (HamRobinhood)

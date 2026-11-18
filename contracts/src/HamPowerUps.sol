@@ -6,8 +6,9 @@ pragma solidity 0.8.26;
 /// a run with the free K-7 carbine, which is not an NFT.
 ///
 /// Every Power-Up is sold as a sealed pack, and every pack costs the same. The price starts low each
-/// day (about $1) and climbs one step every `stepEvery` seconds, then drops back at 00:00 UTC. There
-/// are 10,000 packs in all. You strip (open) a pack to see which gun is inside.
+/// day (about $1) and every pack sold that day multiplies it by `growth`, which by default is
+/// 10^(1/100): ten times dearer after 100 packs, a hundred times after 200. It drops back at 00:00
+/// UTC. There are 10,000 packs in all. You strip (open) a pack to see which gun is inside.
 ///
 /// What a pack holds is drawn like a card from a shuffled deck: the lineup's caps add up to exactly
 /// 10,000, so each kind's chance is its share of what is still in the deck, and every pack can always
@@ -42,10 +43,11 @@ contract HamPowerUps {
     address public game; // the only address allowed to call recordRun
     bool public locked; // lineup and art frozen for good; sales open
 
-    // the price: basePrice at 00:00 UTC, plus `step` every `stepEvery` seconds through the day
+    // the price: basePrice for the day's first pack, times `growth` (1e18 = x1) for every pack after
     uint96 public basePrice = 0.00055 ether; // about $1 at $1,800 ETH
-    uint96 public step = 0.0000275 ether; // 5% of the base
-    uint32 public stepEvery = 10 minutes;
+    uint64 public growth = 1_023292992280754130; // 10^(1/100): x10 per 100 packs
+    uint256 public priceDay; // the UTC day `_nextPrice` belongs to
+    uint256 internal _nextPrice;
 
     Kind[] internal _kinds; // kind id = index + 1
     address internal _packHead;
@@ -71,7 +73,7 @@ contract HamPowerUps {
     event KindAdded(uint256 indexed kind, string name, string rarity, uint32 cap);
     event ArtSet(uint256 indexed kind, address head, address tail); // kind 0 = the pack
     event Locked();
-    event PricingSet(uint96 basePrice, uint96 step, uint32 stepEvery);
+    event PricingSet(uint96 basePrice, uint64 growth);
     event PackOpened(uint256 indexed tokenId, address indexed holder, uint256 indexed kind);
     event Equipped(address indexed holder, uint256 indexed tokenId);
     event RunRecorded(uint256 indexed tokenId, uint32 runs, uint32 kills);
@@ -123,19 +125,31 @@ contract HamPowerUps {
     }
 
     // ── buying and opening ───────────────────────────────────────────────────────
-    /// @notice What one pack costs right now. Resets at 00:00 UTC.
+    /// @notice What the next pack costs. Back to basePrice at 00:00 UTC.
     function priceNow() public view returns (uint256) {
-        return uint256(basePrice) + uint256(step) * ((block.timestamp % 1 days) / stepEvery);
+        return priceDay == block.timestamp / 1 days ? _nextPrice : basePrice;
     }
 
-    /// @notice Buy `count` sealed packs at today's current price. Anything paid over is sent back,
-    /// so a buyer can pay a little extra in case the price steps up before the transaction lands.
+    /// @notice What `count` packs cost together right now (each one dearer than the last), and the
+    /// price of the pack after them.
+    function quote(uint256 count) public view returns (uint256 cost, uint256 next) {
+        next = priceNow();
+        for (uint256 i; i < count; ++i) {
+            cost += next;
+            next = next * growth / 1e18;
+        }
+    }
+
+    /// @notice Buy `count` sealed packs. Anything paid over is sent back, so a buyer can pay a
+    /// little extra in case someone else's packs land first and push the price up.
     function buy(uint256 count) external payable nonReentrant returns (uint256 firstId) {
         if (!locked) revert NotOpenYet();
         if (count == 0 || count > MAX_PER_BUY) revert BadCount();
         if (totalSupply + count > MAX_PACKS) revert SoldOut();
-        uint256 cost = priceNow() * count;
+        (uint256 cost, uint256 next) = quote(count);
         if (msg.value < cost) revert WrongPrice();
+        priceDay = block.timestamp / 1 days;
+        _nextPrice = next;
         _keepSeal();
         _lastBuyBlock = block.number;
         firstId = totalSupply + 1;
@@ -256,11 +270,13 @@ contract HamPowerUps {
         emit Locked();
     }
 
-    /// @notice Tune the daily price curve. Applies from the next purchase.
-    function setPricing(uint96 basePrice_, uint96 step_, uint32 stepEvery_) external onlyOwner {
-        if (stepEvery_ == 0) revert WrongPrice();
-        (basePrice, step, stepEvery) = (basePrice_, step_, stepEvery_);
-        emit PricingSet(basePrice_, step_, stepEvery_);
+    /// @notice Tune the daily curve: the first pack's price and the per-pack multiplier (1e18 = flat).
+    /// Starts over from the new base right away.
+    function setPricing(uint96 basePrice_, uint64 growth_) external onlyOwner {
+        if (basePrice_ == 0 || growth_ < 1e18) revert WrongPrice();
+        (basePrice, growth) = (basePrice_, growth_);
+        priceDay = 0;
+        emit PricingSet(basePrice_, growth_);
     }
 
     function kinds() external view returns (Kind[] memory) {

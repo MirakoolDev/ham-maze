@@ -49,7 +49,7 @@ contract HamPowerUpsTest is Test {
     }
 
     function _buy(address who, uint256 count) internal returns (uint256 first) {
-        uint256 cost = pu.priceNow() * count;
+        (uint256 cost,) = pu.quote(count);
         vm.prank(who);
         first = pu.buy{value: cost}(count);
     }
@@ -77,29 +77,36 @@ contract HamPowerUpsTest is Test {
         vm.stopPrank();
     }
 
-    function test_priceClimbsThroughTheDayAndResetsAtMidnight() public {
+    function test_priceGoesTenTimesPerHundredSoldAndResetsAtMidnight() public {
+        _open();
         uint256 base = pu.basePrice();
-        uint256 step = pu.step();
-        assertEq(pu.priceNow(), base, "00:00 UTC");
-        vm.warp(DAY0 + 25 minutes);
-        assertEq(pu.priceNow(), base + 2 * step, "two 10-minute steps");
-        vm.warp(DAY0 + 1 days - 1);
-        assertEq(pu.priceNow(), base + 143 * step, "23:59");
+        assertEq(pu.priceNow(), base, "first pack of the day");
+        vm.warp(DAY0 + 20 hours);
+        assertEq(pu.priceNow(), base, "time alone moves nothing");
+        for (uint256 i; i < 5; ++i) _buy(alice, 20);
+        assertApproxEqRel(pu.priceNow(), base * 10, 1e12, "x10 after 100 packs");
+        for (uint256 i; i < 5; ++i) _buy(bob, 20);
+        assertApproxEqRel(pu.priceNow(), base * 100, 1e12, "x100 after 200 packs");
         vm.warp(DAY0 + 1 days);
         assertEq(pu.priceNow(), base, "back down the next day");
     }
 
-    function test_oneBuyCanTakeSeveralPacksAndOverpayIsReturned() public {
+    function test_eachPackInOneBuyCostsMoreThanTheLast() public {
         _open();
-        uint256 cost = pu.priceNow() * 3;
+        (uint256 cost, uint256 next) = pu.quote(3);
+        uint256 p0 = pu.basePrice();
+        uint256 p1 = p0 * pu.growth() / 1e18;
+        uint256 p2 = p1 * pu.growth() / 1e18;
+        assertEq(cost, p0 + p1 + p2);
         uint256 before = alice.balance;
         vm.prank(alice);
         pu.buy{value: cost + 0.01 ether}(3);
-        assertEq(before - alice.balance, cost);
+        assertEq(before - alice.balance, cost, "overpay comes back");
         assertEq(pu.balanceOf(alice), 3);
+        assertEq(pu.priceNow(), next);
         vm.prank(alice);
         vm.expectRevert(HamPowerUps.WrongPrice.selector);
-        pu.buy{value: cost / 3 - 1}(1);
+        pu.buy{value: next - 1}(1);
     }
 
     function test_cannotSellPastTenThousand() public {
@@ -219,18 +226,19 @@ contract HamPowerUpsTest is Test {
         pu.setArt(1, "x", "y");
         vm.expectRevert(HamPowerUps.IsLocked.selector);
         pu.setArt(0, "x", "y");
-        pu.setPricing(0.001 ether, 0, 1 hours); // pricing stays tunable
+        pu.setPricing(0.001 ether, 1e18); // pricing stays tunable
         vm.stopPrank();
         assertEq(pu.priceNow(), 0.001 ether);
     }
 
     function test_withdrawGoesWhereTheOwnerSays() public {
         _open();
+        (uint256 cost,) = pu.quote(4);
         _buy(alice, 4);
         address vault = makeAddr("vault");
         vm.prank(owner);
         pu.withdraw(vault);
-        assertEq(vault.balance, pu.basePrice() * 4);
+        assertEq(vault.balance, cost);
     }
 
     // ── art ─────────────────────────────────────────────────────────────────────
