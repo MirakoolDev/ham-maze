@@ -63,11 +63,13 @@ const weapon = createWeapon(envMap);
 const enemies = createEnemies(scene, world, maze, effects, audio, { count: DRONES });
 const hud = createHud({ magSize: CFG.magSize });
 // the runner (third person): loads beside the game; if it can't (an embed with no /models), V just says so
+// Third person is switched off until the hold is right (tune it on design/character); flip this to bring V back.
+const THIRD_PERSON = false;
 const runner = createRunner(scene);
-if (location.protocol.startsWith('http')) runner.load(location.origin); else runner.failed = true;
+if (THIRD_PERSON && location.protocol.startsWith('http')) runner.load(location.origin); else runner.failed = true;
 const thirdCam = createThirdCam(world);
 let view = 'first';
-try { if (localStorage.getItem('ham.view') === 'third') view = 'third'; } catch {}
+try { if (THIRD_PERSON && localStorage.getItem('ham.view') === 'third') view = 'third'; } catch {}
 const third = () => view === 'third' && runner.ready;
 let lastFire = -9, aimPose = 0;
 hud.setSeed(seed);
@@ -350,7 +352,7 @@ function tick(dt, inp) {
       hud.rotateArcs(player.yaw - yaw0);
       const moveSpeed = Math.hypot(player.vel.x, player.vel.z);
       weapon.update(dt, { inp, player, camera, sprinting: player.sprinting, moveSpeed });
-      if (inp.pressed.has('KeyV')) {
+      if (THIRD_PERSON && inp.pressed.has('KeyV')) {
         if (runner.ready) {
           view = view === 'third' ? 'first' : 'third';
           try { localStorage.setItem('ham.view', view); } catch {}
