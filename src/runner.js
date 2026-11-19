@@ -156,14 +156,27 @@ export function createRunner(scene) {
     if (th[2]) { point(th[0], th[1], at(40)); point(th[1], th[2], at(65)); }
   }
 
-  /** ctx: { pos, yaw, pitch, speed, back, aim (0..1), kick, flash } */
+  // Body facing is her own, apart from the camera (the free-orbit third person of open-world
+  // shooters): she turns to the way she moves and keeps it when she stops, so the camera can swing
+  // round to her face. Aiming or firing turns her to the camera, so shots leave where you look.
+  let bodyYaw = null;
+  const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+
+  /** ctx: { pos, vel, yaw, pitch, speed, aim (0..1), kick, flash } (yaw/pitch: the camera's) */
   r.update = (dt, ctx) => {
     if (!r.ready) return;
+    if (bodyYaw === null) bodyYaw = ctx.yaw;
+    const sp = ctx.speed;
+    let rate = 0, target = bodyYaw;
+    if (ctx.aim > 0.05 || ctx.flash) { target = ctx.yaw; rate = ctx.flash ? 40 : 16; }
+    else if (sp > 0.4) { target = Math.atan2(-ctx.vel.x, -ctx.vel.z); rate = 9; }
+    bodyYaw = wrapAngle(bodyYaw + wrapAngle(target - bodyYaw) * (1 - Math.exp(-rate * dt)));
     root.position.copy(ctx.pos);
-    root.rotation.set(0, ctx.yaw + Math.PI, 0);
+    root.rotation.set(0, bodyYaw + Math.PI, 0);
 
-    // locomotion: idle / walk / run by ground speed, played backwards when backing up
-    const sp = ctx.speed, dirSign = ctx.back ? -1 : 1;
+    // locomotion: idle / walk / run by ground speed; backing up only happens while aiming
+    const along = -Math.sin(bodyYaw) * ctx.vel.x - Math.cos(bodyYaw) * ctx.vel.z;
+    const dirSign = along < -0.5 ? -1 : 1;
     if (sp < 0.4) play('idle', 1);
     else if (sp < 4.2) play('walk', dirSign * THREE.MathUtils.clamp(sp / 1.7, 0.7, 2));
     else play('run', dirSign * THREE.MathUtils.clamp(sp / 5.2, 0.85, 1.8));
@@ -171,8 +184,8 @@ export function createRunner(scene) {
     root.updateMatrixWorld(true);
 
     const up = V(0, 1, 0);
-    const fwd = V(-Math.sin(ctx.yaw), 0, -Math.cos(ctx.yaw));
-    const right = V(Math.cos(ctx.yaw), 0, -Math.sin(ctx.yaw));
+    const fwd = V(-Math.sin(bodyYaw), 0, -Math.cos(bodyYaw));
+    const right = V(Math.cos(bodyYaw), 0, -Math.sin(bodyYaw));
     const view = V(-Math.sin(ctx.yaw) * Math.cos(ctx.pitch), Math.sin(ctx.pitch), -Math.cos(ctx.yaw) * Math.cos(ctx.pitch));
 
     // lean the chest with the view so the gun can follow it up and down
@@ -197,7 +210,8 @@ export function createRunner(scene) {
     orientHand('Left', gRight.clone().multiplyScalar(0.75).addScaledVector(gUp, 0.55).addScaledVector(dir, 0.25), dir);
     curl('Right', [64, 135, 195], true);
     curl('Left', [55, 115, 165], false);
-    point(bones.Head, bones.HeadTop_End, up.clone().addScaledVector(view, 0.12 + 0.1 * ctx.aim));
+    // head: looks where she walks, and down the sights when aiming
+    point(bones.Head, bones.HeadTop_End, up.clone().addScaledVector(fwd.clone().lerp(view, ctx.aim), 0.12 + 0.1 * ctx.aim));
 
     flash.visible = ctx.flash;
     if (flash.visible) { flash.material.rotation = Math.random() * 6.28; flash.scale.setScalar((0.14 + Math.random() * 0.08) / GUN_SCALE); }

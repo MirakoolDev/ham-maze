@@ -359,9 +359,8 @@ function tick(dt, inp) {
       }
       if (third()) {
         thirdCam(camera, player, weapon.ads, dt);
-        const fwdDot = -Math.sin(player.yaw) * player.vel.x - Math.cos(player.yaw) * player.vel.z;
         aimPose += (Math.max(weapon.ads, state.t - lastFire < 0.9 || inp.fire ? 1 : 0) - aimPose) * (1 - Math.exp(-12 * dt));
-        runner.update(dt, { pos: player.pos, yaw: player.yaw, pitch: player.pitch, speed: moveSpeed, back: fwdDot < -0.5, aim: aimPose, kick: weapon.kick, flash: weapon.flashT > 0 });
+        runner.update(dt, { pos: player.pos, vel: player.vel, yaw: player.yaw, pitch: player.pitch, speed: moveSpeed, aim: aimPose, kick: weapon.kick, flash: weapon.flashT > 0 });
       }
       audio.setListener(player.pos.x, player.pos.z, player.yaw);
       audio.step(dt, moveSpeed, player.grounded);
