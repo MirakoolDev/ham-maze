@@ -28,6 +28,54 @@ export function rimMaterial({ color = 0x07060a, rim = 0x5ff4ff, power = 4.2, str
   return m;
 }
 
+// ---- hair cards: lashes and brows ----
+// The rig ships its lashes and brows as MakeHuman cards (curved strips meant to be cut out by an alpha
+// texture) but with no texture, so they render as solid bands over the eyes. Each card gets a
+// coordinate (s along the lid, t from root 0 to tip 1) and the shader cuts it into strands: thick at the
+// lid, tapering, each a random length. Alpha-tested, so no sorting.
+function cardCoords(mesh, skull) {
+  const g = mesh.geometry, pos = g.attributes.position, uv = g.attributes.uv, idx = g.index;
+  const n = pos.count, parent = Int32Array.from({ length: n }, (_, i) => i);
+  const find = (i) => { while (parent[i] !== i) i = parent[i] = parent[parent[i]]; return i; };
+  for (let k = 0; k < idx.count; k += 3) { const a = find(idx.getX(k)); parent[find(idx.getX(k + 1))] = a; parent[find(idx.getX(k + 2))] = a; }
+  mesh.updateMatrixWorld(true);
+  const d = new Float32Array(n), v = new THREE.Vector3(), lo = {}, hi = {};
+  for (let i = 0; i < n; i++) {
+    d[i] = v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld).distanceTo(skull);
+    const c = find(i); lo[c] = Math.min(lo[c] ?? Infinity, d[i]); hi[c] = Math.max(hi[c] ?? -Infinity, d[i]);
+  }
+  const out = new Float32Array(n * 2);
+  for (let i = 0; i < n; i++) { const c = find(i); out[i * 2] = uv.getX(i); out[i * 2 + 1] = (d[i] - lo[c]) / Math.max(1e-6, hi[c] - lo[c]); }
+  g.setAttribute('aCard', new THREE.BufferAttribute(out, 2));
+}
+
+const CUT = {
+  // ~65 lashes per lid, slanted a touch, solid lash line at the root
+  lash: `float x = vCard.x * 120.0 + vCard.y * 0.8; float id = floor(x);
+    float h = fract(sin(id * 12.9898) * 43758.5453);
+    float len = 0.55 + 0.45 * h, w = mix(0.42, 0.12, clamp(vCard.y / len, 0.0, 1.0));
+    if (vCard.y > 0.12 && (vCard.y > len || abs(fract(x) - 0.5) > w)) discard;`,
+  // short slanted strokes, sparse at the edges of the brow
+  brow: `float x = vCard.x * 95.0 + vCard.y * 1.6; float id = floor(x);
+    float h = fract(sin(id * 78.233) * 43758.5453), h2 = fract(h * 91.7);
+    if (abs(fract(x) - 0.5) > 0.36 || vCard.y < 0.12 * h2 || vCard.y > 0.6 + 0.4 * h) discard;`,
+};
+function cardMaterial(kind, rim) {
+  const m = new THREE.MeshPhysicalMaterial({ color: 0x050407, roughness: 0.35, clearcoat: 0.6, side: THREE.DoubleSide });
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uRim = { value: new THREE.Color(rim) };
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute vec2 aCard; varying vec2 vCard;')
+      .replace('#include <uv_vertex>', '#include <uv_vertex>\n  vCard = aCard;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vCard; uniform vec3 uRim;')
+      .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>\n  { ${CUT[kind]} }`)
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += uRim * (pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 4.0) * 0.6 + smoothstep(0.25, 1.0, vCard.y) * 0.35);');
+  };
+  m.customProgramCacheKey = () => 'ham-card-' + kind;
+  return m;
+}
+
 function boneMap(root) { const m = {}; root.traverse((o) => { if (o.isBone) m[o.name.replace(/^mixamorig:?/, '')] = o; }); return m; }
 
 // turn a rig so hips->head is +y and the chest faces +z, at HEIGHT metres, feet on y = 0
@@ -102,6 +150,12 @@ export function createRunner(scene) {
       bones = boneMap(model);
       const wrap = new THREE.Group(); wrap.add(model); root.add(wrap);
       standUp(wrap, model, bones);
+      // lashes and brows: cut into strands (see cardCoords); skull centre between Head and its tip
+      const skull = P(bones.Head).lerp(P(bones.HeadTop_End), 0.45);
+      model.traverse((o) => {
+        const kind = /eyelash/i.test(o.name) ? 'lash' : /eyebrow/i.test(o.name) ? 'brow' : null;
+        if (o.isMesh && kind && o.geometry.attributes.uv) { cardCoords(o, skull); o.material = cardMaterial(kind, 0x5ff4ff); o.castShadow = false; }
+      });
       mixer = new THREE.AnimationMixer(model);
       for (const [k, json] of Object.entries(clips)) actions[k] = mixer.clipAction(THREE.AnimationClip.parse(json));
       current = actions.idle; current.play();
@@ -159,7 +213,7 @@ export function createRunner(scene) {
   // Body facing is her own, apart from the camera (the free-orbit third person of open-world
   // shooters): she turns to the way she moves and keeps it when she stops, so the camera can swing
   // round to her face. Aiming or firing turns her to the camera, so shots leave where you look.
-  let bodyYaw = null;
+  let bodyYaw = null, airT = 0;
   const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
   /** ctx: { pos, vel, yaw, pitch, speed, aim (0..1), kick, flash } (yaw/pitch: the camera's) */
@@ -186,6 +240,24 @@ export function createRunner(scene) {
     const up = V(0, 1, 0);
     const fwd = V(-Math.sin(bodyYaw), 0, -Math.cos(bodyYaw));
     const right = V(Math.cos(bodyYaw), 0, -Math.sin(bodyYaw));
+
+    // crouch and jump, posed on top of the clips (the clip library has neither): crouching drops the
+    // hips and the legs bend to keep the feet where the clip put them; in the air the feet tuck up.
+    const k = 1 - Math.exp(-10 * dt);
+    airT += ((ctx.air ? 1 : 0) - airT) * k;
+    const c = THREE.MathUtils.clamp(ctx.crouch || 0, 0, 1);
+    if (c > 0.01 || airT > 0.01) {
+      const feet = ['Left', 'Right'].map((s) => ({ s, p: P(bones[s + 'Foot']), q: Q(bones[s + 'Foot']) }));
+      root.position.y -= 0.46 * c;
+      root.updateMatrixWorld(true);
+      turn(bones.Spine, right, -0.32 * c);
+      for (const f of feet) {
+        const target = f.p.addScaledVector(up, 0.32 * airT).addScaledVector(fwd, 0.08 * airT);
+        const out = right.clone().multiplyScalar(f.s === 'Left' ? -0.15 : 0.15);
+        reach(bones[f.s + 'UpLeg'], bones[f.s + 'Leg'], bones[f.s + 'Foot'], target, fwd.clone().add(out));
+        setWorldQuat(bones[f.s + 'Foot'], f.q);
+      }
+    }
     const view = V(-Math.sin(ctx.yaw) * Math.cos(ctx.pitch), Math.sin(ctx.pitch), -Math.cos(ctx.yaw) * Math.cos(ctx.pitch));
 
     // lean the chest with the view so the gun can follow it up and down
