@@ -14,9 +14,39 @@ const P = (o) => o.getWorldPosition(new THREE.Vector3());
 const Q = (o) => o.getWorldQuaternion(new THREE.Quaternion());
 const DEG = Math.PI / 180;
 
-/** Near-black gloss with a fresnel rim that blooms: the look of the HAM renders. */
-export function rimMaterial({ color = 0x07060a, rim = 0x5ff4ff, power = 4.2, strength = 1.9 } = {}) {
+/** Near-black gloss with a fresnel glow, built like a Blender Layer Weight (facing) into emission:
+ *  a wide soft falloff in the rim colour that fades in toward the silhouette, and a thin bright edge
+ *  that goes toward white. Both are emission, so the game's bloom turns them into light. */
+export function rimMaterial({ color = 0x07060a, rim = 0x5ff4ff, edge = 0xeafcff, power = 1.8, strength = 1.1, edgePower = 6, edgeStrength = 1.7 } = {}) {
   const m = new THREE.MeshPhysicalMaterial({ color, roughness: 0.12, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.08 });
+  const uniforms = {
+    uRim: { value: new THREE.Color(rim) }, uRimPow: { value: power }, uRimStr: { value: strength },
+    uEdge: { value: new THREE.Color(edge) }, uEdgePow: { value: edgePower }, uEdgeStr: { value: edgeStrength },
+  };
+  m.userData.rim = uniforms;
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, uniforms);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 uRim; uniform float uRimPow; uniform float uRimStr; uniform vec3 uEdge; uniform float uEdgePow; uniform float uEdgeStr;')
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+  float facing = 1.0 - saturate(abs(dot(normal, normalize(vViewPosition))));
+  totalEmissiveRadiance += uRim * smoothstep(0.15, 1.0, pow(facing, uRimPow)) * uRimStr;
+  totalEmissiveRadiance += uEdge * pow(facing, uEdgePow) * uEdgeStr;`);
+  };
+  m.customProgramCacheKey = () => 'ham-rim2';
+  return m;
+}
+
+/** Translucent glow: a milky see-through body lit from inside, brightest at the edges (the glowing
+ *  translucent objects of the HAM renders). Transmission lets the room tint through; the fresnel rim is
+ *  added as emission so it reads as light, not paint. */
+export function glowMaterial({ color = '#f4f2ff', tint = '#cfe6ff', rim = '#ffffff', glow = '#e6efff', transmission = 0.55, power = 2.0, strength = 1.9, core = 0.38 } = {}) {
+  const m = new THREE.MeshPhysicalMaterial({
+    color, roughness: 0.22, metalness: 0, transmission, thickness: 0.45, ior: 1.3,
+    attenuationColor: new THREE.Color(tint), attenuationDistance: 0.7,
+    clearcoat: 1, clearcoatRoughness: 0.12, emissive: new THREE.Color(glow), emissiveIntensity: core,
+    sheen: 0.5, sheenColor: new THREE.Color(rim), sheenRoughness: 0.4,
+  });
   const uniforms = { uRim: { value: new THREE.Color(rim) }, uRimPow: { value: power }, uRimStr: { value: strength } };
   m.userData.rim = uniforms;
   m.onBeforeCompile = (sh) => {
@@ -25,9 +55,19 @@ export function rimMaterial({ color = 0x07060a, rim = 0x5ff4ff, power = 4.2, str
       .replace('#include <common>', '#include <common>\nuniform vec3 uRim; uniform float uRimPow; uniform float uRimStr;')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  float rimF = pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), uRimPow);\n  totalEmissiveRadiance += uRim * rimF * uRimStr;');
   };
-  m.customProgramCacheKey = () => 'ham-rim';
+  m.customProgramCacheKey = () => 'ham-glow';
   return m;
 }
+
+/** Body looks: the body material and the eyes' light. */
+export const LOOKS = {
+  rim: { name: 'Blue glow', body: () => rimMaterial(), eyes: '#9ff8ff' },
+  pearl: { name: 'Pearl glow', body: () => glowMaterial(), eyes: '#bff8ff' },
+
+  pink: { name: 'Pink glow', body: () => glowMaterial({ color: '#ffd3e0', tint: '#ff9cbc', rim: '#ffe6ee', glow: '#ff6fa3', core: 0.4 }), eyes: '#ffffff' },
+  frost: { name: 'Frost glass', body: () => glowMaterial({ color: '#e4f4ff', tint: '#8fd4ff', rim: '#dff6ff', glow: '#5fd0ff', transmission: 0.75, core: 0.3 }), eyes: '#5ff4ff' },
+  ember: { name: 'Ember (Blender export)', body: () => rimMaterial({ rim: 0xff5a2e, edge: 0xffe2d0 }), eyes: '#ffb08a' },
+};
 
 // ---- hair cards: lashes and brows ----
 // The rig ships its lashes and brows as MakeHuman cards (curved strips meant to be cut out by an alpha
@@ -129,6 +169,11 @@ export const HOLD = {
   supportX: -0.02, supportY: -0.035, supportZ: -0.3,
   gunRoll: 0, gunYaw: 0, gunPitch: 0,               // degrees, on top of what the hands give
   supportPull: 1,                                   // 0..1: pull the left hand exactly onto its spot
+  // posture on top of the clips (degrees): the rifle set is a man's mocap; these soften it
+  hipSway: 6,                                       // pelvis drops on the swinging side while walking / running
+  narrow: 3,                                        // legs drawn in toward the centre line (steps closer to one line)
+  chestLift: 4,                                     // chest up and back
+  shoulderDrop: 3,                                  // shoulders down and relaxed
   // fingers, degrees added to the clip's own grip (curl closes toward the palm)
   rCurl: 0, rSpread: 0, rIndex: 0, rMiddle: 0, rRing: 0, rPinky: 0,
   rThumbBend: 0, rThumbAcross: 0, rThumbOut: 0, rThumbTwist: 0,
@@ -139,7 +184,7 @@ export const HOLD = {
 // bones the aim and reload clips drive (everything above the hips)
 const UPPER = /^(Spine|Neck|Head|LeftShoulder|RightShoulder|LeftArm|RightArm|LeftForeArm|RightForeArm|LeftHand|RightHand)/;
 
-export function createRunner(scene) {
+export function createRunner(scene, opts = {}) {
   const root = new THREE.Group(); root.visible = false; scene.add(root);
   const { group: gun, flash } = buildGun({ slim: true });
   gun.visible = false; scene.add(gun);
@@ -147,7 +192,7 @@ export function createRunner(scene) {
   const MUZZLE = V(0, BORE, -0.66);
   const GRIP = V(), GUARD = V();
 
-  const r = { root, gun, ready: false, failed: false, show: false, hold: { ...HOLD }, holdWeight: 0 };
+  const r = { root, gun, ready: false, failed: false, show: false, hold: { ...HOLD }, holdWeight: 0, look: opts.look || 'rim' };
   let model, mixer, bones, actions = {}, current = null, clipPose = null;
   const overlays = {};
 
@@ -158,8 +203,7 @@ export function createRunner(scene) {
         fetch(urls.clips || `${base}/models/runner-clips.json`).then((res) => { if (!res.ok) throw new Error('clips ' + res.status); return res.json(); }),
       ]);
       model = gltf.scene;
-      const mat = rimMaterial();
-      model.traverse((o) => { if (o.isMesh) { o.material = mat; o.castShadow = true; o.frustumCulled = false; } });
+      model.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
       bones = boneMap(model);
       const wrap = new THREE.Group(); wrap.add(model); root.add(wrap);
       standUp(wrap, model, bones);
@@ -169,6 +213,7 @@ export function createRunner(scene) {
         const kind = /eyelash/i.test(o.name) ? 'lash' : /eyebrow/i.test(o.name) ? 'brow' : null;
         if (o.isMesh && kind && o.geometry.attributes.uv) { cardCoords(o, skull); o.material = cardMaterial(kind, 0x5ff4ff); o.castShadow = false; }
       });
+      r.setLook(r.look);
       mixer = new THREE.AnimationMixer(model);
       for (const [k, json] of Object.entries(clips)) {
         const clip = THREE.AnimationClip.parse(json);
@@ -187,6 +232,19 @@ export function createRunner(scene) {
       r.ready = true;
     } catch (e) { r.failed = true; console.warn('runner model unavailable', e); }
     return r.ready;
+  };
+
+  // body look: body, hair and mouth share it; the eyes glow on their own; lash and brow cards keep theirs
+  r.setLook = (k) => {
+    const L = LOOKS[k] || LOOKS.rim;
+    r.look = LOOKS[k] ? k : 'rim';
+    if (!model) return;
+    const body = L.body(), eyes = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: new THREE.Color(L.eyes), emissiveIntensity: 2.4, roughness: 0.2 });
+    model.traverse((o) => {
+      if (!o.isMesh || /eyelash|eyebrow/i.test(o.name)) return;
+      o.material = /high-poly|^eye/i.test(o.name) ? eyes : body;
+      o.castShadow = !/high-poly|^eye/i.test(o.name);
+    });
   };
 
   r.setVisible = (v) => { r.show = v; root.visible = v && r.ready; gun.visible = v && r.ready; };
@@ -226,6 +284,31 @@ export function createRunner(scene) {
     if (H[p + 'ThumbTwist']) turn(t2, P(t3).sub(P(t2)).normalize(), H[p + 'ThumbTwist'] * DEG);
     const tb = H[p + 'ThumbBend'] * DEG;
     if (tb) { const td = P(t3).sub(P(t2)).normalize(), ax = new THREE.Vector3().crossVectors(td, n).normalize(); turn(t2, ax, tb); turn(t3, ax, tb); }
+  }
+
+  // posture on top of the clip: hip sway synced to the feet (the stance side's hip rides up, the
+  // spine takes most of it back so the chest stays level), legs drawn in, chest lifted, shoulders down
+  let sway = 0;
+  function posture() {
+    const H = r.hold;
+    root.updateMatrixWorld(true);
+    const yaw = root.rotation.y - Math.PI;
+    const fwd = V(-Math.sin(yaw), 0, -Math.cos(yaw)), right = V(Math.cos(yaw), 0, -Math.sin(yaw));
+    const moving = current === actions.walk || current === actions.run;
+    const lf = P(bones.LeftFoot).y, rf = P(bones.RightFoot).y;
+    const target = moving ? THREE.MathUtils.clamp((rf - lf) / 0.08, -1, 1) : 0;
+    sway += (target - sway) * 0.35;
+    const hs = H.hipSway * DEG * sway;
+    if (hs) { turn(bones.Hips, fwd, hs); turn(bones.Spine, fwd, -hs * 0.8); }
+    if (H.narrow) {
+      for (const [side, sg] of [['Left', -1], ['Right', 1]]) {
+        const fq = Q(bones[side + 'Foot']);
+        turn(bones[side + 'UpLeg'], fwd, sg * H.narrow * DEG);
+        setWorldQuat(bones[side + 'Foot'], fq);
+      }
+    }
+    if (H.chestLift) turn(bones.Spine2, right, H.chestLift * DEG);
+    if (H.shoulderDrop) { turn(bones.LeftShoulder, fwd, -H.shoulderDrop * DEG); turn(bones.RightShoulder, fwd, H.shoulderDrop * DEG); }
   }
 
   // Body facing is her own, apart from the camera (the free-orbit third person of open-world
@@ -301,6 +384,7 @@ export function createRunner(scene) {
       if (reloadT >= d) reloadT = -1;
       else { rw = Math.max(0, Math.min(1, reloadT / 0.15, (d - reloadT) / 0.25)); overlay('reload', reloadT, rw); }
     }
+    posture(); // after the overlays, so aiming keeps it too
     // lean the chest with the view, plus the correction that keeps the barrel on it
     root.updateMatrixWorld(true);
     const right = V(Math.cos(bodyYaw), 0, -Math.sin(bodyYaw));
