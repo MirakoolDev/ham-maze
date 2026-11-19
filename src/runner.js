@@ -132,7 +132,7 @@ export function createRunner(scene) {
   gun.scale.setScalar(GUN_SCALE);
   const BUTT = V(0, 0.01, gunBox.max.z - 0.01);           // stock end (barrel runs along -z)
   const GRIP_WRIST = V(0, -0.085, 0.11);                   // where the right wrist sits behind the pistol grip
-  const GUARD_WRIST = V(-0.055, -0.06, -0.27);             // left wrist under the handguard
+  const GUARD_WRIST = V(-0.12, -0.12, -0.3);          // left wrist under the handguard
   const MUZZLE = V(0, BORE, -0.66);
 
   const r = { root, gun, ready: false, failed: false, show: false };
@@ -213,7 +213,7 @@ export function createRunner(scene) {
   // Body facing is her own, apart from the camera (the free-orbit third person of open-world
   // shooters): she turns to the way she moves and keeps it when she stops, so the camera can swing
   // round to her face. Aiming or firing turns her to the camera, so shots leave where you look.
-  let bodyYaw = null, airT = 0;
+  let bodyYaw = null, airT = 0, stance = 0.4;
   const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
   /** ctx: { pos, vel, yaw, pitch, speed, aim (0..1), kick, flash } (yaw/pitch: the camera's) */
@@ -226,7 +226,10 @@ export function createRunner(scene) {
     else if (sp > 0.4) { target = Math.atan2(-ctx.vel.x, -ctx.vel.z); rate = 9; }
     bodyYaw = wrapAngle(bodyYaw + wrapAngle(target - bodyYaw) * (1 - Math.exp(-rate * dt)));
     root.position.copy(ctx.pos);
-    root.rotation.set(0, bodyYaw + Math.PI, 0);
+    // bladed stance: hips and chest turned right so the left shoulder leads and the support hand can
+    // reach out along the handguard (square to the target, the left arm cannot get there)
+    stance += ((sp > 0.4 ? 0.22 : 0.42) + 0.2 * ctx.aim - stance) * (1 - Math.exp(-8 * dt));
+    root.rotation.set(0, bodyYaw + Math.PI - stance, 0);
 
     // locomotion: idle / walk / run by ground speed; backing up only happens while aiming
     const along = -Math.sin(bodyYaw) * ctx.vel.x - Math.cos(bodyYaw) * ctx.vel.z;
@@ -278,8 +281,9 @@ export function createRunner(scene) {
     reach(bones.RightArm, bones.RightForeArm, bones.RightHand, gun.localToWorld(GRIP_WRIST.clone()), right.clone().multiplyScalar(0.6).addScaledVector(up, -1));
     const gUp = up.clone().applyQuaternion(gun.quaternion), gRight = V(1, 0, 0).applyQuaternion(gun.quaternion);
     orientHand('Right', dir.clone().addScaledVector(gUp, -0.55), gUp);
-    reach(bones.LeftArm, bones.LeftForeArm, bones.LeftHand, gun.localToWorld(GUARD_WRIST.clone()), right.clone().multiplyScalar(-0.4).addScaledVector(up, -1));
-    orientHand('Left', gRight.clone().multiplyScalar(0.75).addScaledVector(gUp, 0.55).addScaledVector(dir, 0.25), dir);
+    reach(bones.LeftArm, bones.LeftForeArm, bones.LeftHand, gun.localToWorld(GUARD_WRIST.clone()), right.clone().multiplyScalar(-0.75).addScaledVector(up, -1));
+    // support hand cups the handguard from below: palm up, fingers across and up the far side
+    orientHand('Left', gRight.clone().multiplyScalar(0.85).addScaledVector(gUp, 0.45).addScaledVector(dir, 0.2), dir);
     curl('Right', [64, 135, 195], true);
     curl('Left', [55, 115, 165], false);
     // head: looks where she walks, and down the sights when aiming
