@@ -353,23 +353,57 @@ function reach(arm, fore, hand, target, pole) {
   point(arm, fore, E.clone().sub(S));
   point(fore, hand, S.addScaledVector(dir, dist).sub(P(fore)));
 }
-// Turn the hand so the wrist-to-knuckle line runs along `dir`, a little below it like a real grip.
-function aimHand(hand, knuckle, dir) { point(hand, knuckle, dir.clone().add(V(0, -.3, 0))); }
-// Close a hand around the grip. `s` is +1 for the left hand, -1 for the right (which way is "across").
-// The gun hand keeps its index finger straight along the frame, off the trigger until it fires.
-function grip(side, s, trigger) {
-  const across = -s; // fingers wrap toward the other hand
-  for (const f of ['Middle', 'Ring', 'Pinky', 'Index']) {
-    const b = [1, 2, 3, 4].map((i) => bones[`${side}Hand${f}${i}`]);
+// The hand's own frame, read off the bones every frame so it works in any pose:
+//   f = wrist to middle knuckle (where open fingers point), a = pinky knuckle to index knuckle (the
+//   line a gun grip runs along inside a fist, index side up), n = out of the palm.
+function handFrame(side) {
+  const s = side === 'Right' ? -1 : 1;
+  const w = P(bones[side + 'Hand']), mid = P(bones[side + 'HandMiddle1']);
+  const f = mid.clone().sub(w).normalize();
+  const a = P(bones[side + 'HandIndex1']).sub(P(bones[side + 'HandPinky1']));
+  a.addScaledVector(f, -a.dot(f)).normalize();
+  const n = new THREE.Vector3().crossVectors(f, a).multiplyScalar(s).normalize();
+  return { w, mid, f, a, n };
+}
+// Turn a hand so its fingers point along fD and its index side faces aD (world space).
+const _m1 = new THREE.Matrix4(), _m2 = new THREE.Matrix4();
+function orientHand(side, fD, aD) {
+  const hand = bones[side + 'Hand'], { f, a } = handFrame(side);
+  const fd = fD.clone().normalize(), ad = aD.clone().addScaledVector(fd, -aD.dot(fd)).normalize();
+  _m1.makeBasis(f, a, new THREE.Vector3().crossVectors(f, a));
+  _m2.makeBasis(fd, ad, new THREE.Vector3().crossVectors(fd, ad));
+  _q.setFromRotationMatrix(_m2.multiply(_m1.transpose()));
+  hand.getWorldQuaternion(_wq).premultiply(_q);
+  hand.parent.getWorldQuaternion(_pq);
+  hand.quaternion.copy(_pq.invert().multiply(_wq));
+  hand.updateMatrixWorld(true);
+}
+// Close a hand: each finger bends around the knuckle line, from the fingers' direction into the palm.
+// `bend` is each joint's angle (degrees from straight); the gun hand's index stays nearly straight
+// along the frame, off the trigger.
+const DEG = Math.PI / 180;
+function curl(side, bend, trigger) {
+  const { f, n } = handFrame(side);
+  const at = (deg) => f.clone().multiplyScalar(Math.cos(deg * DEG)).addScaledVector(n, Math.sin(deg * DEG));
+  for (const name of ['Index', 'Middle', 'Ring', 'Pinky']) {
+    const b = [1, 2, 3, 4].map((i) => bones[`${side}Hand${name}${i}`]);
     if (!b[3]) continue;
-    const straight = f === 'Index' && side === 'Right';
-    const dirs = straight
-      ? [V(across * .15, -.05, 1), V(across * .2, -.08, 1), V(across * .25, -.1, 1)]
-      : [V(across * .55, -.35, 1), V(across * 1, -.35, -.25), V(across * .35, -.25, -1)];
-    for (let i = 0; i < 3; i++) point(b[i], b[i + 1], dirs[i]);
+    const angles = trigger && name === 'Index' ? [6, 12, 18] : bend;
+    for (let i = 0; i < 3; i++) point(b[i], b[i + 1], at(angles[i]));
   }
+  // thumb wraps the other side of the grip, tip toward the front
   const th = [2, 3, 4].map((i) => bones[`${side}HandThumb${i}`]);
-  if (th[2]) { point(th[0], th[1], V(across * .35, .1, 1)); point(th[1], th[2], V(across * .3, .05, 1)); }
+  if (th[2]) { point(th[0], th[1], at(40)); point(th[1], th[2], at(65)); }
+}
+// Where the grip sits in the right fist, and how the gun is turned to match, in the hand's frame.
+const _gb = new THREE.Matrix4(), GRIP_LOCAL = new THREE.Vector3(0, -.01, -.005);
+function holdGun(kick) {
+  const { w, mid, f, a, n } = handFrame('Right');
+  const fwd = f.clone().addScaledVector(a, -f.dot(a)).normalize();
+  _gb.makeBasis(new THREE.Vector3().crossVectors(a, fwd), a, fwd);
+  gunObj.quaternion.setFromRotationMatrix(_gb);
+  const inFist = w.clone().lerp(mid, .8).addScaledVector(n, .028).addScaledVector(fwd, -kick * .02);
+  gunObj.position.copy(inFist).sub(GRIP_LOCAL.clone().applyQuaternion(gunObj.quaternion));
 }
 
 const clock = new THREE.Clock();
@@ -396,32 +430,31 @@ function tick() {
 
     const aiming = m === 'aim' || m === 'shoot' || m === 'rungun';
     const kick = state.recoil;
-    let barrel;
     if (aiming) {
       // Two-handed stance layered over the clip: hands meet just below chin height in front of the
-      // chest, elbows bent and dropped (two-bone IK), the support hand wrapped under the gun hand.
+      // chest, elbows bent and dropped (two-bone IK). Gun hand thumb-up with the barrel straight ahead;
+      // the support hand comes from the left, fingers wrapped over the gun hand's fingers.
       const chest = P(bones.Spine2), neck = P(bones.Neck);
-      const hand = chest.clone().add(V(-.03, (neck.y - chest.y) * .55 + kick * .03, .4 - kick * .03));
+      const hand = chest.clone().add(V(-.03, (neck.y - chest.y) * .5 + kick * .03, .36 - kick * .03));
       reach(bones.RightArm, bones.RightForeArm, bones.RightHand, hand, V(-.7, -1, -.1));
-      barrel = V(0, .02 + kick * .35, 1).normalize();
-      aimHand(bones.RightHand, bones.RightHandMiddle1, barrel);
-      reach(bones.LeftArm, bones.LeftForeArm, bones.LeftHand, hand.clone().add(V(.045, -.035, .005)), V(.7, -1, -.1));
-      aimHand(bones.LeftHand, bones.LeftHandMiddle1, V(-.25, -.15, 1));
-      grip('Left', 1, false);
+      orientHand('Right', V(0, .02 + kick * .35, 1), V(.12, 1, 0));
+      const g = handFrame('Right');
+      const support = g.w.clone().addScaledVector(g.n, .07).addScaledVector(g.a, -.045).addScaledVector(g.f, .01);
+      reach(bones.LeftArm, bones.LeftForeArm, bones.LeftHand, support, V(.7, -1, -.1));
+      orientHand('Left', V(-.85, -.1, .5), V(.15, 1, .2));
+      curl('Left', [55, 125, 185], false);
       if (m !== 'rungun') point(bones.Head, bones.HeadTop_End, V(0, 1, .12));
       if (m !== 'aim' && t >= state.nextShot) {
         state.fireT = 0; state.recoil = 1;
         state.nextShot = t + 60 / GUNS[state.gun].rpm / Math.max(state.speed, .1);
       }
+    } else {
+      // carrying at low ready: keep the clip's arm swing, turn the wrist so the barrel points ahead,
+      // down and a little out from the body, thumb side up
+      orientHand('Right', V(-.18, -.7, 1), V(-.1, 1, .5));
     }
-    grip('Right', -1, aiming);
-
-    // gun in the right palm: grip between wrist and knuckles, barrel ahead (aiming) or along the hand
-    const wrist = P(bones.RightHand), knuckle = P(bones.RightHandMiddle1);
-    if (!barrel) barrel = knuckle.clone().sub(wrist).normalize().add(V(0, .45, 0)).normalize();
-    const palm = wrist.lerp(knuckle, .55);
-    gunObj.position.copy(palm).add(V(0, -.035, 0)).addScaledVector(barrel, -.015 - kick * .02);
-    gunObj.lookAt(gunObj.position.clone().add(barrel));
+    curl('Right', [80, 170, 245], true);
+    holdGun(kick);
   }
   // flash, tracer, recoil decay
   state.fireT += dt; state.recoil = Math.max(0, state.recoil - dt * 9);
