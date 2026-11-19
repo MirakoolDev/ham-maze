@@ -1,0 +1,122 @@
+<title>HAM Scores</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: a quiet dark gallery in the portfolio's manner; the art carries all the colour. */
+  :root {
+    --bg: #0e0e10;
+    --surface: #161619;
+    --line: #26262c;
+    --ink: #f2f0ec;
+    --muted: #9b98a2;
+    --orange: #ff6a1f;
+    --display: 'Jost', Futura, 'Avenir Next', sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--ink); margin: 0;
+    font-family: var(--display); font-size: 15px; line-height: 1.6;
+    padding-block: 56px 96px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  .mark { font-weight: 600; letter-spacing: 0.32em; font-size: 13px; }
+  h1 { font-weight: 500; font-size: clamp(40px, 7vw, 76px); line-height: 1; letter-spacing: -0.02em; margin: 40px 0 18px; text-wrap: balance; }
+  .lede { color: var(--muted); max-width: 60ch; font-size: 17px; margin: 0; }
+  section { margin-top: 88px; }
+  .label { font-weight: 600; font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; margin: 0 0 6px; }
+  .sub { color: var(--muted); margin: 0 0 26px; max-width: 64ch; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+  figure { margin: 0; min-width: 0; }
+  figure svg { display: block; width: 100%; height: auto; border-radius: 4px; }
+  figcaption { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 10px; display: flex; justify-content: space-between; gap: 12px; }
+  figcaption b { color: var(--ink); font-weight: 500; }
+  .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0 32px; border-top: 1px solid var(--line); }
+  .fields div { padding: 16px 0; border-bottom: 1px solid var(--line); min-width: 0; }
+  .fields dt { font-family: var(--mono); font-size: 12px; color: var(--orange); }
+  .fields dd { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+</style>
+
+<div class="wrap">
+  <div class="mark">HAM</div>
+  <h1>The Score is the maze, as far as you got.</h1>
+  <p class="lede">Every run mints the day's real maze as a small floating model. The art never gives the maze away: while the day is live, every Score is sealed to the entrance corner. After 00:00 UTC the maze is retired forever and the Score develops, raising a round patch of walls as far as your run got. A radius, never a route.</p>
+
+  <section>
+    <p class="label">Today, sealed</p>
+    <p class="sub">Six runs of today's maze. Only the corner every player sees at spawn is drawn. The figure shows where each run ended: beside the monolith if found, or on the straight line from START toward the centre, as far in as it got. No walls, no path, nothing to copy.</p>
+    <div class="grid" id="day"></div>
+  </section>
+
+  <section>
+    <p class="label">The same runs, developed</p>
+    <p class="sub">What those six Scores turn into once the day ends. More walls rise for runs that got further, but they rise in a circle around the entrance, so even a finished run shows a patch of the maze, not the way through it. Mazes never repeat, so a retired one gives nothing away.</p>
+    <div class="grid" id="dev"></div>
+  </section>
+
+  <section>
+    <p class="label">Five rooms</p>
+    <p class="sub">Each day draws one of five rooms from the portfolio: the red room, dusk, the pool, iris and the dunes. These are past days, already developed.</p>
+    <div class="grid" id="week"></div>
+  </section>
+
+  <section>
+    <p class="label">Power-Ups are guns</p>
+    <p class="sub">Everyone starts with the K-7. A Power-Up is a gun you keep: it trades raw damage for one move, with a few charges per run, and each one acts its move out on a plinth of maze concrete. Every HAM gun carries the same sight, a sliver of the orange monolith. Guns are sold as sealed packs, 10,000 in all. Every pack costs the same: the day's first is about $1, and each one sold makes the next dearer, ten times dearer every 100 packs. Back to $1 at midnight UTC. Strip one to see which gun is inside.</p>
+    <div class="grid" id="pups"></div>
+  </section>
+
+  <section>
+    <p class="label">What draws it</p>
+    <p class="sub">Nothing here is stored as an image. <code>tokenURI()</code> rebuilds the drawing from fields the contract already records.</p>
+    <dl class="fields">
+      <div><dt>day</dt><dd>Seeds the maze, with the same generator the game uses, and picks the room.</dd></div>
+      <div><dt>day + block time</dt><dd>Sealed while the day is live, developed after 00:00 UTC. No one has to update anything: <code>tokenURI()</code> checks the clock.</dd></div>
+      <div><dt>completed</dt><dd>Lights the monolith and puts the figure beside it, or dims the room.</dd></div>
+      <div><dt>timeMs + kills</dt><dd>On a lost run, how far in the figure stands and how wide the developed patch is: about a cell per 20 seconds survived, plus half a cell per kill.</dd></div>
+      <div><dt>gun + runs</dt><dd>Which Power-Up it is, and how many runs it has been carried on.</dd></div>
+      <div><dt>points</dt><dd>The number on the card. Ranking uses the same figure.</dd></div>
+    </dl>
+  </section>
+</div>
+
+<script src="ham-art.js"></script>
+<script>
+  const A = window.HAMArt;
+  const card = (el, svg, left, right) => {
+    const f = document.createElement('figure');
+    f.innerHTML = svg + `<figcaption><span>${left}</span><b>${right}</b></figcaption>`;
+    el.appendChild(f);
+  };
+  const today = A.seedFromDate(new Date());
+  const runs = [
+    { tokenId: 142, points: 8420, timeMs: 112000, kills: 4, completed: true },
+    { tokenId: 151, points: 3110, timeMs: 95000, kills: 6, completed: false },
+    { tokenId: 147, points: 7160, timeMs: 138000, kills: 2, completed: true },
+    { tokenId: 160, points: 1930, timeMs: 41000, kills: 1, completed: false },
+    { tokenId: 163, points: 2480, timeMs: 64000, kills: 5, completed: false },
+    { tokenId: 170, points: 960, timeMs: 18000, kills: 0, completed: false },
+  ];
+  runs.forEach((r, i) => card(document.getElementById('day'), A.scoreSVG({ ...r, seed: today, uid: 'd' + i, sealed: true }), 'No. ' + r.tokenId, r.completed ? 'Found' : 'Lost'));
+  runs.forEach((r, i) => card(document.getElementById('dev'), A.scoreSVG({ ...r, seed: today, uid: 'v' + i }), 'No. ' + r.tokenId, r.completed ? 'Found' : 'Lost'));
+
+  const seen = new Set();
+  const week = document.getElementById('week');
+  for (let k = 1, n = 0; n < 5 && k < 60; k++) {
+    const d = new Date(Date.now() - k * 86400000), seed = A.seedFromDate(d), room = A.roomOf(seed);
+    if (seen.has(room.name)) continue;
+    seen.add(room.name);
+    card(week, A.scoreSVG({ seed, uid: 'w' + n, tokenId: 200 + n * 37, points: 6200 + n * 410, timeMs: 120000 + n * 9000, kills: 2 + n, completed: true }), A.dateLabel(seed), room.name);
+    n++;
+  }
+
+  card(document.getElementById('pups'), A.packSVG({ tokenId: 4213, uid: 'pk' }), 'Sealed pack', 'How every gun is sold');
+  [['marker', 41], ['frost', 112], ['pulse', 87], ['blinker', 9], ['snare', 23], ['k7', 0]]
+    .forEach(([gun, id], i) => {
+      const g = A.GUNS[gun];
+      card(document.getElementById('pups'), A.powerUpSVG({ gun, tokenId: id, runs: 6 + i * 11, uid: 'p' + i }), g.name, g.rarity.charAt(0) + g.rarity.slice(1).toLowerCase());
+    });
+</script>
