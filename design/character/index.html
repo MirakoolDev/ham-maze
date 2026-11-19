@@ -202,8 +202,14 @@ const POSE_SPEC = [
   ['aimSide', 'Sideways', -.2, .2, .03],
   ['aimTilt', 'Barrel tilt', -.4, .4, .02],
   ['elbowOut', 'Elbows out', 0, 2, .7],
-  ['supportOut', 'Support hand out', 0, .15, .07],
-  ['supportDown', 'Support hand down', -.05, .12, .045],
+  ['Support hand (aim)'],
+  ['supportX', 'Left / right', -.05, .2, .035],
+  ['supportY', 'Up / down', -.15, .1, -.06],
+  ['supportZ', 'Forward / back', -.15, .15, .06],
+  ['supportYaw', 'Fingers turn', -120, 60, -85],
+  ['supportPitch', 'Fingers tilt', -80, 80, -15],
+  ['supportRoll', 'Palm roll', -120, 120, -35],
+  ['supportCurl', 'Finger curl', 0, 1.4, 1],
   ['Grip (both)'],
   ['gripAlong', 'Gun along palm', .3, 1.2, .8],
   ['gripDepth', 'Gun off palm', -.02, .08, .028],
@@ -218,6 +224,7 @@ function buildPose() {
     : `<label class="sl">${s[1]}<input type="range" data-k="${s[0]}" min="${s[2]}" max="${s[3]}" step="0.005" value="${POSE[s[0]]}"><output>${(+POSE[s[0]]).toFixed(3)}</output></label>`).join('');
 }
 buildPose();
+window.preview.pose = POSE;
 $('pose').addEventListener('input', (e) => {
   const k = e.target.dataset.k; if (!k) return;
   POSE[k] = +e.target.value;
@@ -491,10 +498,15 @@ function tick() {
       reach(bones.RightArm, bones.RightForeArm, bones.RightHand, hand, V(-POSE.elbowOut, -1, -.1));
       orientHand('Right', V(0, POSE.aimTilt + kick * .35, 1), V(.12, 1, 0));
       const g = handFrame('Right');
-      const support = g.w.clone().addScaledVector(g.n, POSE.supportOut).addScaledVector(g.a, -POSE.supportDown).addScaledVector(g.f, .01);
+      // support hand, placed from the gun hand's wrist in the character's own directions
+      // (+x her left, +y up, +z ahead), then turned by yaw / tilt / roll
+      const support = g.w.clone().add(V(POSE.supportX, POSE.supportY, POSE.supportZ));
       reach(bones.LeftArm, bones.LeftForeArm, bones.LeftHand, support, V(POSE.elbowOut, -1, -.1));
-      orientHand('Left', V(-.85, -.1, .5), V(.15, 1, .2));
-      curl('Left', [55, 125, 185].map((d) => d * POSE.curl), false);
+      const yaw = POSE.supportYaw * DEG, pitch = POSE.supportPitch * DEG;
+      const fD = V(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
+      const aD = V(0, 1, 0).addScaledVector(fD, -fD.y).normalize().applyAxisAngle(fD, POSE.supportRoll * DEG);
+      orientHand('Left', fD, aD);
+      curl('Left', [55, 125, 185].map((d) => d * POSE.supportCurl), false);
       if (m !== 'rungun') point(bones.Head, bones.HeadTop_End, V(0, 1, .12));
       if (m !== 'aim' && t >= state.nextShot) {
         state.fireT = 0; state.recoil = 1;
