@@ -38,13 +38,13 @@
 <div id="load">Loading the runner…</div>
 <div class="panel">
   <h1>HAM Runner</h1>
-  <p class="sub">The game's own runner code (src/runner.js). Tune the hold here; Copy values and send them over to bake them in.</p>
+  <p class="sub">The game's own runner code (src/runner.js), playing Mixamo's rifle animations. The clips hold the gun; these sliders only adjust on top. Copy values and send them over to bake them in.</p>
   <h2>State</h2>
   <div class="row" id="move">
     <button data-move="idle" aria-pressed="true">Idle</button><button data-move="walk">Walk</button><button data-move="run">Run</button>
   </div>
   <div class="row" style="margin-top:6px">
-    <button id="aim" aria-pressed="true">Aim</button><button id="fire">Fire</button><button id="crouch">Crouch</button><button id="air">In the air</button>
+    <button id="aim" aria-pressed="true">Aim</button><button id="fire">Fire</button><button id="reload">Reload</button><button id="crouch">Crouch</button><button id="air">Jump</button>
   </div>
   <label class="sl">Look up / down<input type="range" id="pitch" min="-0.8" max="0.8" step="0.01" value="0"><output></output></label>
   <h2>Hold</h2>
@@ -53,7 +53,7 @@
     <button id="copy">Copy values</button><button id="reset">Reset</button>
   </div>
   <p id="status" role="status"></p>
-  <p class="note">Drag to orbit, scroll to zoom. Hand and finger sliders act while Aim or Fire is on (the carry plays the clip's arms). Turn spins the hand about the gun's up axis, Tilt about the barrel, Roll about the hand's own fingers.</p>
+  <p class="note">Drag to orbit, scroll to zoom. The gun hangs from the right wrist and points at the left one, so it follows the animation. Wrist spots move where each hand sits on the gun. Finger sliders add degrees to the clip's own grip.</p>
 </div>
 
 <script type="importmap">
@@ -100,23 +100,44 @@ function fit() {
 fit(); addEventListener('resize', fit);
 
 const runner = createRunner(scene);
-const KEY = 'ham.hold';
+const KEY = 'ham.hold.v2'; // v2: the hold rides on the rifle clips; older saves were for the hand-built hold
 // only keys the runner still knows (older saves had other names)
 try { const saved = JSON.parse(localStorage.getItem(KEY) || '{}'); for (const k in HOLD) if (typeof saved[k] === 'number') runner.hold[k] = saved[k]; } catch {}
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(runner.hold)); } catch {} };
 
 // ---- sliders, one per hold value ----
 const SPEC = [
-  ['Gun', [['gunScale', 'Gun size', 0.4, 1.1, 0.01]]],
-  ['Shooting hand (right): position', [['gripX', 'Wrist across', -0.1, 0.1, 0.005], ['gripY', 'Wrist up', -0.2, 0.05, 0.005], ['gripZ', 'Wrist back', -0.05, 0.25, 0.005], ['rightElbow', 'Elbow out (deg)', -60, 90, 1]]],
-  ['Shooting hand (right): rotation', [['rightTurn', 'Turn (deg)', -90, 90, 1], ['rightTilt', 'Tilt (deg)', -90, 90, 1], ['rightRoll', 'Roll (deg)', -120, 120, 1]]],
-  ['Shooting hand (right): fingers', [['rFingers', 'All four: curl', 0, 1.6, 0.02], ['rSpread', 'All four: spread', -25, 25, 1], ['rIndex', 'Index curl', 0, 1.6, 0.02], ['rMiddle', 'Middle curl', 0, 1.6, 0.02], ['rRing', 'Ring curl', 0, 1.6, 0.02], ['rPinky', 'Pinky curl', 0, 1.6, 0.02], ['rThumbBend', 'Thumb bend', -0.5, 2, 0.02], ['rThumbSide', 'Thumb swing', -60, 60, 1], ['rThumbTwist', 'Thumb twist', -90, 90, 1]]],
-  ['Support hand (left): position', [['supportX', 'Wrist across', -0.25, 0.1, 0.005], ['supportY', 'Wrist up', -0.25, 0.08, 0.005], ['supportZ', 'Wrist forward', -0.5, -0.1, 0.005], ['leftElbow', 'Elbow out (deg)', -60, 90, 1]]],
-  ['Support hand (left): rotation', [['supportTurn', 'Turn (deg)', -90, 90, 1], ['supportTilt', 'Tilt (deg)', -120, 120, 1], ['supportRoll', 'Roll (deg)', -120, 120, 1]]],
-  ['Support hand (left): fingers', [['lFingers', 'All four: curl', 0, 1.6, 0.02], ['lSpread', 'All four: spread', -25, 25, 1], ['lIndex', 'Index curl', 0, 1.6, 0.02], ['lMiddle', 'Middle curl', 0, 1.6, 0.02], ['lRing', 'Ring curl', 0, 1.6, 0.02], ['lPinky', 'Pinky curl', 0, 1.6, 0.02], ['lThumbBend', 'Thumb bend', -0.5, 2, 0.02], ['lThumbSide', 'Thumb swing', -60, 60, 1], ['lThumbTwist', 'Thumb twist', -90, 90, 1]]],
-  ['Forearms', [['forearmTwist', 'Twist into forearm', 0, 1, 0.01]]],
-  ['Shoulder and stance', [['buttUp', 'Stock up', -0.15, 0.15, 0.005], ['buttFwd', 'Stock forward', -0.1, 0.2, 0.005], ['buttIn', 'Stock in', -0.1, 0.15, 0.005], ['stance', 'Body turn', 0, 1, 0.01]]],
-  ['Carry (not aiming)', [['carryDown', 'Barrel down (deg)', -10, 90, 1], ['carryOut', 'Swing out (deg)', -60, 60, 1], ['carryRoll', 'Roll (deg)', -90, 90, 1], ['carryX', 'Grip out', -0.15, 0.15, 0.005], ['carryY', 'Grip up', -0.15, 0.15, 0.005], ['carryZ', 'Grip forward', -0.15, 0.15, 0.005]]],
+  ["Gun",[["gunScale","Gun size",0.4,1.1,0.01],
+  ["gunRoll","Roll (deg)",-45,45,1],
+  ["gunYaw","Turn (deg)",-30,30,1],
+  ["gunPitch","Tilt (deg)",-30,30,1]]],
+  ["Right wrist spot on the gun",[["gripX","Across",-0.1,0.1,0.005],
+  ["gripY","Up",-0.2,0.05,0.005],
+  ["gripZ","Back",-0.05,0.25,0.005]]],
+  ["Left wrist spot on the gun",[["supportX","Across",-0.15,0.1,0.005],
+  ["supportY","Up",-0.15,0.08,0.005],
+  ["supportZ","Forward",-0.5,-0.1,0.005],
+  ["supportPull","Pull onto spot",0,1,0.01]]],
+  ["Right fingers (degrees)",[["rCurl","All four: curl",-40,60,1],
+  ["rSpread","All four: spread",-25,25,1],
+  ["rIndex","Index curl",-40,60,1],
+  ["rMiddle","Middle curl",-40,60,1],
+  ["rRing","Ring curl",-40,60,1],
+  ["rPinky","Pinky curl",-40,60,1],
+  ["rThumbBend","Thumb bend",-60,60,1],
+  ["rThumbAcross","Thumb across palm",-60,60,1],
+  ["rThumbOut","Thumb toward index",-60,60,1],
+  ["rThumbTwist","Thumb twist",-90,90,1]]],
+  ["Left fingers (degrees)",[["lCurl","All four: curl",-40,60,1],
+  ["lSpread","All four: spread",-25,25,1],
+  ["lIndex","Index curl",-40,60,1],
+  ["lMiddle","Middle curl",-40,60,1],
+  ["lRing","Ring curl",-40,60,1],
+  ["lPinky","Pinky curl",-40,60,1],
+  ["lThumbBend","Thumb bend",-60,60,1],
+  ["lThumbAcross","Thumb across palm",-60,60,1],
+  ["lThumbOut","Thumb toward index",-60,60,1],
+  ["lThumbTwist","Thumb twist",-90,90,1]]]
 ];
 const box = document.getElementById('sliders');
 const fmt = (v, step) => (+v).toFixed(step >= 1 ? 0 : step < 0.01 ? 3 : 2);
@@ -148,6 +169,7 @@ const press = (el, on) => el.setAttribute('aria-pressed', on ? 'true' : 'false')
 document.querySelectorAll('[data-move]').forEach((b) => b.addEventListener('click', () => {
   st.move = b.dataset.move; document.querySelectorAll('[data-move]').forEach((x) => press(x, x === b));
 }));
+document.getElementById('reload').addEventListener('click', () => runner.reload());
 for (const k of ['aim', 'fire', 'crouch', 'air']) {
   const b = document.getElementById(k); press(b, st[k]);
   b.addEventListener('click', () => { st[k] = !st[k]; press(b, st[k]); });
@@ -156,7 +178,8 @@ const pitch = document.getElementById('pitch');
 pitch.addEventListener('input', () => { st.pitch = +pitch.value; pitch.nextElementSibling.value = (+pitch.value).toFixed(2); });
 pitch.nextElementSibling.value = '0.00';
 
-await runner.load('', { glb: '../../assets/runner.glb', clips: '../../assets/runner-clips.json' });
+const bust = `?v=${Date.now()}`; // the local server lets the browser cache these too
+await runner.load('', { glb: '../../assets/runner.glb' + bust, clips: '../../assets/runner-clips.json' + bust });
 document.getElementById('load').remove();
 runner.setVisible(true);
 window.preview = { runner, camera, controls, st, HOLD };
@@ -170,7 +193,7 @@ renderer.setAnimationLoop((now) => {
   aim += ((st.aim || st.fire ? 1 : 0) - aim) * (1 - Math.exp(-12 * dt));
   crouch += ((st.crouch ? 1 : 0) - crouch) * (1 - Math.exp(-12 * dt));
   const sp = SPEEDS[st.move];
-  runner.update(dt, { pos: new THREE.Vector3(0, st.air ? 0.35 : 0, 0), vel: new THREE.Vector3(0, 0, -sp), yaw: 0, pitch: st.pitch,
+  runner.update(dt, { pos: new THREE.Vector3(0, 0, 0), vel: new THREE.Vector3(0, 0, -sp), yaw: 0, pitch: st.pitch,
     speed: sp, air: st.air, crouch, aim, kick: firing ? 1 : 0, flash: firing });
   controls.update();
   renderer.render(scene, camera);
