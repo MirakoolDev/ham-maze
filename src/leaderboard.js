@@ -30,6 +30,7 @@ async function refresh() {
     $('potV').textContent = 'Not live yet';
     $('metaV').textContent = CHAIN.name;
     empty(`The pot isn’t live on ${CHAIN.name} yet. You can still play the maze.`, true);
+    $('pastS').hidden = true;
     return;
   }
   document.body.classList.add('refreshing');
@@ -50,11 +51,40 @@ async function refresh() {
     }
     status.textContent = '';
     status.className = 'status';
+    loadPast(t.day);
   } catch (e) {
     status.textContent = 'Can’t reach the chain right now. Trying again in a moment.';
     status.className = 'status bad';
   } finally {
     document.body.classList.remove('refreshing');
+  }
+}
+
+// Previous days: read once per load (they don't change, except a day settling)
+const fmtDay = (d) => new Date(d * 86400000).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+let pastFor = -1;
+async function loadPast(today) {
+  if (pastFor === today) return;
+  pastFor = today;
+  try {
+    const days = (await chain.pastDays(today, 14)).filter((d) => d.entries > 0);
+    const box = $('pastV');
+    if (!days.length) {
+      box.innerHTML = '<p class="day none">No earlier days with runs yet.</p>';
+    } else {
+      box.innerHTML = days.map((d) => `<div class="day">
+        <div class="day-h">
+          <span class="day-d">${fmtDay(d.day)}<span class="tag ${d.settled ? 'paid' : 'open'}">${d.settled ? 'Paid out' : 'Not paid out yet'}</span></span>
+          <span class="day-m"><b>${Number(d.pot).toFixed(4)} ETH</b> &middot; ${d.entries.toLocaleString('en-US')} run${d.entries === 1 ? '' : 's'}</span>
+        </div>
+        ${d.top.length
+          ? `<ol>${d.top.map((p, i) => `<li><span class="n">${i + 1}</span><span class="w">${chain.short(p.who)}</span><span class="p">${p.points.toLocaleString('en-US')} pts &middot; ${(p.timeMs / 1000).toFixed(2)}s</span></li>`).join('')}</ol>`
+          : '<p class="none">Runs were played, but nobody reached the monolith.</p>'}
+      </div>`).join('');
+    }
+    $('pastS').hidden = false;
+  } catch (e) {
+    pastFor = -1; // try again on the next refresh
   }
 }
 
