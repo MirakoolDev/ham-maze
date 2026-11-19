@@ -2,63 +2,107 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>HAM Leaderboard</title>
+<meta name="description" content="Today's HAM pot and the top three runs of today's maze.">
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="apple-touch-icon" href="favicon-180.png">
 <style>
-  :root { --ink:#2a2733; --bone:#f3efe4; --muted:#8d89a0; --line:rgba(42,39,51,.14); --accent:#e0708a; --cream:#f6e4b4; --good:#3f9a62; --bad:#c84949; }
+  /* The game's own look (src/ui.css): plum ink, bone text, Bread Island in cream, Cabinet Grotesk,
+     the title screen's concrete, cream bevelled buttons, pink signal. */
+  @font-face { font-family: 'Bread Island'; src: url('brand/bread-island.otf') format('opentype'); font-display: swap; }
+  @font-face { font-family: 'Cabinet Grotesk'; src: url('brand/cabinet-grotesk.otf') format('opentype'); font-display: swap; }
+  :root {
+    color-scheme: dark;
+    --ink: #2a2733; --surface: #332f3e; --line: rgba(255, 250, 242, .14);
+    --bone: #fffaf2; --muted: rgba(255, 250, 242, .7); --faint: rgba(255, 250, 242, .44);
+    --cream: #f6e4b4; --signal: #ff8fa6; --bad: #ffb3b3;
+    --head: 'Bread Island', Georgia, 'Times New Roman', serif;
+    --text: 'Cabinet Grotesk', 'Segoe UI', system-ui, sans-serif;
+    --concrete: linear-gradient(rgba(176, 156, 134, .34), rgba(176, 156, 134, .34)), url('brand/concrete.jpg') 0 0 / 520px repeat, #8a837b;
+    --gutter-l: max(16px, env(safe-area-inset-left, 0px)); --gutter-r: max(16px, env(safe-area-inset-right, 0px));
+  }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--ink); color: var(--bone); font: 15px/1.5 'Segoe UI', system-ui, sans-serif; }
-  .wrap { max-width: 640px; margin: 0 auto; padding: 36px 20px 80px; }
-  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
-  h1 { font-size: 22px; margin: 0; }
-  .sub { color: var(--muted); margin: 0 0 26px; font-size: 13px; }
-  select { font: 600 12px/1 'Segoe UI', sans-serif; background: rgba(255,255,255,.07); color: var(--bone); border: 1px solid var(--line); border-radius: 999px; padding: 7px 12px; }
-  select option { color: #000; }
-  .card { background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin-bottom: 16px; }
-  .pot-row { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
-  .pot-k { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
-  .pot-v { font-size: 34px; font-weight: 700; color: var(--cream); }
-  .meta { color: var(--muted); font-size: 12px; margin-top: 6px; }
-  table { width: 100%; border-collapse: collapse; margin-top: 4px; }
-  th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 0 8px 10px; font-weight: 500; }
-  th:last-child, td:last-child { text-align: right; }
-  td { padding: 12px 8px; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
-  td.rank { font-weight: 700; color: var(--cream); width: 32px; }
-  td.who { font: 13px ui-monospace, monospace; }
-  .empty { text-align: center; color: var(--muted); padding: 28px 8px; }
-  .refreshing { opacity: .5; }
-  .status { font-size: 12px; color: var(--muted); margin-top: 10px; }
+  body { margin: 0; background: var(--ink); color: var(--bone); font: 16px/1.5 var(--text); font-feature-settings: "tnum"; -webkit-font-smoothing: antialiased; }
+  a { color: inherit; }
+  .wrap { max-width: 720px; margin: 0 auto; padding-left: var(--gutter-l); padding-right: var(--gutter-r); }
+
+  /* top bar */
+  .bar { padding-top: env(safe-area-inset-top, 0px); border-bottom: 1px solid var(--line); }
+  .bar .wrap { display: flex; align-items: center; gap: 16px; height: 60px; }
+  .mark { display: inline-flex; align-items: center; gap: 10px; font: 900 20px/1 var(--head); letter-spacing: .12em; color: var(--cream); text-decoration: none; }
+  .mark img { width: 30px; height: auto; display: block; }
+  .bar .story { margin-left: auto; color: var(--muted); font-size: 14px; text-decoration: none; white-space: nowrap; }
+  .bar .story:hover { color: var(--bone); }
+  select { font: 600 12px/1 var(--text); color: var(--bone); background: rgba(255, 250, 242, .06); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; max-width: 42vw; }
+  select option { color: #2a2733; }
+
+  /* the pot, on the title screen's concrete */
+  .pot { background: var(--concrete); text-shadow: 0 1px 2px rgba(40, 32, 60, .45), 0 2px 12px rgba(40, 32, 60, .3); }
+  .pot .wrap { padding-block: 44px 40px; text-align: center; }
+  .kick { font: 600 12px/1 var(--text); letter-spacing: .24em; text-transform: uppercase; color: rgba(255, 250, 242, .9); }
+  .pot-v { font: 900 clamp(48px, 13vw, 92px)/1 var(--head); color: var(--cream); letter-spacing: .01em; margin: 16px 0 10px; }
+  .pot-v small { font-size: .42em; letter-spacing: .08em; margin-left: .2em; }
+  .meta { color: rgba(255, 250, 242, .9); font-size: 15px; }
+  .ends { display: inline-flex; align-items: center; gap: 8px; margin-top: 18px; font-size: 13px; border: 1px solid rgba(255, 250, 242, .38); background: rgba(42, 39, 51, .28); border-radius: 999px; padding: 6px 14px 6px 12px; }
+  .ends i { width: 7px; height: 7px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 10px var(--signal); }
+
+  /* the top three */
+  .board { padding-block: 40px 24px; }
+  .board h2 { font: 900 28px/1.1 var(--head); color: var(--cream); margin: 0 0 6px; letter-spacing: .01em; }
+  .board .sub { color: var(--muted); margin: 0 0 22px; font-size: 15px; }
+  ol.top { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+  ol.top li { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 4px 16px; padding: 18px 0; border-bottom: 1px solid var(--line); }
+  .place { font: 900 34px/1 var(--head); color: var(--cream); }
+  li:nth-child(2) .place { color: #e9dfc9; } li:nth-child(3) .place { color: #d8c6a8; }
+  .who { font-size: 15px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .who small { display: block; color: var(--muted); font-size: 13px; }
+  .pts { text-align: right; font-size: 22px; font-weight: 600; white-space: nowrap; }
+  .pts small { display: block; color: var(--signal); font-size: 12px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
+  .empty { text-align: center; padding: 36px 0 8px; color: var(--muted); }
+  .empty p { margin: 0 0 18px; font-size: 16px; }
+
+  .btn { display: inline-flex; align-items: center; justify-content: center; font: 600 15px/1 var(--text); text-decoration: none; padding: 14px 22px; border-radius: 10px;
+    background: var(--cream); color: var(--ink); border: 1px solid var(--cream);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .75), inset 0 -2px 0 rgba(120, 96, 52, .18), 0 1px 2px rgba(20, 16, 30, .3), 0 4px 14px rgba(20, 16, 30, .18); }
+  .btn:hover { background: #fff1cc; }
+  .btn:active { transform: translateY(1px); box-shadow: inset 0 1px 2px rgba(0, 0, 0, .2); }
+  :focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; }
+
+  .foot { color: var(--faint); font-size: 13px; padding-bottom: calc(48px + env(safe-area-inset-bottom, 0px)); }
+  .status { font-size: 13px; color: var(--muted); min-height: 1.5em; margin: 14px 0 0; }
   .status.bad { color: var(--bad); }
-  a.back { color: var(--accent); font-size: 13px; text-decoration: none; }
-  a.back:hover { text-decoration: underline; }
+  .refreshing { opacity: .55; transition: opacity .2s; }
+  @media (max-width: 480px) { .bar .story { display: none; } select { margin-left: auto; } }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <h1>Leaderboard</h1>
-    <select id="netSel"></select>
-  </header>
-  <p class="sub">The top 3 scores for today's maze. Resets at midnight UTC. <a class="back" href="/">&larr; Back to the game</a></p>
-
-  <div class="card">
-    <div class="pot-row">
-      <div><div class="pot-k">Today&rsquo;s pot</div><div class="pot-v" id="potV">&ndash;</div></div>
-      <div class="meta" id="metaV"></div>
-    </div>
+<header class="bar">
+  <div class="wrap">
+    <a class="mark" href="/" aria-label="HAM: play the game"><img src="brand/logo.png" alt="" width="30" height="31"><span>HAM</span></a>
+    <a class="story" href="/story">How it works</a>
+    <select id="netSel" aria-label="Network"></select>
   </div>
+</header>
 
-  <div class="card">
-    <table id="table" hidden>
-      <thead><tr><th>#</th><th>Player</th><th>Points</th><th>Time</th></tr></thead>
-      <tbody id="rows"></tbody>
-    </table>
-    <div class="empty" id="emptyV">Loading…</div>
+<section class="pot">
+  <div class="wrap">
+    <div class="kick">Today&rsquo;s pot</div>
+    <div class="pot-v" id="potV">&ndash;</div>
+    <div class="meta" id="metaV">&nbsp;</div>
+    <div class="ends"><i></i><span id="endsV">Today&rsquo;s maze ends at 00:00 UTC</span></div>
   </div>
+</section>
+
+<main class="board wrap">
+  <h2>Top three</h2>
+  <p class="sub">The fastest runs to the monolith today. When the day settles they split the pot 40 / 20 / 10.</p>
+  <ol class="top" id="rows" hidden></ol>
+  <div class="empty" id="emptyV"><p>Loading&hellip;</p></div>
   <p class="status" id="statusV"></p>
-</div>
+</main>
+
+<footer class="wrap foot">Read straight off the chain. No wallet needed. Updates every 15 seconds.</footer>
 <!--JS-->
 </body>
 </html>

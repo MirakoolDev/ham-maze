@@ -1,7 +1,8 @@
 <title>HAM: Maze or Money</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
+  @font-face { font-family: 'Bread Island'; src: url('brand/bread-island.otf') format('opentype'); font-display: swap; }
+  @font-face { font-family: 'Cabinet Grotesk'; src: url('brand/cabinet-grotesk.otf') format('opentype'); font-display: swap; }
   /* Layout: one long dark page in the portfolio's manner (quiet type, the art carries the colour),
      structured like jack.art's Exchange story: a question, a flow that shows the whole mechanic,
      three numbered choices, the art, the money, an honest checklist, a glossary. */
@@ -218,11 +219,53 @@
     .gloss dt { border-bottom: none; padding-bottom: 2px; }
     .gloss dd { padding-top: 0; }
   }
+
+  /* ── The game's own look (src/ui.css): plum ink, bone text, Bread Island headings in cream,
+     Cabinet Grotesk everywhere else, a concrete panel like the title screen, cream buttons, pink signal. ── */
+  :root {
+    --bg: #2a2733;
+    --surface: #332f3e;
+    --surface-2: #3b3647;
+    --line: rgba(255, 250, 242, 0.14);
+    --ink: #fffaf2;
+    --muted: rgba(255, 250, 242, 0.72);
+    --faint: rgba(255, 250, 242, 0.46);
+    --cream: #f6e4b4;
+    --signal: #ff8fa6;
+    --orange: #ff8fa6;
+    --orange-soft: #ffb0c0;
+    --heading: 'Bread Island', Georgia, 'Times New Roman', serif;
+    --display: 'Cabinet Grotesk', 'Segoe UI', system-ui, sans-serif;
+    --mono: 'Cabinet Grotesk', 'Segoe UI', system-ui, sans-serif;
+    --concrete: linear-gradient(rgba(176, 156, 134, 0.34), rgba(176, 156, 134, 0.34)), url('brand/concrete.jpg') 0 0 / 520px repeat, #8a837b;
+  }
+  body { font-feature-settings: "tnum"; }
+  body::before, header.nav { background: rgba(42, 39, 51, 0.9); }
+  .mark { display: inline-flex; align-items: center; gap: 10px; font: 900 20px/1 var(--heading); letter-spacing: 0.12em; color: var(--cream); }
+  .mark img { width: 30px; height: auto; display: block; filter: drop-shadow(0 1px 4px rgba(20, 16, 30, 0.4)); }
+  h1, h2, .step h3 { font-family: var(--heading); color: var(--cream); letter-spacing: 0.01em; font-weight: 900; }
+  h1 { line-height: 0.95; }
+  /* a subtle bevel: light along the top edge, a soft shade along the bottom, a small drop */
+  .btn { border-radius: 10px; font-weight: 600; text-shadow: none;
+    box-shadow: inset 0 1px 0 rgba(255, 250, 242, 0.16), inset 0 -1px 0 rgba(0, 0, 0, 0.18), 0 1px 2px rgba(20, 16, 30, 0.25);
+    transition: transform 0.08s, box-shadow 0.12s, background 0.12s; }
+  .btn.hot, .seg input:checked + label { background: var(--cream); border-color: var(--cream); color: var(--bg);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75), inset 0 -2px 0 rgba(120, 96, 52, 0.18), 0 1px 2px rgba(20, 16, 30, 0.3), 0 4px 14px rgba(20, 16, 30, 0.18); }
+  .btn.hot:hover { background: #fff1cc; border-color: #fff1cc; }
+  .btn:active { transform: translateY(1px); box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2); }
+  .kicker, .chip { color: var(--signal); }
+  /* the hero sits on the title screen's concrete */
+  .hero { background: var(--concrete); padding-bottom: 72px; text-shadow: 0 1px 2px rgba(40, 32, 60, 0.45), 0 2px 12px rgba(40, 32, 60, 0.3); }
+  .hero p { color: rgba(255, 250, 242, 0.92); }
+  .hero .pill { border-color: rgba(255, 250, 242, 0.38); color: var(--ink); background: rgba(42, 39, 51, 0.28); }
+  .hero .btn:not(.hot) { border-color: rgba(255, 250, 242, 0.5); background: rgba(42, 39, 51, 0.3); }
+  .hero .flow { background: var(--bg); text-shadow: none; border-radius: 14px; border: none; margin-top: 64px; }
+  .hero .flow-cap { color: rgba(255, 250, 242, 0.9); }
 </style>
 
 <header class="nav pad">
   <div class="wrap">
-    <a class="mark" href="#top">HAM</a>
+    <a class="mark" href="https://ham-maze.vercel.app" aria-label="HAM: play the game"><img src="brand/logo.png" alt="" width="30" height="31"><span>HAM</span></a>
     <nav class="links" aria-label="Sections">
       <a href="#how">How it works</a>
       <a href="#scores">Scores</a>
@@ -548,13 +591,13 @@
     out.push(`<rect x="${potX - 40}" y="${potTop}" width="80" height="${potBot - potTop}" fill="#ff7a2e" opacity="0.35" filter="url(#fblur)"/>`);
     out.push(`<rect x="${potX - 13}" y="${potTop}" width="26" height="${potBot - potTop}" fill="url(#fpot)"/>`);
     out.push(`<rect x="${potX - 2}" y="${potTop}" width="4" height="${potBot - potTop}" fill="#fff4e8" opacity="0.8"/>`);
-    out.push(`<text x="${potX}" y="${potBot + 34}" text-anchor="middle" fill="#f3f1ed" font-family="IBM Plex Mono, monospace" font-size="14">0.34 ETH</text>`);
-    out.push(`<text x="${potX}" y="${potBot + 54}" text-anchor="middle" fill="#6d6974" font-family="IBM Plex Mono, monospace" font-size="11.5">39 runs, example day</text>`);
+    out.push(`<text x="${potX}" y="${potBot + 34}" text-anchor="middle" fill="#fffaf2" font-family="Cabinet Grotesk, sans-serif" font-size="14">0.34 ETH</text>`);
+    out.push(`<text x="${potX}" y="${potBot + 54}" text-anchor="middle" fill="#a9a3b3" font-family="Cabinet Grotesk, sans-serif" font-size="11.5">39 runs, example day</text>`);
     dests.forEach((d, i) => {
       if (d.art) out.push(nest(A.scoreSVG({ ...d.art, seed: todaySeed, uid: 'f' + i }), dx, d.y - 26, 52));
       else out.push(`<rect x="${dx + 8}" y="${d.y - 18}" width="36" height="36" rx="18" fill="none" stroke="${d.col}" stroke-width="1.5"/><circle cx="${dx + 26}" cy="${d.y}" r="6" fill="${d.col}"/>`);
-      out.push(`<text x="${dx + 70}" y="${d.y - 3}" fill="#f3f1ed" font-family="Jost, sans-serif" font-size="17" font-weight="500">${d.label} <tspan fill="${d.col}" font-family="IBM Plex Mono, monospace" font-size="14">${d.pct}</tspan></text>`);
-      out.push(`<text x="${dx + 70}" y="${d.y + 17}" fill="#a19da8" font-family="Jost, sans-serif" font-size="13">${d.sub}</text>`);
+      out.push(`<text x="${dx + 70}" y="${d.y - 3}" fill="#fffaf2" font-family="Cabinet Grotesk, sans-serif" font-size="17" font-weight="500">${d.label} <tspan fill="${d.col}" font-family="Cabinet Grotesk, sans-serif" font-size="14">${d.pct}</tspan></text>`);
+      out.push(`<text x="${dx + 70}" y="${d.y + 17}" fill="#d9d4cc" font-family="Cabinet Grotesk, sans-serif" font-size="13">${d.sub}</text>`);
     });
     out.push('</svg>');
     document.getElementById('flow').innerHTML = out.join('');
@@ -628,7 +671,7 @@
     s.push('<g fill="none" stroke="#ffffff" stroke-opacity="0.7" stroke-width="1.4" stroke-dasharray="0.1 7" stroke-linecap="round"><path d="M200 214 L104 300"/><path d="M200 214 L200 318"/><path d="M200 214 L296 300"/></g>');
     s.push(fig(200, 214, 3.2, '#ffe2c6'));
     s.push(fig(104, 300, 2.2, '#d8f4ff'), fig(200, 318, 2.2, '#d8f4ff'), fig(296, 300, 2.2, '#d8f4ff'));
-    s.push('<g font-family="Jost, sans-serif" fill="#0f2f2c"><text x="28" y="44" font-size="13" font-weight="600" letter-spacing="3">CREW OF 3</text><text x="372" y="44" text-anchor="end" font-size="13" font-family="IBM Plex Mono, monospace">5% &#8594; 10%</text></g></svg>');
+    s.push('<g font-family="Cabinet Grotesk, sans-serif" fill="#0f2f2c"><text x="28" y="44" font-size="13" font-weight="600" letter-spacing="3">CREW OF 3</text><text x="372" y="44" text-anchor="end" font-size="13" font-family="Cabinet Grotesk, sans-serif">5% &#8594; 10%</text></g></svg>');
     return s.join('');
   })();
   $('tokenVis').innerHTML = (function token() {
@@ -638,8 +681,8 @@
       <path d="M128 250 C190 250 220 210 258 206" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-dasharray="0.1 7" stroke-linecap="round"/>
       <ellipse cx="292" cy="300" rx="44" ry="9" fill="#1d1b27" opacity="0.18"/>
       <circle cx="292" cy="206" r="54" fill="url(#tcoin)"/><circle cx="292" cy="206" r="40" fill="none" stroke="#ffffff" stroke-opacity="0.6"/>
-      <text x="292" y="212" text-anchor="middle" font-family="Jost, sans-serif" font-size="17" font-weight="600" letter-spacing="2" fill="#1d1b27">PFWA</text>
-      <g fill="#1d1b27"><text x="28" y="44" font-family="Jost, sans-serif" font-size="13" font-weight="600" letter-spacing="3">TREASURY</text><text x="372" y="44" text-anchor="end" font-size="13" font-family="IBM Plex Mono, monospace">20% &#8594; buyback</text></g></svg>`;
+      <text x="292" y="212" text-anchor="middle" font-family="Cabinet Grotesk, sans-serif" font-size="17" font-weight="600" letter-spacing="2" fill="#1d1b27">PFWA</text>
+      <g fill="#1d1b27"><text x="28" y="44" font-family="Cabinet Grotesk, sans-serif" font-size="13" font-weight="600" letter-spacing="3">TREASURY</text><text x="372" y="44" text-anchor="end" font-size="13" font-family="Cabinet Grotesk, sans-serif">20% &#8594; buyback</text></g></svg>`;
   })();
 })();
 </script>

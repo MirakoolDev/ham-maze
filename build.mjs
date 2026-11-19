@@ -17,6 +17,8 @@ if (dev) {
   const writeLeaderboard = () => fs.writeFileSync('www/leaderboard.html', fill(fs.readFileSync('src/leaderboard.html', 'utf8'), '', '<script src="leaderboard.js"></script>'));
   fs.copyFileSync('assets/favicon.png', 'www/favicon.png');
   fs.copyFileSync('assets/favicon-180.png', 'www/favicon-180.png');
+  fs.mkdirSync('www/brand', { recursive: true });
+  for (const [from, to] of [['logo.png', 'logo.png'], ['bread-island.otf', 'bread-island.otf'], ['cabinet-grotesk.otf', 'cabinet-grotesk.otf'], ['concrete_albedo.jpg', 'concrete.jpg']]) fs.copyFileSync(`assets/${from}`, `www/brand/${to}`);
   writeHtml(); writeAdmin(); writeDeploy(); writeLeaderboard();
   const ctx = await esbuild.context({
     entryPoints: [{ in: 'src/boot.js', out: 'main' }, 'src/ui.css', 'src/admin.js', 'src/deploy.js', 'src/leaderboard.js'], bundle: true, outdir: 'www', format: 'iife', sourcemap: true, logLevel: 'info', loader,
@@ -58,6 +60,9 @@ if (dev) {
   // of their own), so wrap each in a real document here. They share design/nft/ham-art.js, the same
   // art the contracts are generated from. "Play" points at the game on this same domain.
   fs.copyFileSync('design/nft/ham-art.js', 'dist/ham-art.js');
+  // the game's own brand files, so the pages look like the game: logo, fonts, title-screen concrete
+  fs.mkdirSync('dist/brand', { recursive: true });
+  for (const [from, to] of [['logo.png', 'logo.png'], ['bread-island.otf', 'bread-island.otf'], ['cabinet-grotesk.otf', 'cabinet-grotesk.otf'], ['concrete_albedo.jpg', 'concrete.jpg']]) fs.copyFileSync(`assets/${from}`, `dist/brand/${to}`);
   const page = (src, out, desc) => {
     const body = fs.readFileSync(src, 'utf8')
       .replace(/<meta name="claude:viewport-fit-sides"[^>]*>\s*/, '')

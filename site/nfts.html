@@ -1,7 +1,8 @@
 <title>HAM Scores</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
+  @font-face { font-family: 'Bread Island'; src: url('brand/bread-island.otf') format('opentype'); font-display: swap; }
+  @font-face { font-family: 'Cabinet Grotesk'; src: url('brand/cabinet-grotesk.otf') format('opentype'); font-display: swap; }
   /* Layout: a quiet dark gallery in the portfolio's manner; the art carries all the colour. */
   :root {
     --bg: #0e0e10;
@@ -38,10 +39,23 @@
   .fields div { padding: 16px 0; border-bottom: 1px solid var(--line); min-width: 0; }
   .fields dt { font-family: var(--mono); font-size: 12px; color: var(--orange); }
   .fields dd { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+
+  /* the game's own look: plum ink, bone text, Bread Island in cream, Cabinet Grotesk, pink signal */
+  :root {
+    --bg: #2a2733; --line: rgba(255, 250, 242, 0.14); --ink: #fffaf2; --muted: rgba(255, 250, 242, 0.72);
+    --cream: #f6e4b4; --orange: #ff8fa6;
+    --display: 'Cabinet Grotesk', 'Segoe UI', system-ui, sans-serif; --mono: 'Cabinet Grotesk', 'Segoe UI', system-ui, sans-serif;
+  }
+  .mark { display: inline-flex; align-items: center; gap: 10px; font: 900 20px/1 'Bread Island', Georgia, serif; letter-spacing: 0.12em; color: var(--cream); text-decoration: none; }
+  .mark img { width: 30px; height: auto; display: block; }
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .top a.story { color: var(--muted); font-size: 14px; }
+  h1 { font-family: 'Bread Island', Georgia, serif; font-weight: 900; color: var(--cream); letter-spacing: 0.01em; }
+  .label { color: var(--orange); }
 </style>
 
 <div class="wrap">
-  <div class="mark">HAM</div>
+  <div class="top"><a class="mark" href="https://ham-maze.vercel.app" aria-label="HAM: play the game"><img src="brand/logo.png" alt="" width="30" height="31"><span>HAM</span></a><a class="story" href="story">How HAM works &#8594;</a></div>
   <h1>The Score is the maze, as far as you got.</h1>
   <p class="lede">Every run mints the day's real maze as a small floating model. The art never gives the maze away: while the day is live, every Score is sealed to the entrance corner. After 00:00 UTC the maze is retired forever and the Score develops, raising a round patch of walls as far as your run got. A radius, never a route.</p>
 
