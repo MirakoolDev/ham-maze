@@ -152,6 +152,8 @@ export function createRunner(scene) {
   const MUZZLE = V(0, BORE, -0.66);
   const GRIP_WRIST = V(), GUARD_WRIST = V();
   let armBones = [];
+  // the clip's pose, kept so each frame's IK and leans start from it (see r.update)
+  let clipPose = null;
 
   // every number of the hold lives in r.hold (tunable live from the character page, design/character)
   const r = { root, gun, ready: false, failed: false, show: false, hold: { ...HOLD } };
@@ -298,7 +300,13 @@ export function createRunner(scene) {
     if (sp < 0.4) play('idle', 1);
     else if (sp < 4.2) play('walk', dirSign * THREE.MathUtils.clamp(sp / 1.7, 0.7, 2));
     else play('run', dirSign * THREE.MathUtils.clamp(sp / 5.2, 0.85, 1.8));
+    // three's mixer only writes a bone when its keyed value changes, so a bone the clip holds still
+    // (the idle's chest) kept last frame's lean and IK and they stacked until the clip moved and
+    // snapped it back (the idle-aim glitch). Put the clip's pose back before the mixer runs.
+    if (!clipPose) { clipPose = []; root.traverse((o) => { if (o.isBone) clipPose.push({ o, q: o.quaternion.clone(), p: o.position.clone() }); }); }
+    for (const c of clipPose) { c.o.quaternion.copy(c.q); c.o.position.copy(c.p); }
     mixer.update(dt);
+    for (const c of clipPose) { c.q.copy(c.o.quaternion); c.p.copy(c.o.position); }
     root.updateMatrixWorld(true);
 
     const up = V(0, 1, 0);
