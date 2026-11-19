@@ -32,6 +32,10 @@
   label.sl { display: grid; grid-template-columns: 64px 1fr 44px; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin: 6px 0; }
   label.sl output { text-align: right; color: var(--bone); font-variant-numeric: tabular-nums; }
   input[type=range] { width: 100%; accent-color: var(--signal); }
+  .pose-h { font-size: 12px; color: var(--cream); margin: 10px 0 2px; }
+  #pose label.sl { grid-template-columns: 112px 1fr 44px; font-size: 12px; margin: 3px 0; }
+  #pose + .row { margin-top: 8px; }
+  #poseNote { word-break: break-all; user-select: all; }
   .parts label { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); margin: 0 10px 6px 0; }
   .note { font-size: 12px; color: var(--muted); margin: 12px 0 0; border-top: 1px solid var(--line); padding-top: 10px; }
   .hint { position: fixed; right: max(14px, env(safe-area-inset-right, 0px)); bottom: max(14px, env(safe-area-inset-bottom, 0px)); font-size: 12px; color: rgba(42, 39, 51, .7); }
@@ -56,6 +60,11 @@
 
   <h2>Body</h2>
   <div class="row" id="skins"></div>
+
+  <h2>Pose</h2>
+  <div id="pose"></div>
+  <div class="row"><button id="poseCopy">Copy values</button><button id="poseReset">Reset</button></div>
+  <p class="note" id="poseNote" hidden></p>
 
   <h2>Room</h2>
   <div class="row" id="rooms"></div>
@@ -179,6 +188,49 @@ const flashBall = new THREE.Mesh(new THREE.SphereGeometry(.035, 16, 12), new THR
 scene.add(flashBall);
 const tracer = new THREE.Mesh(new THREE.CylinderGeometry(.006, .006, 1, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, toneMapped: false }));
 tracer.geometry.rotateX(Math.PI / 2); tracer.geometry.translate(0, 0, .5); scene.add(tracer);
+
+// Pose: every number the hold is built from, editable live in the panel. "Copy values" gives the
+// JSON to bake back in as the defaults. Your edits are remembered in this browser.
+const POSE_SPEC = [
+  ['Carry (Idle, Walk, Run)'],
+  ['carryForward', 'Muzzle forward', -.5, 1.5, .3],
+  ['carryDown', 'Wrist down', -.5, 1, .25],
+  ['carryOut', 'Away from body', -.4, .4, .05],
+  ['Aim (Aim, Shoot, Run + shoot)'],
+  ['aimHeight', 'Hand height', 0, 1.2, .5],
+  ['aimReach', 'Reach', .15, .6, .36],
+  ['aimSide', 'Sideways', -.2, .2, .03],
+  ['aimTilt', 'Barrel tilt', -.4, .4, .02],
+  ['elbowOut', 'Elbows out', 0, 2, .7],
+  ['supportOut', 'Support hand out', 0, .15, .07],
+  ['supportDown', 'Support hand down', -.05, .12, .045],
+  ['Grip (both)'],
+  ['gripAlong', 'Gun along palm', .3, 1.2, .8],
+  ['gripDepth', 'Gun off palm', -.02, .08, .028],
+  ['curl', 'Finger curl', 0, 1.3, 1],
+];
+const POSE_DEFAULT = Object.fromEntries(POSE_SPEC.filter((s) => s.length > 1).map((s) => [s[0], s[4]]));
+const POSE = { ...POSE_DEFAULT };
+try { Object.assign(POSE, JSON.parse(localStorage.getItem('ham.pose') || '{}')); } catch {}
+function buildPose() {
+  $('pose').innerHTML = POSE_SPEC.map((s) => s.length === 1
+    ? `<div class="pose-h">${s[0]}</div>`
+    : `<label class="sl">${s[1]}<input type="range" data-k="${s[0]}" min="${s[2]}" max="${s[3]}" step="0.005" value="${POSE[s[0]]}"><output>${(+POSE[s[0]]).toFixed(3)}</output></label>`).join('');
+}
+buildPose();
+$('pose').addEventListener('input', (e) => {
+  const k = e.target.dataset.k; if (!k) return;
+  POSE[k] = +e.target.value;
+  e.target.nextElementSibling.textContent = POSE[k].toFixed(3);
+  try { localStorage.setItem('ham.pose', JSON.stringify(POSE)); } catch {}
+});
+$('poseReset').onclick = () => { Object.assign(POSE, POSE_DEFAULT); try { localStorage.removeItem('ham.pose'); } catch {} buildPose(); };
+$('poseCopy').onclick = async () => {
+  const txt = JSON.stringify(Object.fromEntries(Object.entries(POSE).map(([k, v]) => [k, +(+v).toFixed(3)])));
+  const note = $('poseNote'); note.hidden = false;
+  try { await navigator.clipboard.writeText(txt); note.textContent = 'Copied. Paste it to Claude to make it the default.'; }
+  catch { note.textContent = txt; getSelection().selectAllChildren(note); }
+};
 
 // State
 const state = { move: 'idle', gun: 'k7', skin: 'file', room: 'pink', speed: 1, fireT: 9, nextShot: 0, recoil: 0 };
@@ -402,7 +454,7 @@ function holdGun(kick) {
   const fwd = f.clone().addScaledVector(a, -f.dot(a)).normalize();
   _gb.makeBasis(new THREE.Vector3().crossVectors(a, fwd), a, fwd);
   gunObj.quaternion.setFromRotationMatrix(_gb);
-  const inFist = w.clone().lerp(mid, .8).addScaledVector(n, .028).addScaledVector(fwd, -kick * .02);
+  const inFist = w.clone().lerp(mid, POSE.gripAlong).addScaledVector(n, POSE.gripDepth).addScaledVector(fwd, -kick * .02);
   gunObj.position.copy(inFist).sub(GRIP_LOCAL.clone().applyQuaternion(gunObj.quaternion));
 }
 
@@ -435,25 +487,26 @@ function tick() {
       // chest, elbows bent and dropped (two-bone IK). Gun hand thumb-up with the barrel straight ahead;
       // the support hand comes from the left, fingers wrapped over the gun hand's fingers.
       const chest = P(bones.Spine2), neck = P(bones.Neck);
-      const hand = chest.clone().add(V(-.03, (neck.y - chest.y) * .5 + kick * .03, .36 - kick * .03));
-      reach(bones.RightArm, bones.RightForeArm, bones.RightHand, hand, V(-.7, -1, -.1));
-      orientHand('Right', V(0, .02 + kick * .35, 1), V(.12, 1, 0));
+      const hand = chest.clone().add(V(-POSE.aimSide, (neck.y - chest.y) * POSE.aimHeight + kick * .03, POSE.aimReach - kick * .03));
+      reach(bones.RightArm, bones.RightForeArm, bones.RightHand, hand, V(-POSE.elbowOut, -1, -.1));
+      orientHand('Right', V(0, POSE.aimTilt + kick * .35, 1), V(.12, 1, 0));
       const g = handFrame('Right');
-      const support = g.w.clone().addScaledVector(g.n, .07).addScaledVector(g.a, -.045).addScaledVector(g.f, .01);
-      reach(bones.LeftArm, bones.LeftForeArm, bones.LeftHand, support, V(.7, -1, -.1));
+      const support = g.w.clone().addScaledVector(g.n, POSE.supportOut).addScaledVector(g.a, -POSE.supportDown).addScaledVector(g.f, .01);
+      reach(bones.LeftArm, bones.LeftForeArm, bones.LeftHand, support, V(POSE.elbowOut, -1, -.1));
       orientHand('Left', V(-.85, -.1, .5), V(.15, 1, .2));
-      curl('Left', [55, 125, 185], false);
+      curl('Left', [55, 125, 185].map((d) => d * POSE.curl), false);
       if (m !== 'rungun') point(bones.Head, bones.HeadTop_End, V(0, 1, .12));
       if (m !== 'aim' && t >= state.nextShot) {
         state.fireT = 0; state.recoil = 1;
         state.nextShot = t + 60 / GUNS[state.gun].rpm / Math.max(state.speed, .1);
       }
     } else {
-      // carrying at low ready: keep the clip's arm swing, turn the wrist so the barrel points ahead,
-      // down and a little out from the body, thumb side up
-      orientHand('Right', V(-.18, -.7, 1), V(-.1, 1, .5));
+      // carrying at the side: the hand hangs in line with the forearm, muzzle down and a little
+      // ahead of the feet, index knuckle facing forward
+      const fore = P(bones.RightHand).sub(P(bones.RightForeArm)).normalize();
+      orientHand('Right', fore.add(V(-POSE.carryOut, -POSE.carryDown, POSE.carryForward)), V(-.1, .25, 1));
     }
-    curl('Right', [80, 170, 245], true);
+    curl('Right', [80, 170, 245].map((d) => d * POSE.curl), true);
     holdGun(kick);
   }
   // flash, tracer, recoil decay
