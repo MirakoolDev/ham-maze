@@ -75,7 +75,7 @@ hud.setKills(0, DRONES);
 const touchUi = document.getElementById('touch');
 
 const state = { mode: 'title', t: 0, elapsed: 0, timerOn: false, retries: 0, hp: MAX_HP, sinceHurt: 99 };
-window.__maze = { maze, world, player, state, scene, camera, enemies, weapon, render: () => draw(), tick: (dt, inp) => tick(dt, inp) }; // debugging handle
+window.__maze = { maze, world, player, state, scene, camera, enemies, weapon, runner: () => runner, render: () => draw(), tick: (dt, inp) => tick(dt, inp) }; // debugging handle
 
 const settings = createSettings({ touch: input.touch });
 const post = createPost(renderer, scene, camera, weapon);
