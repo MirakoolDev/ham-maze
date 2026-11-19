@@ -238,6 +238,9 @@
     --display: 'Cabinet Grotesk', 'Segoe UI', system-ui, sans-serif;
     --mono: 'Cabinet Grotesk', 'Segoe UI', system-ui, sans-serif;
     --concrete: linear-gradient(rgba(176, 156, 134, 0.34), rgba(176, 156, 134, 0.34)), url('brand/concrete.jpg') 0 0 / 520px repeat, #8a837b;
+    /* the maze walls: pink faces and pale blue faces, the same concrete underneath, as lit in the game */
+    --wall-pink: linear-gradient(rgba(214, 150, 180, 0.62), rgba(214, 150, 180, 0.62)), url('brand/concrete.jpg') 0 0 / 520px repeat, #b4889f;
+    --wall-blue: linear-gradient(rgba(140, 180, 224, 0.6), rgba(140, 180, 224, 0.6)), url('brand/concrete.jpg') 0 0 / 520px repeat, #8fa9c9;
   }
   body { font-feature-settings: "tnum"; }
   body::before, header.nav { background: rgba(42, 39, 51, 0.9); }
@@ -255,7 +258,7 @@
   .btn:active { transform: translateY(1px); box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2); }
   .kicker, .chip { color: var(--signal); }
   /* the hero sits on the title screen's concrete */
-  .hero { background: var(--concrete); padding-bottom: 72px; text-shadow: 0 1px 2px rgba(40, 32, 60, 0.45), 0 2px 12px rgba(40, 32, 60, 0.3); }
+  .hero { background: var(--wall-pink); padding-bottom: 72px; text-shadow: 0 1px 2px rgba(40, 32, 60, 0.45), 0 2px 12px rgba(40, 32, 60, 0.3); }
   .hero p { color: rgba(255, 250, 242, 0.92); }
   .hero .pill { border-color: rgba(255, 250, 242, 0.38); color: var(--ink); background: rgba(42, 39, 51, 0.28); }
   .hero .btn:not(.hot) { border-color: rgba(255, 250, 242, 0.5); background: rgba(42, 39, 51, 0.3); }
@@ -423,7 +426,7 @@
       <div class="strip-head"><h3>One day, many runs</h3><span>Same maze, different reach. A day's Scores form a set.</span></div>
       <div class="strip" id="strip"></div>
 
-      <div class="strip-head"><h3>Five rooms</h3><span>Each day draws one, after the portfolio.</span></div>
+      <div class="strip-head"><h3>Five rooms</h3><span>The maze picks one each day. Every Score from that day is drawn in it.</span></div>
       <div class="rooms" id="rooms"></div>
     </div>
   </section>
