@@ -49,7 +49,6 @@
 
   <h2>Move</h2>
   <div class="row" id="moves"></div>
-  <label class="sl" id="scrubRow" hidden>Clip time<input type="range" id="scrub" min="0" max="1" step="0.001" value="0"><output id="scrubV">0.0s</output></label>
   <label class="sl">Speed<input type="range" id="speed" min="0" max="2" step="0.05" value="1"><output id="speedV">1.00</output></label>
 
   <h2>Gun</h2>
@@ -182,66 +181,114 @@ tracer.geometry.rotateX(Math.PI / 2); tracer.geometry.translate(0, 0, .5); scene
 
 // State
 const state = { move: 'idle', gun: 'k7', skin: 'file', room: 'pink', speed: 1, fireT: 9, nextShot: 0, recoil: 0 };
-let model, mixer, action, clipDur = 0, bones = {}, gunObj, meshes = [], hipsLock = null;
+let model, mixer, bones = {}, gunObj, meshes = [], actions = {}, current = null, fallback = false;
+const P = (o) => o.getWorldPosition(new THREE.Vector3());
+const Q = (o) => o.getWorldQuaternion(new THREE.Quaternion());
+const boneMap = (root) => { const m = {}; root.traverse((o) => { if (o.isBone) m[o.name.replace(/^mixamorig:?/, '')] = o; }); return m; };
 
-const loader = new GLTFLoader();
-loader.load('hamrunner.glb', (gltf) => {
-  model = gltf.scene;
-  model.traverse((o) => {
-    if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; meshes.push(o); }
-    if (o.isBone) bones[o.name.replace(/^mixamorig:?/, '')] = o;
-  });
-
-  // Stand it up: the file's armature carries an odd rotation. Measure the rig in bind pose and turn
-  // a wrapper so hips->head is +y and the chest faces +z, then scale it to 1.75 m and plant it on the plinth.
-  const wrap = new THREE.Group(); wrap.add(model); scene.add(wrap);
+// Stand a rig up: turn its wrapper so hips->head is +y and the chest faces +z, scale it to `height`,
+// and (for the runner) plant it on the plinth. Works whatever rotation the file's armature carries.
+function standUp(wrap, root, b, height, plant) {
   wrap.updateMatrixWorld(true);
-  const P = (b) => b.getWorldPosition(new THREE.Vector3());
-  const up = P(bones.Head).sub(P(bones.Hips)).normalize();
-  const side = P(bones.RightArm).sub(P(bones.LeftArm)).normalize();      // toward the character's right
+  const up = P(b.Head).sub(P(b.Hips)).normalize();
+  const side = P(b.RightArm).sub(P(b.LeftArm)).normalize();
   const fwd = new THREE.Vector3().crossVectors(side, up).normalize().negate();
   side.crossVectors(up, fwd).normalize().negate();
-  const basis = new THREE.Matrix4().makeBasis(side.clone().negate(), up, fwd); // character left = +x when facing +z
-  wrap.quaternion.setFromRotationMatrix(basis).invert();
+  wrap.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(side.clone().negate(), up, fwd)).invert();
   wrap.updateMatrixWorld(true);
-  const box = new THREE.Box3().setFromObject(model, true);
-  const h = box.max.y - box.min.y;
-  wrap.scale.setScalar(1.75 / h);
+  const box = new THREE.Box3().setFromObject(root, true);
+  wrap.scale.setScalar(height / (box.max.y - box.min.y));
   wrap.updateMatrixWorld(true);
-  box.setFromObject(model, true);
+  if (!plant) return;
+  box.setFromObject(root, true);
   const c = box.getCenter(new THREE.Vector3());
   wrap.position.set(-c.x, .06 - box.min.y, -c.z);
   wrap.updateMatrixWorld(true);
-  state.wrap = wrap;
+}
 
-  // Animation from the file
-  mixer = new THREE.AnimationMixer(model);
-  const clip = gltf.animations[0];
-  if (clip) {
-    clipDur = clip.duration;
-    action = mixer.clipAction(clip);
-    // If the hips travel (root motion), keep the runner on the plinth: lock the axis that drifts.
-    const tr = clip.tracks.find((t) => t.name === bones.Hips.name + '.position');
-    if (tr) {
-      const v = tr.values, n = v.length / 3, lock = [];
-      for (let a = 0; a < 3; a++) {
-        let lo = Infinity, hi = -Infinity;
-        for (let i = 0; i < n; i++) { lo = Math.min(lo, v[i * 3 + a]); hi = Math.max(hi, v[i * 3 + a]); }
-        if (Math.abs(v[(n - 1) * 3 + a] - v[a]) > (hi - lo) * .5 && hi - lo > 1e-3) lock.push(a);
-      }
-      if (lock.length) hipsLock = { axes: lock, base: bones.Hips.position.clone() };
+// Retarget a clip from another Mixamo rig onto the runner. The two files store different rest
+// rotations per bone, so tracks can't be copied as they are: sample the source at 30 fps, take each
+// bone's world-space turn away from its rest pose, apply that turn to the runner's matching bone,
+// and convert back to local rotations. Hips height follows too; forward drift is dropped so it runs in place.
+function retarget(clip, src, sb, sRest, rest) {
+  const order = [];
+  model.traverse((o) => { if (o.isBone) { const k = o.name.replace(/^mixamorig:?/, ''); if (sb[k] && rest[k]) order.push(k); } });
+  const keyOf = new Map(order.map((k) => [bones[k], k]));
+  const fixedParent = {};
+  for (const k of order) if (!keyOf.has(bones[k].parent)) fixedParent[k] = Q(bones[k].parent);
+  const hipsToLocal = bones.Hips.parent.matrixWorld.clone().invert();
+  const mx = new THREE.AnimationMixer(src);
+  mx.clipAction(clip).play();
+  const fps = 30, n = Math.max(2, Math.ceil(clip.duration * fps) + 1);
+  const times = new Float32Array(n), hips = new Float32Array(n * 3), out = {};
+  for (const k of order) out[k] = new Float32Array(n * 4);
+  const world = {}, inv = new THREE.Quaternion(), loc = new THREE.Quaternion();
+  for (let i = 0; i < n; i++) {
+    const t = Math.min(i / fps, clip.duration);
+    times[i] = t;
+    mx.setTime(t);
+    src.updateMatrixWorld(true);
+    for (const k of order) {
+      const w = Q(sb[k]).multiply(inv.copy(sRest[k].q).invert()).multiply(rest[k].q);
+      world[k] = w;
+      const pw = keyOf.has(bones[k].parent) ? world[keyOf.get(bones[k].parent)] : fixedParent[k];
+      loc.copy(pw).invert().multiply(w);
+      if (i && loc.x * out[k][i * 4 - 4] + loc.y * out[k][i * 4 - 3] + loc.z * out[k][i * 4 - 2] + loc.w * out[k][i * 4 - 1] < 0) loc.set(-loc.x, -loc.y, -loc.z, -loc.w);
+      loc.toArray(out[k], i * 4);
     }
+    const dp = P(sb.Hips).sub(sRest.Hips.p); dp.z = 0;
+    rest.Hips.p.clone().add(dp).applyMatrix4(hipsToLocal).toArray(hips, i * 3);
   }
+  const tracks = order.map((k) => new THREE.QuaternionKeyframeTrack(bones[k].name + '.quaternion', times, out[k]));
+  tracks.push(new THREE.VectorKeyframeTrack(bones.Hips.name + '.position', times, hips));
+  return new THREE.AnimationClip(clip.name, clip.duration, tracks);
+}
 
-  // Parts list
+// Clips: Mixamo moves from the three.js example rig (Xbot), retargeted onto the runner
+const LIB = 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r180/examples/models/gltf/Xbot.glb';
+const LIB_CLIPS = { idle: 'idle', walk: 'walk', run: 'run', agree: 'agree', shake: 'headShake' };
+const MOVES = { idle: 'Idle', walk: 'Walk', run: 'Run', agree: 'Nod', shake: 'Head shake', aim: 'Aim', shoot: 'Shoot', rungun: 'Run + shoot' };
+const BASE = { idle: 'idle', walk: 'walk', run: 'run', agree: 'agree', shake: 'shake', aim: 'idle', shoot: 'idle', rungun: 'run' };
+
+const loader = new GLTFLoader();
+try {
+  const gltf = await loader.loadAsync('hamrunner.glb');
+  model = gltf.scene;
+  model.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; meshes.push(o); } });
+  bones = boneMap(model);
+  const wrap = new THREE.Group(); wrap.add(model); scene.add(wrap);
+  standUp(wrap, model, bones, 1.75, true);
+  const rest = {};
+  for (const [k, b] of Object.entries(bones)) rest[k] = { q: Q(b), p: P(b) };
+  model.traverse((o) => { if (o.isBone) o.userData.rest = { p: o.position.clone(), q: o.quaternion.clone() }; });
+  mixer = new THREE.AnimationMixer(model);
+
   $('parts').innerHTML = meshes.map((m, i) => `<label><input type="checkbox" data-i="${i}" checked>${m.name.replace(/\d*\.?obj(mesh)?.*$/, '').replace(/_/g, ' ')}</label>`).join('');
   $('parts').addEventListener('change', (e) => { const m = meshes[e.target.dataset.i]; if (m) m.visible = e.target.checked; });
+  setSkin(state.skin); setGun(state.gun);
+  $('load').textContent = 'Fitting the moves…';
 
-  $('info').textContent = `${meshes.length} meshes, ${Object.keys(bones).length} Mixamo bones, ${gltf.animations.length} clip (${clipDur.toFixed(1)}s). Idle, Aim and Shoot are posed in code on top of the rig; more Mixamo clips can drop straight in.`;
-  model.traverse((o) => { if (o.isBone) o.userData.rest = { p: o.position.clone(), q: o.quaternion.clone() }; });
-  setSkin(state.skin); setGun(state.gun); setMove(state.move);
+  try {
+    const lib = await loader.loadAsync(LIB);
+    const src = lib.scene, sb = boneMap(src);
+    const sw = new THREE.Group(); sw.add(src);
+    standUp(sw, src, sb, 1.75, false);
+    const sRest = {};
+    for (const [k, b] of Object.entries(sb)) sRest[k] = { q: Q(b), p: P(b) };
+    for (const [key, name] of Object.entries(LIB_CLIPS)) {
+      const clip = lib.animations.find((a) => a.name === name);
+      if (clip) actions[key] = mixer.clipAction(retarget(clip, src, sb, sRest, rest));
+    }
+  } catch (e) { console.warn('Clip library failed, falling back to code poses', e); }
+  fallback = !actions.idle;
+
+  mk('moves', fallback ? { idle: 'Idle', aim: 'Aim', shoot: 'Shoot' } : MOVES, setMove);
+  $('info').textContent = fallback
+    ? `${meshes.length} meshes, ${Object.keys(bones).length} Mixamo bones. Couldn't reach the clip library, so these poses are set in code.`
+    : `${meshes.length} meshes, ${Object.keys(bones).length} Mixamo bones. Idle, walk, run, nod and head shake are Mixamo clips retargeted onto the runner; aim and recoil are layered on in code.`;
+  setMove('idle');
   $('load').hidden = true;
-}, undefined, (err) => { $('load').textContent = 'Could not load hamrunner.glb'; console.error(err); });
+} catch (err) { $('load').textContent = 'Could not load hamrunner.glb'; console.error(err); }
 
 function setSkin(k) {
   state.skin = k;
@@ -258,103 +305,84 @@ function setGun(k) {
 }
 function setMove(k) {
   state.move = k;
-  const clipMove = k === 'clip' || k === 'rungun';
-  if (action) { if (clipMove) { action.reset().play(); action.paused = false; } else { action.stop(); } }
-  $('scrubRow').hidden = !clipMove;
+  const next = actions[BASE[k]];
+  if (next && next !== current) {
+    next.reset().setEffectiveWeight(1).fadeIn(.3).play();
+    if (current) current.fadeOut(.3);
+    current = next;
+  }
   press('moves', k);
 }
 function press(group, k) { for (const b of $(group).children) b.setAttribute('aria-pressed', String(b.dataset.k === k)); }
 
 // UI
-const MOVES = { idle: 'Idle', aim: 'Aim', shoot: 'Shoot', clip: 'Clip from file', rungun: 'Clip + gun' };
-const mk = (box, items, fn, dot) => { for (const [k, v] of Object.entries(items)) {
+function mk(box, items, fn, dot) { for (const [k, v] of Object.entries(items)) {
   const b = document.createElement('button'); b.dataset.k = k;
   b.innerHTML = (dot ? `<span class="dot" style="background:${dot(v)}"></span>` : '') + (v.name || v);
-  b.onclick = () => fn(k); $(box).append(b); } };
-mk('moves', MOVES, setMove);
+  b.onclick = () => fn(k); $(box).append(b); } }
 mk('guns', GUNS, setGun, (g) => g.accent);
 mk('skins', SKINS, setSkin);
 mk('rooms', ROOMS, (k) => { setRoom(k); press('rooms', k); }, (r) => '#' + r.bg.getHexString());
 setRoom(state.room); press('rooms', state.room);
+press('guns', state.gun); press('skins', state.skin);
 $('speed').oninput = (e) => { state.speed = +e.target.value; $('speedV').textContent = state.speed.toFixed(2); };
-$('scrub').oninput = (e) => { if (action) { action.time = +e.target.value * clipDur; action.paused = true; } };
-$('scrub').onchange = () => { if (action) action.paused = false; };
-canvas.addEventListener('dblclick', () => fire(true));
+canvas.addEventListener('dblclick', () => { state.fireT = 0; state.recoil = 1; });
 
-// Pose helpers: turn a bone so the direction to its child points along `dir` (world space), blended by w.
+// Pose helper: turn a bone so the direction to its child points along `dir` (world space).
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _q = new THREE.Quaternion(), _pq = new THREE.Quaternion(), _wq = new THREE.Quaternion();
-function point(bone, child, dir, w = 1) {
+function point(bone, child, dir) {
   bone.getWorldPosition(_a); child.getWorldPosition(_b);
-  const cur = _b.sub(_a).normalize();
-  _q.setFromUnitVectors(cur, dir.clone().normalize());
-  if (w < 1) _q.slerp(new THREE.Quaternion(), 1 - w);
-  bone.getWorldQuaternion(_wq);
-  _wq.premultiply(_q);
+  _q.setFromUnitVectors(_b.sub(_a).normalize(), dir.clone().normalize());
+  bone.getWorldQuaternion(_wq).premultiply(_q);
   bone.parent.getWorldQuaternion(_pq);
   bone.quaternion.copy(_pq.invert().multiply(_wq));
   bone.updateMatrixWorld(true);
 }
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
-const UP = V(0, 1, 0), FWD = V(0, 0, 1), RIGHT = V(-1, 0, 0);
-
-function fire(force) {
-  if (!force && state.move !== 'shoot' && state.move !== 'rungun') return;
-  state.fireT = 0; state.recoil = 1;
-}
 
 const clock = new THREE.Clock();
 function tick() {
   const dt = Math.min(clock.getDelta(), .05) * state.speed;
   const t = clock.elapsedTime;
-  if (model) {
+  if (model && gunObj) {
     const m = state.move;
-    // reset to bind pose for code-posed moves, run the clip otherwise
-    if (m === 'clip' || m === 'rungun') {
+    if (!fallback) {
       mixer.update(dt);
-      if (hipsLock) for (const a of hipsLock.axes) bones.Hips.position.setComponent(a, hipsLock.base.getComponent(a));
-      if (!$('scrubRow').hidden && action && !action.paused) $('scrub').value = (action.time % clipDur) / clipDur;
-      $('scrubV').textContent = (action ? action.time % clipDur : 0).toFixed(1) + 's';
+      model.updateMatrixWorld(true);
     } else {
+      // no clips: start from rest and pose the arms down with a little breathing
       model.traverse((o) => { if (o.isBone && o.userData.rest) { o.position.copy(o.userData.rest.p); o.quaternion.copy(o.userData.rest.q); } });
-    }
-    model.updateMatrixWorld(true);
-
-    const aiming = m === 'aim' || m === 'shoot' || m === 'rungun';
-    const breathe = Math.sin(t * 2.1 * state.speed) * .5 + .5;
-    if (m !== 'clip' && m !== 'rungun') {
-      // stand: arms down, slight breathing
-      point(bones.Spine2, bones.Neck, V(0, 1, .04 + breathe * .02));
+      model.updateMatrixWorld(true);
+      point(bones.Spine2, bones.Neck, V(0, 1, .04 + (Math.sin(t * 2.1) * .5 + .5) * .02));
       point(bones.LeftArm, bones.LeftForeArm, V(.18, -1, .02));
       point(bones.LeftForeArm, bones.LeftHand, V(.08, -1, .22));
-      point(bones.Head, bones.HeadTop_End, V(0, 1, .08));
+      if (m === 'idle') {
+        point(bones.RightArm, bones.RightForeArm, V(-.2, -1, .05));
+        point(bones.RightForeArm, bones.RightHand, V(-.05, -.55, .85));
+      }
     }
-    if (m === 'idle') {
-      point(bones.RightArm, bones.RightForeArm, V(-.2, -1, .05));
-      point(bones.RightForeArm, bones.RightHand, V(-.05, -.55, .85)); // gun held low, pointing ahead
-    }
-    if (aiming) {
-      // two-handed aim, gun at eye line in front of the chest; recoil kicks the arms up
-      const chest = bones.Spine2.getWorldPosition(new THREE.Vector3());
-      const sh = bones.RightArm.getWorldPosition(new THREE.Vector3());
+
+    if (m === 'aim' || m === 'shoot' || m === 'rungun') {
+      // two-handed aim layered over the clip: gun at eye line in front of the chest, recoil kicks it up
+      const chest = P(bones.Spine2);
       const aimPt = chest.clone().add(V(-.04, .2, .42));
-      point(bones.RightArm, bones.RightForeArm, aimPt.clone().sub(sh));
-      point(bones.RightForeArm, bones.RightHand, V(0, .02 + state.recoil * .3, 1)); // barrel level, kicks up on each shot
-      const grip = bones.RightHand.getWorldPosition(new THREE.Vector3()).add(V(0, -.02, .04));
-      point(bones.LeftArm, bones.LeftForeArm, grip.clone().sub(bones.LeftArm.getWorldPosition(new THREE.Vector3())));
-      point(bones.LeftForeArm, bones.LeftHand, grip.clone().sub(bones.LeftForeArm.getWorldPosition(new THREE.Vector3())));
-      point(bones.Head, bones.HeadTop_End, V(0, 1, .2));
+      point(bones.RightArm, bones.RightForeArm, aimPt.clone().sub(P(bones.RightArm)));
+      point(bones.RightForeArm, bones.RightHand, V(0, .02 + state.recoil * .3, 1));
+      const grip = P(bones.RightHand).add(V(0, -.02, .04));
+      point(bones.LeftArm, bones.LeftForeArm, grip.clone().sub(P(bones.LeftArm)));
+      point(bones.LeftForeArm, bones.LeftHand, grip.clone().sub(P(bones.LeftForeArm)));
+      if (m !== 'rungun') point(bones.Head, bones.HeadTop_End, V(0, 1, .2));
+      if (m !== 'aim' && t >= state.nextShot) {
+        state.fireT = 0; state.recoil = 1;
+        state.nextShot = t + 60 / GUNS[state.gun].rpm / Math.max(state.speed, .1);
+      }
     }
 
     // gun in the right hand, barrel along the forearm
-    const hand = bones.RightHand.getWorldPosition(new THREE.Vector3());
-    const fore = bones.RightForeArm.getWorldPosition(new THREE.Vector3());
-    const dir = hand.clone().sub(fore).normalize();
+    const hand = P(bones.RightHand);
+    const dir = hand.clone().sub(P(bones.RightForeArm)).normalize();
     gunObj.position.copy(hand).addScaledVector(dir, .03 - state.recoil * .03);
-    gunObj.up.copy(UP);
     gunObj.lookAt(gunObj.position.clone().add(dir));
-
-    // auto fire
-    if ((m === 'shoot' || m === 'rungun') && t >= state.nextShot) { fire(); state.nextShot = t + 60 / GUNS[state.gun].rpm / Math.max(state.speed, .1); }
   }
   // flash, tracer, recoil decay
   state.fireT += dt; state.recoil = Math.max(0, state.recoil - dt * 9);
