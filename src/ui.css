@@ -317,3 +317,6 @@ kbd { font: 500 11px/1 var(--f-label); color: #5b5866; background: #fff; border:
 .m-powerup[hidden] { display: none; }
 .m-powerup-k { font: 500 12px/1.35 var(--f-label); color: var(--bone); flex: 1; }
 .btn.small { font-size: 12px; letter-spacing: .08em; padding: 8px 14px; flex: none; }
+
+/* /practice: a pill before the maze number */
+.m-no .m-practice { display: inline-block; font: 600 11px/1 var(--f-label); letter-spacing: .16em; text-transform: uppercase; color: #2a2733; background: #f6e4b4; border-radius: 6px; padding: 4px 7px 3px; margin-right: 6px; vertical-align: 1px; }

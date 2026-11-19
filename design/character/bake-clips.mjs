@@ -1,0 +1,84 @@
+// Bakes the runner's animation clips: retargets Mixamo idle / walk / run from the three.js example
+// rig (Xbot, same Mixamo skeleton) onto hamrunner.glb and writes them as plain three.js clip JSON,
+// so the game loads them with the model and never fetches anything else at runtime.
+// Run: node design/character/bake-clips.mjs   ->  assets/runner.glb, assets/runner-clips.json
+import fs from 'node:fs';
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+
+const XBOT = 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r180/examples/models/gltf/Xbot.glb';
+const CLIPS = { idle: 'idle', walk: 'walk', run: 'run' };
+
+const parse = (buf) => new Promise((res, rej) => new GLTFLoader().parse(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength), '', res, rej));
+const P = (o) => o.getWorldPosition(new THREE.Vector3());
+const Q = (o) => o.getWorldQuaternion(new THREE.Quaternion());
+const boneMap = (root) => { const m = {}; root.traverse((o) => { if (o.isBone) m[o.name.replace(/^mixamorig:?/, '')] = o; }); return m; };
+
+// Same as the preview page: turn a rig so hips->head is +y and the chest faces +z, at a set height.
+function standUp(wrap, root, b, height) {
+  wrap.updateMatrixWorld(true);
+  const up = P(b.Head).sub(P(b.Hips)).normalize();
+  const side = P(b.RightArm).sub(P(b.LeftArm)).normalize();
+  const fwd = new THREE.Vector3().crossVectors(side, up).normalize().negate();
+  side.crossVectors(up, fwd).normalize().negate();
+  wrap.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(side.clone().negate(), up, fwd)).invert();
+  wrap.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(root, true);
+  wrap.scale.setScalar(height / (box.max.y - box.min.y));
+  wrap.updateMatrixWorld(true);
+}
+
+// World-space retarget (see design/character/index.html for the reasoning).
+function retarget(clip, model, bones, rest, src, sb, sRest) {
+  const order = [];
+  model.traverse((o) => { if (o.isBone) { const k = o.name.replace(/^mixamorig:?/, ''); if (sb[k] && rest[k]) order.push(k); } });
+  const keyOf = new Map(order.map((k) => [bones[k], k]));
+  const fixedParent = {};
+  for (const k of order) if (!keyOf.has(bones[k].parent)) fixedParent[k] = Q(bones[k].parent);
+  const hipsToLocal = bones.Hips.parent.matrixWorld.clone().invert();
+  const mx = new THREE.AnimationMixer(src);
+  mx.clipAction(clip).play();
+  const fps = 30, n = Math.max(2, Math.ceil(clip.duration * fps) + 1);
+  const times = new Float32Array(n), hips = new Float32Array(n * 3), out = {};
+  for (const k of order) out[k] = new Float32Array(n * 4);
+  const world = {}, inv = new THREE.Quaternion(), loc = new THREE.Quaternion();
+  for (let i = 0; i < n; i++) {
+    const t = Math.min(i / fps, clip.duration);
+    times[i] = t;
+    mx.setTime(t);
+    src.updateMatrixWorld(true);
+    for (const k of order) {
+      const w = Q(sb[k]).multiply(inv.copy(sRest[k].q).invert()).multiply(rest[k].q);
+      world[k] = w;
+      const pw = keyOf.has(bones[k].parent) ? world[keyOf.get(bones[k].parent)] : fixedParent[k];
+      loc.copy(pw).invert().multiply(w);
+      if (i && loc.x * out[k][i * 4 - 4] + loc.y * out[k][i * 4 - 3] + loc.z * out[k][i * 4 - 2] + loc.w * out[k][i * 4 - 1] < 0) loc.set(-loc.x, -loc.y, -loc.z, -loc.w);
+      loc.toArray(out[k], i * 4);
+    }
+    const dp = P(sb.Hips).sub(sRest.Hips.p); dp.z = 0;
+    rest.Hips.p.clone().add(dp).applyMatrix4(hipsToLocal).toArray(hips, i * 3);
+  }
+  const round = (a, d) => Array.from(a, (v) => Math.round(v * d) / d);
+  const tracks = order.map((k) => new THREE.QuaternionKeyframeTrack(bones[k].name + '.quaternion', round(times, 1e4), round(out[k], 1e4)));
+  tracks.push(new THREE.VectorKeyframeTrack(bones.Hips.name + '.position', round(times, 1e4), round(hips, 1e4)));
+  return new THREE.AnimationClip(clip.name, clip.duration, tracks);
+}
+
+const own = await parse(fs.readFileSync('design/character/hamrunner.glb'));
+const lib = await parse(Buffer.from(await (await fetch(XBOT)).arrayBuffer()));
+const model = own.scene, bones = boneMap(model);
+const wrap = new THREE.Group(); wrap.add(model); standUp(wrap, model, bones, 1.75);
+const rest = {}; for (const [k, b] of Object.entries(bones)) rest[k] = { q: Q(b), p: P(b) };
+const src = lib.scene, sb = boneMap(src);
+const sw = new THREE.Group(); sw.add(src); standUp(sw, src, sb, 1.75);
+const sRest = {}; for (const [k, b] of Object.entries(sb)) sRest[k] = { q: Q(b), p: P(b) };
+
+const out = {};
+for (const [key, name] of Object.entries(CLIPS)) {
+  const clip = lib.animations.find((a) => a.name === name);
+  if (!clip) throw new Error('missing clip ' + name);
+  out[key] = THREE.AnimationClip.toJSON(retarget(clip, model, bones, rest, src, sb, sRest));
+}
+fs.writeFileSync('assets/runner-clips.json', JSON.stringify(out));
+fs.copyFileSync('design/character/hamrunner.glb', 'assets/runner.glb');
+console.log('wrote assets/runner-clips.json', (fs.statSync('assets/runner-clips.json').size / 1024).toFixed(0), 'KB, assets/runner.glb');

@@ -10,8 +10,11 @@ const fill = (html, css, js) => html.replace('<!--CSS-->', () => css).replace('<
 
 if (dev) {
   fs.mkdirSync('www', { recursive: true });
-  const writeHtml = () => fs.writeFileSync('www/index.html',
-    fill(fs.readFileSync('src/index.html', 'utf8'), '<link rel="stylesheet" href="ui.css">', '<script src="main.js"></script>'));
+  const writeHtml = () => {
+    const h = fill(fs.readFileSync('src/index.html', 'utf8'), '<link rel="stylesheet" href="/ui.css">', '<script src="/main.js"></script>');
+    fs.writeFileSync('www/index.html', h);
+    fs.writeFileSync('www/practice.html', h); // /practice.html locally (esbuild's server has no clean URLs)
+  };
   const writeAdmin = () => fs.writeFileSync('www/admin.html', fill(fs.readFileSync('src/admin.html', 'utf8'), '', '<script src="admin.js"></script>'));
   const writeDeploy = () => fs.writeFileSync('www/deploy.html', fill(fs.readFileSync('src/deploy.html', 'utf8'), '', '<script src="deploy.js"></script>'));
   const writeLeaderboard = () => fs.writeFileSync('www/leaderboard.html', fill(fs.readFileSync('src/leaderboard.html', 'utf8'), '', '<script src="leaderboard.js"></script>'));
@@ -19,6 +22,8 @@ if (dev) {
   fs.copyFileSync('assets/favicon-180.png', 'www/favicon-180.png');
   fs.mkdirSync('www/brand', { recursive: true });
   for (const [from, to] of [['logo.png', 'logo.png'], ['bread-island.otf', 'bread-island.otf'], ['cabinet-grotesk.otf', 'cabinet-grotesk.otf'], ['concrete_albedo.jpg', 'concrete.jpg']]) fs.copyFileSync(`assets/${from}`, `www/brand/${to}`);
+  fs.mkdirSync('www/models', { recursive: true });
+  for (const f of ['runner.glb', 'runner-clips.json']) fs.copyFileSync(`assets/${f}`, `www/models/${f}`);
   writeHtml(); writeAdmin(); writeDeploy(); writeLeaderboard();
   const ctx = await esbuild.context({
     entryPoints: [{ in: 'src/boot.js', out: 'main' }, 'src/ui.css', 'src/admin.js', 'src/deploy.js', 'src/leaderboard.js'], bundle: true, outdir: 'www', format: 'iife', sourcemap: true, logLevel: 'info', loader,
@@ -38,6 +43,10 @@ if (dev) {
   fs.copyFileSync('assets/favicon-180.png', 'dist/favicon-180.png');
   const full = fill(tpl, `<style>\n${css}\n</style>`, `<script>\n${js}\n</script>`);
   fs.writeFileSync('dist/index.html', full); // self-hosting (your own site)
+  fs.writeFileSync('dist/practice.html', full); // /practice: the same game; it reads the path and stays off-chain
+  // the runner (third person) loads from /models beside the page
+  fs.mkdirSync('dist/models', { recursive: true });
+  for (const f of ['runner.glb', 'runner-clips.json']) fs.copyFileSync(`assets/${f}`, `dist/models/${f}`);
   // claude.ai artifact: the host supplies the document skeleton, so drop ours.
   const artifact = full
     .replace(/<!doctype html>\s*|<\/?html[^>]*>\s*|<\/?head>\s*|<\/?body>\s*/gi, '')
@@ -95,6 +104,7 @@ ${body}
   const esc = (s) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
   for (const [file, route, desc] of [
     ['dist/index.html', '/', 'A daily maze shooter. Everyone gets the same maze; reach the monolith fastest and the top three split the pot. Every run is an NFT you keep.'],
+    ['dist/practice.html', '/practice', 'Practice today\'s HAM maze: same maze, same sentries, no wallet and no pot. Learn the route, then play for it.'],
     ['dist/leaderboard.html', '/leaderboard', 'Today\'s HAM pot, the top three runs of today\'s maze, and every day before it.'],
     ['dist/story.html', '/story', 'HAM is a daily maze shooter. Every run becomes a Score NFT, the top three split the pot, and nothing launches a new coin.'],
     ['dist/nfts.html', '/nfts', 'The HAM NFTs: Scores drawn from the day\'s real maze, and Power-Up guns sold in sealed packs.'],
@@ -120,5 +130,5 @@ ${body}
     ].join('\n');
     fs.writeFileSync(file, html.replace(/<\/title>/, `</title>\n${tags}`));
   }
-  for (const f of ['dist/index.html', 'dist/artifact.html', 'dist/admin.html', 'dist/deploy.html', 'dist/leaderboard.html', 'dist/story.html', 'dist/nfts.html']) console.log(`${f}  ${(fs.statSync(f).size / 1024).toFixed(0)} KB`);
+  for (const f of ['dist/index.html', 'dist/practice.html', 'dist/artifact.html', 'dist/admin.html', 'dist/deploy.html', 'dist/leaderboard.html', 'dist/story.html', 'dist/nfts.html']) console.log(`${f}  ${(fs.statSync(f).size / 1024).toFixed(0)} KB`);
 }

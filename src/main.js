@@ -17,6 +17,7 @@ import { setCellSize, CELL } from './world.js';
 import { CHAINS, CHAIN_KEY, setChain } from './config.js';
 import { chain } from './chain.js';
 import { scoreRun, shortestMetres } from './score.js';
+import { createRunner, createThirdCam } from './runner.js';
 
 // Size and difficulty come from the admin settings (defaults match the Unity scene: 12 x 12 cells of 7 m, 8 sentries).
 const MAZE_W = CFG.mazeSize, MAZE_D = CFG.mazeSize, DRONES = CFG.sentries;
@@ -61,6 +62,14 @@ const player = new Player(camera, world);
 const weapon = createWeapon(envMap);
 const enemies = createEnemies(scene, world, maze, effects, audio, { count: DRONES });
 const hud = createHud({ magSize: CFG.magSize });
+// the runner (third person): loads beside the game; if it can't (an embed with no /models), V just says so
+const runner = createRunner(scene);
+if (location.protocol.startsWith('http')) runner.load(location.origin); else runner.failed = true;
+const thirdCam = createThirdCam(world);
+let view = 'first';
+try { if (localStorage.getItem('ham.view') === 'third') view = 'third'; } catch {}
+const third = () => view === 'third' && runner.ready;
+let lastFire = -9, aimPose = 0;
 hud.setSeed(seed);
 hud.setKills(0, DRONES);
 const touchUi = document.getElementById('touch');
@@ -128,13 +137,14 @@ function complete() {
   setTimeout(() => {
     hud.debrief(stats); hud.show(false); hud.setScreen('complete');
     if (ticket) recordRun();
-    else setStatus(runStatus, chain.enabled() && !CFG.preview ? 'Practice run, so this score stays here. Play for the pot to put it on-chain.' : '');
+    else setStatus(runStatus, CFG.practice ? 'Practice run, so this score stays here. Play for the pot from the main page to put it on-chain.' : chain.enabled() && !OFFCHAIN ? 'Practice run, so this score stays here. Play for the pot to put it on-chain.' : '');
   }, 2200);
 }
 
 // ── paid runs: pay to enter, the referee checks the finished run, the score is recorded on-chain ──
 let ticket = null, lastRun = null, pendingSigned = null;
 const $q = (s) => document.querySelector(s);
+const OFFCHAIN = CFG.preview || CFG.practice; // admin previews and /practice never touch the chain
 const potBox = $q('.m-pot'), potBtn = $q('[data-act="play-pot"]'), practiceBtn = $q('[data-act="deploy"]');
 const powerupBox = $q('.m-powerup'), powerupK = $q('.m-powerup-k'), mintBtn = $q('[data-act="mint-powerup"]');
 const titleStatus = $q('.m-title-status'), runStatus = $q('.m-run-status'), retrySubmit = $q('[data-act="submit-run"]');
@@ -153,7 +163,13 @@ const errText = (e) => {
 const chainSel = $q('.m-chain');
 for (const [k, c] of Object.entries(CHAINS)) chainSel.add(new Option(c.name + (c.contract ? '' : ' (soon)'), k, false, k === CHAIN_KEY));
 chainSel.addEventListener('change', () => setChain(chainSel.value));
-potBox.hidden = CFG.preview;
+potBox.hidden = OFFCHAIN;
+if (CFG.practice) {
+  // the practice page: same maze, no pot, no wallet
+  $q('.m-no').insertAdjacentHTML('afterbegin', '<b class="m-practice">Practice</b> ');
+  practiceBtn.textContent = 'Start practice';
+  $q('[data-practice-link]').hidden = true; $q('[data-pot-link]').hidden = false;
+}
 
 async function refreshPot() {
   const v = potBox.querySelector('.m-pot-v'), list = potBox.querySelector('.m-podium');
@@ -193,10 +209,10 @@ hud.on('mint-powerup', async () => {
     mintBtn.disabled = false; mintBtn.textContent = 'Mint free';
   }
 });
-if (chain.enabled() && !CFG.preview) {
+if (chain.enabled() && !OFFCHAIN) {
   potBtn.hidden = false; practiceBtn.classList.remove('primary'); practiceBtn.textContent = 'Practice run';
   refreshPot();
-} else refreshPot();
+} else if (!OFFCHAIN) refreshPot();
 
 async function recordRun() {
   retrySubmit.hidden = true;
@@ -240,7 +256,7 @@ hud.on('deploy', () => { state.retries = 0; startRun(); });
 hud.on('resume', resume);
 hud.on('restart', () => { state.retries++; startRun(); });
 hud.on('retry', () => { state.retries++; startRun(); });
-hud.on('again', () => { if (chain.enabled() && !CFG.preview) { toTitle(); refreshPot(); } else { state.retries = 0; startRun(); } });
+hud.on('again', () => { if (chain.enabled() && !OFFCHAIN) { toTitle(); refreshPot(); } else { state.retries = 0; startRun(); } });
 hud.on('quit', toTitle);
 hud.on('settings', () => settings.open('settings'));
 hud.on('controls', () => settings.open('controls'));
@@ -248,6 +264,8 @@ addEventListener('keydown', (e) => { if (e.code === 'Enter' && state.mode === 't
 
 // ---- combat wiring ----
 weapon.onShoot = (origin, dir, muzzle) => {
+  lastFire = state.t;
+  if (third()) muzzle = runner.muzzle();
   audio.shot();
   effects.flash(muzzle);
   const wall = world.raycast(origin, dir, 250);
@@ -289,7 +307,8 @@ let lastDt = 1 / 60;
 function draw() {
   weapon.prepare(camera.aspect);
   const inRun = state.mode === 'play' || state.mode === 'paused';
-  post.render(lastDt, { showGun: inRun, hurt: inRun ? hud.hurtLevel : 0, lowHp: inRun ? hud.lowHp : 0, ads: inRun ? weapon.ads : 0 });
+  runner.setVisible(third() && state.mode !== 'title');
+  post.render(lastDt, { showGun: inRun && !third(), hurt: inRun ? hud.hurtLevel : 0, lowHp: inRun ? hud.lowHp : 0, ads: inRun ? weapon.ads : 0 });
 }
 
 // If play runs slow (average frame over ~2 s above 24 ms), step quality down once per level and say so.
@@ -331,6 +350,19 @@ function tick(dt, inp) {
       hud.rotateArcs(player.yaw - yaw0);
       const moveSpeed = Math.hypot(player.vel.x, player.vel.z);
       weapon.update(dt, { inp, player, camera, sprinting: player.sprinting, moveSpeed });
+      if (inp.pressed.has('KeyV')) {
+        if (runner.ready) {
+          view = view === 'third' ? 'first' : 'third';
+          try { localStorage.setItem('ham.view', view); } catch {}
+          hud.message(view === 'third' ? 'Third person' : 'First person', 1.2);
+        } else hud.message(runner.failed ? 'Third person isn’t available here' : 'The runner is still loading', 1.6);
+      }
+      if (third()) {
+        thirdCam(camera, player, weapon.ads, dt);
+        const fwdDot = -Math.sin(player.yaw) * player.vel.x - Math.cos(player.yaw) * player.vel.z;
+        aimPose += (Math.max(weapon.ads, state.t - lastFire < 0.9 || inp.fire ? 1 : 0) - aimPose) * (1 - Math.exp(-12 * dt));
+        runner.update(dt, { pos: player.pos, yaw: player.yaw, pitch: player.pitch, speed: moveSpeed, back: fwdDot < -0.5, aim: aimPose, kick: weapon.kick, flash: weapon.flashT > 0 });
+      }
       audio.setListener(player.pos.x, player.pos.z, player.yaw);
       audio.step(dt, moveSpeed, player.grounded);
 
