@@ -12,6 +12,10 @@ const ABI = [
   'function dayInfo(uint256) view returns (uint256 pot, uint256 unclaimed, uint256 settledAt, uint256 entryCount, address[3] top, uint32[3] topPoints, uint32[3] topTime)',
   'function bestPoints(uint256,address) view returns (uint32)',
   'function boostOf(address) view returns (uint256)',
+  'function prizeOf(uint256,address) view returns (uint256)',
+  'function settle(uint256)',
+  'function claim(uint256)',
+  'error TooEarly()', 'error AlreadySettled()', 'error NotSettled()', 'error ClaimClosed()', 'error NothingToClaim()',
   'event Entered(uint256 indexed day, address indexed player, uint32 attempt, bool free, uint256 paid)',
   'event RunSubmitted(uint256 indexed day, address indexed player, uint32 attempt, uint32 points, uint32 boosted, uint32 timeMs, bool best)',
 ];
@@ -96,10 +100,34 @@ export const chain = {
     const k = this.reader();
     const days = Array.from({ length: count }, (_, i) => before - 1 - i).filter((d) => d >= 0);
     const infos = await Promise.all(days.map((d) => k.dayInfo(d)));
-    return infos.map((info, i) => ({
-      day: days[i], pot: formatEther(info.pot), entries: Number(info.entryCount), settled: Number(info.settledAt) > 0,
+    const out = infos.map((info, i) => ({
+      day: days[i], pot: formatEther(info.pot), entries: Number(info.entryCount),
+      settled: Number(info.settledAt) > 0, settledAt: Number(info.settledAt),
       top: info.top.map((a, j) => ({ who: a, points: Number(info.topPoints[j]), timeMs: Number(info.topTime[j]) })).filter((t) => t.who !== ZeroAddress),
     }));
+    // what each settled winner still has to claim (0 once claimed)
+    await Promise.all(out.filter((d) => d.settled).flatMap((d) => d.top.map(async (p) => { p.prize = formatEther(await k.prizeOf(d.day, p.who)); })));
+    return out;
+  },
+
+  /** Pay out a finished day. Anyone can call it once the day is 15 minutes over; it only costs gas. */
+  async settleDay(day) {
+    await this.connect();
+    await this._checkBalance();
+    const k = new Contract(CHAIN.contract, ABI, this.signer);
+    const tx = await k.settle(day);
+    await tx.wait();
+    return tx.hash;
+  },
+
+  /** Claim the connected wallet's prize for a settled day. */
+  async claimDay(day) {
+    await this.connect();
+    await this._checkBalance();
+    const k = new Contract(CHAIN.contract, ABI, this.signer);
+    const tx = await k.claim(day);
+    await tx.wait();
+    return tx.hash;
   },
 
   /**

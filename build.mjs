@@ -10,8 +10,11 @@ const fill = (html, css, js) => html.replace('<!--CSS-->', () => css).replace('<
 
 if (dev) {
   fs.mkdirSync('www', { recursive: true });
-  const writeHtml = () => fs.writeFileSync('www/index.html',
-    fill(fs.readFileSync('src/index.html', 'utf8'), '<link rel="stylesheet" href="ui.css">', '<script src="main.js"></script>'));
+  const writeHtml = () => {
+    const h = fill(fs.readFileSync('src/index.html', 'utf8'), '<link rel="stylesheet" href="/ui.css">', '<script src="/main.js"></script>');
+    fs.writeFileSync('www/index.html', h);
+    fs.writeFileSync('www/practice.html', h); // /practice.html locally (esbuild's server has no clean URLs)
+  };
   const writeAdmin = () => fs.writeFileSync('www/admin.html', fill(fs.readFileSync('src/admin.html', 'utf8'), '', '<script src="admin.js"></script>'));
   const writeDeploy = () => fs.writeFileSync('www/deploy.html', fill(fs.readFileSync('src/deploy.html', 'utf8'), '', '<script src="deploy.js"></script>'));
   const writeLeaderboard = () => fs.writeFileSync('www/leaderboard.html', fill(fs.readFileSync('src/leaderboard.html', 'utf8'), '', '<script src="leaderboard.js"></script>'));
@@ -19,6 +22,8 @@ if (dev) {
   fs.copyFileSync('assets/favicon-180.png', 'www/favicon-180.png');
   fs.mkdirSync('www/brand', { recursive: true });
   for (const [from, to] of [['logo.png', 'logo.png'], ['bread-island.otf', 'bread-island.otf'], ['cabinet-grotesk.otf', 'cabinet-grotesk.otf'], ['concrete_albedo.jpg', 'concrete.jpg']]) fs.copyFileSync(`assets/${from}`, `www/brand/${to}`);
+  fs.mkdirSync('www/models', { recursive: true });
+  for (const f of ['runner.glb', 'runner-clips.json']) fs.copyFileSync(`assets/${f}`, `www/models/${f}`);
   writeHtml(); writeAdmin(); writeDeploy(); writeLeaderboard();
   const ctx = await esbuild.context({
     entryPoints: [{ in: 'src/boot.js', out: 'main' }, 'src/ui.css', 'src/admin.js', 'src/deploy.js', 'src/leaderboard.js'], bundle: true, outdir: 'www', format: 'iife', sourcemap: true, logLevel: 'info', loader,
@@ -38,6 +43,10 @@ if (dev) {
   fs.copyFileSync('assets/favicon-180.png', 'dist/favicon-180.png');
   const full = fill(tpl, `<style>\n${css}\n</style>`, `<script>\n${js}\n</script>`);
   fs.writeFileSync('dist/index.html', full); // self-hosting (your own site)
+  fs.writeFileSync('dist/practice.html', full); // /practice: the same game; it reads the path and stays off-chain
+  // the runner (third person) loads from /models beside the page
+  fs.mkdirSync('dist/models', { recursive: true });
+  for (const f of ['runner.glb', 'runner-clips.json']) fs.copyFileSync(`assets/${f}`, `dist/models/${f}`);
   // claude.ai artifact: the host supplies the document skeleton, so drop ours.
   const artifact = full
     .replace(/<!doctype html>\s*|<\/?html[^>]*>\s*|<\/?head>\s*|<\/?body>\s*/gi, '')
@@ -64,19 +73,18 @@ if (dev) {
   fs.mkdirSync('dist/brand', { recursive: true });
   for (const [from, to] of [['logo.png', 'logo.png'], ['bread-island.otf', 'bread-island.otf'], ['cabinet-grotesk.otf', 'cabinet-grotesk.otf'], ['concrete_albedo.jpg', 'concrete.jpg']]) fs.copyFileSync(`assets/${from}`, `dist/brand/${to}`);
   const page = (src, out, desc) => {
-    const body = fs.readFileSync(src, 'utf8')
+    let body = fs.readFileSync(src, 'utf8')
       .replace(/<meta name="claude:viewport-fit-sides"[^>]*>\s*/, '')
       .replaceAll('https://ham-maze.vercel.app', '/')
       .replaceAll('src="ham-art.js"', 'src="/ham-art.js"');
     const title = (body.match(/<title>([^<]*)<\/title>/) || [])[1] || 'HAM';
+    body = body.replace(/<title>[^<]*<\/title>\s*/, ''); // moves to the head
     fs.writeFileSync(out, `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="${desc}">
-<meta property="og:title" content="${title}">
-<meta property="og:description" content="${desc}">
+<title>${title}</title>
 <link rel="icon" href="/favicon.png">
 <link rel="apple-touch-icon" href="/favicon-180.png">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
@@ -89,5 +97,38 @@ ${body}
   };
   page('site/story.html', 'dist/story.html', 'HAM is a daily maze shooter. Every run becomes a Score NFT, the top three split the pot, and nothing launches a new coin.');
   page('site/nfts.html', 'dist/nfts.html', 'The HAM NFTs: Scores drawn from the day\'s real maze, and Power-Up guns sold in sealed packs.');
-  for (const f of ['dist/index.html', 'dist/artifact.html', 'dist/admin.html', 'dist/deploy.html', 'dist/leaderboard.html', 'dist/story.html', 'dist/nfts.html']) console.log(`${f}  ${(fs.statSync(f).size / 1024).toFixed(0)} KB`);
+  // Share cards: every public page gets the same 1200x630 image (assets/og.png, rendered from
+  // design/og/og.html) plus its own title and description, so links unfurl on X, Discord and Telegram.
+  const SITE = 'https://ham3d.fun';
+  fs.copyFileSync('assets/og.png', 'dist/og.png');
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  for (const [file, route, desc] of [
+    ['dist/index.html', '/', 'A daily maze shooter. Everyone gets the same maze; reach the monolith fastest and the top three split the pot. Every run is an NFT you keep.'],
+    ['dist/practice.html', '/practice', 'Practice today\'s HAM maze: same maze, same sentries, no wallet and no pot. Learn the route, then play for it.'],
+    ['dist/leaderboard.html', '/leaderboard', 'Today\'s HAM pot, the top three runs of today\'s maze, and every day before it.'],
+    ['dist/story.html', '/story', 'HAM is a daily maze shooter. Every run becomes a Score NFT, the top three split the pot, and nothing launches a new coin.'],
+    ['dist/nfts.html', '/nfts', 'The HAM NFTs: Scores drawn from the day\'s real maze, and Power-Up guns sold in sealed packs.'],
+  ]) {
+    let html = fs.readFileSync(file, 'utf8');
+    const title = (html.match(/<title>([^<]*)<\/title>/) || [])[1] || 'HAM';
+    html = html.replace(/<meta name="description"[^>]*>\s*/g, '');
+    const tags = [
+      `<meta name="description" content="${esc(desc)}">`,
+      `<meta property="og:type" content="website">`,
+      `<meta property="og:site_name" content="HAM">`,
+      `<meta property="og:url" content="${SITE}${route}">`,
+      `<meta property="og:title" content="${esc(title)}">`,
+      `<meta property="og:description" content="${esc(desc)}">`,
+      `<meta property="og:image" content="${SITE}/og.png">`,
+      `<meta property="og:image:width" content="1200">`,
+      `<meta property="og:image:height" content="630">`,
+      `<meta property="og:image:alt" content="HAM: Everyone gets the same maze. A pink monolith rising out of a pink and blue concrete maze.">`,
+      `<meta name="twitter:card" content="summary_large_image">`,
+      `<meta name="twitter:title" content="${esc(title)}">`,
+      `<meta name="twitter:description" content="${esc(desc)}">`,
+      `<meta name="twitter:image" content="${SITE}/og.png">`,
+    ].join('\n');
+    fs.writeFileSync(file, html.replace(/<\/title>/, `</title>\n${tags}`));
+  }
+  for (const f of ['dist/index.html', 'dist/practice.html', 'dist/artifact.html', 'dist/admin.html', 'dist/deploy.html', 'dist/leaderboard.html', 'dist/story.html', 'dist/nfts.html']) console.log(`${f}  ${(fs.statSync(f).size / 1024).toFixed(0)} KB`);
 }

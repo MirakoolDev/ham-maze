@@ -62,6 +62,8 @@ export async function readChainConfig(address = CHAIN.contract, rpc = CHAIN.rpc,
 
 export async function loadConfig() {
   const q = new URLSearchParams(location.search);
+  // /practice: today's real maze and settings, but nothing touches a wallet or the chain
+  CFG.practice = /^\/practice(\.html)?\/?$/.test(location.pathname) || q.has('practice');
   if (q.has('preview')) {
     for (const f of FIELDS) if (q.has(f.key)) CFG[f.key] = q.get(f.key);
     CFG.source = 'preview'; CFG.preview = true;

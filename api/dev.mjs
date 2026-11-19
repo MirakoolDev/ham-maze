@@ -3,6 +3,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import { referee } from './referee.js';
+import { settleDue } from './settle.js';
 
 try {
   for (const line of fs.readFileSync(new URL('../.env.local', import.meta.url), 'utf8').split(/\r?\n/)) {
@@ -14,6 +15,10 @@ try {
 http.createServer(async (req, res) => {
   const send = (status, body) => { res.writeHead(status, { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type' }); res.end(body ? JSON.stringify(body) : ''); };
   if (req.method === 'OPTIONS') return send(204);
+  if (req.url.startsWith('/api/settle')) {
+    try { const out = await settleDue({ dry: /[?&]dry=1/.test(req.url) }); return send(out.status, out.body); }
+    catch (e) { return send(500, { error: e.shortMessage || e.message }); }
+  }
   if (req.method !== 'POST' || !req.url.startsWith('/api/referee')) return send(404, { error: 'Not found' });
   let raw = '';
   for await (const chunk of req) raw += chunk;
