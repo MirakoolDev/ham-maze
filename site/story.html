@@ -78,7 +78,7 @@
   .hero { text-align: center; padding-block: 96px 40px; }
   .pill { display: inline-flex; align-items: center; gap: 9px; font-size: 13px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px 6px 12px; }
   .pill i { width: 7px; height: 7px; border-radius: 50%; background: var(--orange); box-shadow: 0 0 12px var(--orange); }
-  h1 { font-weight: 500; font-size: clamp(60px, 11.5vw, 136px); line-height: 0.95; letter-spacing: -0.035em; margin: 30px 0 26px; }
+  h1 { font-weight: 500; font-size: clamp(44px, 8.6vw, 108px); line-height: 0.98; letter-spacing: -0.035em; margin: 30px auto 26px; max-width: 11.5ch; text-wrap: balance; }
   .hero p { max-width: 58ch; margin: 0 auto; color: var(--muted); font-size: 18px; }
   .hero p b { color: var(--ink); font-weight: 500; }
   .ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 34px; }
@@ -245,9 +245,9 @@
 <main id="top">
   <section class="hero pad">
     <div class="wrap">
-      <span class="pill"><i></i>A daily maze with an on-chain pot</span>
-      <h1>Maze or money?</h1>
-      <p>Every run is a payment. Every run, finished or not, mints a <b>Score</b>: the day's maze, drawn as far as you got. When the day settles, the pot pays whoever <b>holds</b> the winning Scores, not whoever played them.</p>
+      <span class="pill"><i></i><span id="nextMaze">A new maze every day at 00:00 UTC</span></span>
+      <h1>Everyone gets the same maze.</h1>
+      <p>Get past the sentries and the other players, reach the orange <b>monolith</b> fastest, and the top three split the <b>pot</b>. Every run you play becomes an NFT that's yours to keep, or sell.</p>
       <div class="ctas">
         <a class="btn hot" href="https://ham-maze.vercel.app" target="_blank" rel="noopener">Play today's maze</a>
         <a class="btn" href="#how">How it works</a>
@@ -564,6 +564,14 @@
 
   // the lab
   const $ = (id) => document.getElementById(id);
+  // the hero pill: time until today's maze is retired and a new one drops
+  const tickNext = () => {
+    const left = 86400000 - (Date.now() % 86400000);
+    const h = Math.floor(left / 3600000), m = Math.floor(left / 60000) % 60;
+    $('nextMaze').textContent = `Today's maze ends in ${h}h ${String(m).padStart(2, '0')}m`;
+  };
+  tickNext();
+  setInterval(tickNext, 30000);
   const iso = (d) => d.toISOString().slice(0, 10);
   $('labDate').value = iso(today);
   const clock = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
