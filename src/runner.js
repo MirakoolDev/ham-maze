@@ -123,13 +123,19 @@ function reach(arm, fore, hand, target, pole) {
 /** The hold, in the gun's own space (barrel along -z, x to the gun's right, y up) unless noted. */
 export const HOLD = {
   gunScale: 0.72,                                   // the K-7 viewmodel is built chunky; shrink it on the body
-  gripX: 0, gripY: -0.085, gripZ: 0.11,             // right wrist behind the pistol grip
-  rightElbowOut: 0.6,
-  supportX: -0.1, supportY: -0.1, supportZ: -0.3,   // left wrist under the handguard
-  supportFingersUp: 0.55, supportFingersAcross: 0.6, supportFingersFwd: 0.12, // where the left fingers point
-  supportPalmUp: 0.75, supportPalmAcross: 0.65,     // where the left palm faces (into the handguard)
-  supportCurl: 1,                                   // left finger curl, 1 = [75, 150, 215] degrees
-  leftElbowOut: 0.3,
+  // shooting hand (right): wrist behind the pistol grip, in gun space
+  gripX: 0, gripY: -0.085, gripZ: 0.11,
+  rightTurn: 0, rightTilt: 0, rightRoll: 0,         // degrees, on top of the base grip (fingers forward-down the grip)
+  rightElbow: 30,                                   // degrees the elbow swings out from straight down
+  rIndex: 1, rMiddle: 1, rRing: 1, rPinky: 1,       // finger curl (index is the trigger finger)
+  rThumbBend: 1, rThumbSide: 0,
+  // support hand (left): wrist under the handguard, in gun space
+  supportX: -0.105, supportY: -0.03, supportZ: -0.3,
+  supportTurn: 0, supportTilt: -20, supportRoll: 0, // degrees, on top of the base (palm up, fingers across, index forward)
+  leftElbow: 15,
+  lIndex: 1, lMiddle: 1, lRing: 1, lPinky: 1,
+  lThumbBend: 1, lThumbSide: 0,
+  forearmTwist: 0.5,                                // share of the wrist's roll carried by the forearm (no roll bones in this rig)
   buttUp: 0.03, buttFwd: 0.05, buttIn: 0.03,        // stock in the shoulder pocket (world, from the shoulder joint)
   stance: 0.55,                                     // radians the body turns right when aiming (left shoulder leads)
   carryTilt: 0.45,                                  // carried: smaller = barrel hangs steeper
@@ -218,21 +224,47 @@ export function createRunner(scene) {
     _q.setFromRotationMatrix(m2.multiply(m1.transpose()));
     setWorldQuat(hand, Q(hand).premultiply(_q));
   }
-  function curl(side, bend, trigger) {
+  // fingers: each one bent by its own factor; the thumb bends toward the palm and swings toward the index side
+  const BASE = { Right: { Index: [25, 45, 35], rest: [64, 135, 195] }, Left: { Index: [75, 150, 215], rest: [75, 150, 215] } };
+  function curl(side) {
+    const H = r.hold, p = side === 'Right' ? 'r' : 'l';
     const s = side === 'Right' ? -1 : 1;
     const w = P(bones[side + 'Hand']), f = P(bones[side + 'HandMiddle1']).sub(w).normalize();
     const a = P(bones[side + 'HandIndex1']).sub(P(bones[side + 'HandPinky1'])); a.addScaledVector(f, -a.dot(f)).normalize();
     const n = new THREE.Vector3().crossVectors(f, a).multiplyScalar(s).normalize();
-    const at = (deg) => f.clone().multiplyScalar(Math.cos(deg * DEG)).addScaledVector(n, Math.sin(deg * DEG));
+    const at = (deg, side = 0) => f.clone().multiplyScalar(Math.cos(deg * DEG) * Math.cos(side * DEG)).addScaledVector(n, Math.sin(deg * DEG) * Math.cos(side * DEG)).addScaledVector(a, Math.sin(side * DEG));
     for (const name of ['Index', 'Middle', 'Ring', 'Pinky']) {
       const b = [1, 2, 3, 4].map((i) => bones[`${side}Hand${name}${i}`]);
       if (!b[3]) continue;
-      const angles = trigger && name === 'Index' ? [6, 12, 18] : bend;
-      for (let i = 0; i < 3; i++) point(b[i], b[i + 1], at(angles[i]));
+      const k = H[p + name], base = BASE[side][name] || BASE[side].rest;
+      for (let i = 0; i < 3; i++) point(b[i], b[i + 1], at(base[i] * k));
     }
     const th = [2, 3, 4].map((i) => bones[`${side}HandThumb${i}`]);
-    if (th[2]) { point(th[0], th[1], at(40)); point(th[1], th[2], at(65)); }
+    if (th[2]) { const tb = H[p + 'ThumbBend'], ts = H[p + 'ThumbSide']; point(th[0], th[1], at(40 * tb, ts)); point(th[1], th[2], at(65 * tb, ts * 0.5)); }
   }
+
+  // hand frame from turn / tilt / roll (degrees) on a base frame, all in gun space, then to world:
+  // turn about the gun's up axis, tilt about the barrel, roll about the hand's own finger axis
+  function handFrame(f0, a0, turn, tilt, roll) {
+    const q = new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), turn * DEG).multiply(new THREE.Quaternion().setFromAxisAngle(V(0, 0, 1), tilt * DEG));
+    const f = f0.clone().applyQuaternion(q), a = a0.clone().applyQuaternion(q);
+    a.applyAxisAngle(f, roll * DEG);
+    return [f.applyQuaternion(gun.quaternion), a.applyQuaternion(gun.quaternion)];
+  }
+  // hand the forearm part of the wrist's roll (about the forearm's long axis), so the wrist doesn't wring
+  function shareTwist(side, share) {
+    const fore = bones[side + 'ForeArm'], hand = bones[side + 'Hand'];
+    const qh = Q(hand), local = Q(fore).invert().multiply(qh);
+    const axis = hand.position.clone().normalize();
+    const d = local.x * axis.x + local.y * axis.y + local.z * axis.z;
+    const twist = new THREE.Quaternion(axis.x * d, axis.y * d, axis.z * d, local.w).normalize();
+    fore.quaternion.multiply(new THREE.Quaternion().slerp(twist, share));
+    fore.updateMatrixWorld(true);
+    setWorldQuat(hand, qh);
+  }
+  const elbowPole = (sideOut, deg) => V(0, -Math.cos(deg * DEG), 0).addScaledVector(sideOut, Math.sin(deg * DEG));
+  const R_F0 = V(0, -0.55, -1).normalize(), R_A0 = V(0, 1, 0).addScaledVector(R_F0, -R_F0.y).normalize();
+  const L_F0 = V(1, 0, 0), L_A0 = V(0, 0, -1);
 
   // Body facing is her own, apart from the camera (the free-orbit third person of open-world
   // shooters): she turns to the way she moves and keeps it when she stops, so the camera can swing
@@ -318,22 +350,21 @@ export function createRunner(scene) {
     const gUp = V(0, 1, 0).applyQuaternion(gun.quaternion), gRight = V(1, 0, 0).applyQuaternion(gun.quaternion);
 
     if (w > 0.001) {
-      // shooting hand on the pistol grip, elbow down and a little out
-      reach(bones.RightArm, bones.RightForeArm, bones.RightHand, gun.localToWorld(GRIP_WRIST.clone()), right.clone().multiplyScalar(H.rightElbowOut).addScaledVector(up, -1));
-      orientHand('Right', dir.clone().addScaledVector(gUp, -0.55), gUp);
-      // support hand under the handguard, elbow down beneath it. The hand is set by where the palm
-      // faces (into the handguard, from below-left) and where the fingers point (up and over the far
-      // side); for a left hand palm = fingers x (pinky->index), so pinky->index = palm x fingers.
-      reach(bones.LeftArm, bones.LeftForeArm, bones.LeftHand, gun.localToWorld(GUARD_WRIST.clone()), right.clone().multiplyScalar(-H.leftElbowOut).addScaledVector(up, -1));
-      const fingers = gUp.clone().multiplyScalar(H.supportFingersUp).addScaledVector(gRight, H.supportFingersAcross).addScaledVector(dir, H.supportFingersFwd).normalize();
-      const palm = gUp.clone().multiplyScalar(H.supportPalmUp).addScaledVector(gRight, H.supportPalmAcross).normalize();
-      orientHand('Left', fingers, new THREE.Vector3().crossVectors(palm, fingers));
-      curl('Left', [75, 150, 215].map((d) => d * H.supportCurl), false);
+      // shooting hand on the pistol grip
+      reach(bones.RightArm, bones.RightForeArm, bones.RightHand, gun.localToWorld(GRIP_WRIST.clone()), elbowPole(right, H.rightElbow));
+      orientHand('Right', ...handFrame(R_F0, R_A0, H.rightTurn, H.rightTilt, H.rightRoll));
+      shareTwist('Right', H.forearmTwist);
+      // support hand under the handguard: base is palm up, fingers across to the gun's right, index
+      // toward the muzzle (a left hand's palm = fingers x pinky->index)
+      reach(bones.LeftArm, bones.LeftForeArm, bones.LeftHand, gun.localToWorld(GUARD_WRIST.clone()), elbowPole(right.clone().negate(), H.leftElbow));
+      orientHand('Left', ...handFrame(L_F0, L_A0, H.supportTurn, H.supportTilt, H.supportRoll));
+      shareTwist('Left', H.forearmTwist);
+      curl('Left');
       // blend both arms from the clip to the hold
       for (const b of armBones) { b.quaternion.copy(b.userData.animQ.slerp(b.quaternion, w)); }
       bones.RightShoulder.updateMatrixWorld(true); bones.LeftShoulder.updateMatrixWorld(true);
     }
-    curl('Right', [64, 135, 195], true);
+    curl('Right');
     // head: looks where she walks, and down the sights when aiming
     point(bones.Head, bones.HeadTop_End, up.clone().addScaledVector(fwd.clone().lerp(view, ctx.aim), 0.12 + 0.1 * ctx.aim));
 
