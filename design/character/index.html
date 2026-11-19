@@ -97,6 +97,7 @@ controls.target.set(0, 0.95, 0);
 controls.enableDamping = true;
 controls.minDistance = 1.2; controls.maxDistance = 12;
 controls.maxPolarAngle = Math.PI * 0.53;
+window.preview = { camera, controls }; // for framing screenshots from the console
 
 // Rooms: the game's two maze walls plus the NFT studio
 const ROOMS = {
@@ -340,6 +341,37 @@ function point(bone, child, dir) {
 }
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
+// Two-bone IK: put `hand` at `target` with the elbow bent toward `pole` (world space).
+function reach(arm, fore, hand, target, pole) {
+  const S = P(arm), a = P(fore).distanceTo(S), b = P(hand).distanceTo(P(fore));
+  const d = target.clone().sub(S);
+  const dist = Math.min(Math.max(d.length(), Math.abs(a - b) + 1e-3), a + b - 1e-3);
+  const dir = d.normalize();
+  const cosA = (a * a + dist * dist - b * b) / (2 * a * dist);
+  const side = pole.clone().addScaledVector(dir, -pole.dot(dir)).normalize();
+  const E = S.clone().addScaledVector(dir, cosA * a).addScaledVector(side, Math.sqrt(Math.max(0, 1 - cosA * cosA)) * a);
+  point(arm, fore, E.clone().sub(S));
+  point(fore, hand, S.addScaledVector(dir, dist).sub(P(fore)));
+}
+// Turn the hand so the wrist-to-knuckle line runs along `dir`, a little below it like a real grip.
+function aimHand(hand, knuckle, dir) { point(hand, knuckle, dir.clone().add(V(0, -.3, 0))); }
+// Close a hand around the grip. `s` is +1 for the left hand, -1 for the right (which way is "across").
+// The gun hand keeps its index finger straight along the frame, off the trigger until it fires.
+function grip(side, s, trigger) {
+  const across = -s; // fingers wrap toward the other hand
+  for (const f of ['Middle', 'Ring', 'Pinky', 'Index']) {
+    const b = [1, 2, 3, 4].map((i) => bones[`${side}Hand${f}${i}`]);
+    if (!b[3]) continue;
+    const straight = f === 'Index' && side === 'Right';
+    const dirs = straight
+      ? [V(across * .15, -.05, 1), V(across * .2, -.08, 1), V(across * .25, -.1, 1)]
+      : [V(across * .55, -.35, 1), V(across * 1, -.35, -.25), V(across * .35, -.25, -1)];
+    for (let i = 0; i < 3; i++) point(b[i], b[i + 1], dirs[i]);
+  }
+  const th = [2, 3, 4].map((i) => bones[`${side}HandThumb${i}`]);
+  if (th[2]) { point(th[0], th[1], V(across * .35, .1, 1)); point(th[1], th[2], V(across * .3, .05, 1)); }
+}
+
 const clock = new THREE.Clock();
 function tick() {
   const dt = Math.min(clock.getDelta(), .05) * state.speed;
@@ -362,27 +394,34 @@ function tick() {
       }
     }
 
-    if (m === 'aim' || m === 'shoot' || m === 'rungun') {
-      // two-handed aim layered over the clip: gun at eye line in front of the chest, recoil kicks it up
-      const chest = P(bones.Spine2);
-      const aimPt = chest.clone().add(V(-.04, .2, .42));
-      point(bones.RightArm, bones.RightForeArm, aimPt.clone().sub(P(bones.RightArm)));
-      point(bones.RightForeArm, bones.RightHand, V(0, .02 + state.recoil * .3, 1));
-      const grip = P(bones.RightHand).add(V(0, -.02, .04));
-      point(bones.LeftArm, bones.LeftForeArm, grip.clone().sub(P(bones.LeftArm)));
-      point(bones.LeftForeArm, bones.LeftHand, grip.clone().sub(P(bones.LeftForeArm)));
-      if (m !== 'rungun') point(bones.Head, bones.HeadTop_End, V(0, 1, .2));
+    const aiming = m === 'aim' || m === 'shoot' || m === 'rungun';
+    const kick = state.recoil;
+    let barrel;
+    if (aiming) {
+      // Two-handed stance layered over the clip: hands meet just below chin height in front of the
+      // chest, elbows bent and dropped (two-bone IK), the support hand wrapped under the gun hand.
+      const chest = P(bones.Spine2), neck = P(bones.Neck);
+      const hand = chest.clone().add(V(-.03, (neck.y - chest.y) * .55 + kick * .03, .4 - kick * .03));
+      reach(bones.RightArm, bones.RightForeArm, bones.RightHand, hand, V(-.7, -1, -.1));
+      barrel = V(0, .02 + kick * .35, 1).normalize();
+      aimHand(bones.RightHand, bones.RightHandMiddle1, barrel);
+      reach(bones.LeftArm, bones.LeftForeArm, bones.LeftHand, hand.clone().add(V(.045, -.035, .005)), V(.7, -1, -.1));
+      aimHand(bones.LeftHand, bones.LeftHandMiddle1, V(-.25, -.15, 1));
+      grip('Left', 1, false);
+      if (m !== 'rungun') point(bones.Head, bones.HeadTop_End, V(0, 1, .12));
       if (m !== 'aim' && t >= state.nextShot) {
         state.fireT = 0; state.recoil = 1;
         state.nextShot = t + 60 / GUNS[state.gun].rpm / Math.max(state.speed, .1);
       }
     }
+    grip('Right', -1, aiming);
 
-    // gun in the right hand, barrel along the forearm
-    const hand = P(bones.RightHand);
-    const dir = hand.clone().sub(P(bones.RightForeArm)).normalize();
-    gunObj.position.copy(hand).addScaledVector(dir, .03 - state.recoil * .03);
-    gunObj.lookAt(gunObj.position.clone().add(dir));
+    // gun in the right palm: grip between wrist and knuckles, barrel ahead (aiming) or along the hand
+    const wrist = P(bones.RightHand), knuckle = P(bones.RightHandMiddle1);
+    if (!barrel) barrel = knuckle.clone().sub(wrist).normalize().add(V(0, .45, 0)).normalize();
+    const palm = wrist.lerp(knuckle, .55);
+    gunObj.position.copy(palm).add(V(0, -.035, 0)).addScaledVector(barrel, -.015 - kick * .02);
+    gunObj.lookAt(gunObj.position.clone().add(barrel));
   }
   // flash, tracer, recoil decay
   state.fireT += dt; state.recoil = Math.max(0, state.recoil - dt * 9);
