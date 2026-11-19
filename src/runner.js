@@ -78,6 +78,10 @@ export function createRunner(scene) {
   gun.visible = false; scene.add(gun);
   gun.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   const gunBox = new THREE.Box3().setFromObject(gun);
+  // the K-7 is the first-person viewmodel, built chunky to read up close; on the body it needs shrinking.
+  // Every offset below is in the gun's own space, so the hands follow the scale.
+  const GUN_SCALE = 0.72;
+  gun.scale.setScalar(GUN_SCALE);
   const BUTT = V(0, 0.01, gunBox.max.z - 0.01);           // stock end (barrel runs along -z)
   const GRIP_WRIST = V(0, -0.085, 0.11);                   // where the right wrist sits behind the pistol grip
   const GUARD_WRIST = V(-0.055, -0.06, -0.27);             // left wrist under the handguard
@@ -122,7 +126,7 @@ export function createRunner(scene) {
     const y = V(0, 1, 0).addScaledVector(z, -z.y).normalize();
     const x = new THREE.Vector3().crossVectors(y, z);
     gun.quaternion.setFromRotationMatrix(_m.makeBasis(x, y, z));
-    gun.position.copy(butt).addScaledVector(dir, -kick * 0.05).sub(BUTT.clone().applyQuaternion(gun.quaternion));
+    gun.position.copy(butt).addScaledVector(dir, -kick * 0.05).sub(BUTT.clone().multiplyScalar(GUN_SCALE).applyQuaternion(gun.quaternion));
     gun.updateMatrixWorld(true);
   }
   function orientHand(side, fD, aD) {
@@ -196,7 +200,7 @@ export function createRunner(scene) {
     point(bones.Head, bones.HeadTop_End, up.clone().addScaledVector(view, 0.12 + 0.1 * ctx.aim));
 
     flash.visible = ctx.flash;
-    if (flash.visible) { flash.material.rotation = Math.random() * 6.28; flash.scale.setScalar(0.14 + Math.random() * 0.08); }
+    if (flash.visible) { flash.material.rotation = Math.random() * 6.28; flash.scale.setScalar((0.14 + Math.random() * 0.08) / GUN_SCALE); }
   };
 
   r.muzzle = () => gun.localToWorld(MUZZLE.clone());
