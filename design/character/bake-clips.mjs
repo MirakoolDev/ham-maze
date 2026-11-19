@@ -12,6 +12,8 @@ const DIR = 'design/character/clips/';
 const CLIPS = {
   idle: 'Rifle Idle.fbx', aim: 'Rifle Aiming Idle.fbx', walk: 'Rifle Walk.fbx', run: 'Rifle Run.fbx',
   reload: 'Reloading.fbx', jump: 'Rifle Jump.fbx', crouch: 'Idle Crouching.fbx',
+  // pistol set (the runner borrows the rifle legs for what's missing: walk, jump; reload is posed in code)
+  pistolAim: 'Pistol Idle.fbx', pistolRun: 'Pistol Run.fbx', pistolCrouch: 'Pistol Kneeling Idle.fbx',
 };
 
 const parse = (buf) => new Promise((res, rej) => new GLTFLoader().parse(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength), '', res, rej));

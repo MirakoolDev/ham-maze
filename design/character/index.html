@@ -38,7 +38,7 @@
 <div id="load">Loading the runner…</div>
 <div class="panel">
   <h1>HAM Runner</h1>
-  <p class="sub">The game's own runner code (src/runner.js), playing Mixamo's rifle animations. The clips hold the gun; these sliders only adjust on top. Copy values and send them over to bake them in.</p>
+  <p class="sub">The game's own runner code (src/runner.js), playing Mixamo's rifle and pistol animations. The clips hold the gun; these sliders only adjust on top. Copy values and send them over to bake them in.</p>
   <h2>State</h2>
   <div class="row" id="move">
     <button data-move="idle" aria-pressed="true">Idle</button><button data-move="walk">Walk</button><button data-move="run">Run</button>
@@ -47,6 +47,8 @@
     <button id="aim" aria-pressed="true">Aim</button><button id="fire">Fire</button><button id="reload">Reload</button><button id="crouch">Crouch</button><button id="air">Jump</button>
   </div>
   <label class="sl">Look up / down<input type="range" id="pitch" min="-0.8" max="0.8" step="0.01" value="0"><output></output></label>
+  <h2>Gun</h2>
+  <div class="row" id="guns"></div>
   <h2>Body</h2>
   <div class="row" id="looks"></div>
   <h2>Room</h2>
@@ -76,7 +78,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 // always the current runner code: the local server lets the browser cache modules, so bust it per load
-const { createRunner, HOLD, LOOKS } = await import(`../../src/runner.js?v=${Date.now()}`);
+const { createRunner, HOLD, LOOKS, GUNS } = await import(`../../src/runner.js?v=${Date.now()}`);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -139,7 +141,7 @@ try { const saved = JSON.parse(localStorage.getItem(KEY) || '{}'); for (const k 
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(runner.hold)); } catch {} };
 // body look and room: kept per viewer
 const PREF = 'ham.preview.v1';
-let pref = { look: 'rim', room: 'lilac' };
+let pref = { look: 'rim', room: 'lilac', gun: 'k7' };
 try { Object.assign(pref, JSON.parse(localStorage.getItem(PREF) || '{}')); } catch {}
 const savePref = () => { try { localStorage.setItem(PREF, JSON.stringify(pref)); } catch {} };
 function pick(boxId, table, key, apply) {
@@ -152,6 +154,10 @@ function pick(boxId, table, key, apply) {
 }
 if (!ROOMS[pref.room]) pref.room = 'lilac';
 if (!LOOKS[pref.look]) pref.look = 'rim';
+if (!GUNS[pref.gun]) pref.gun = 'k7';
+runner.setGun(pref.gun);
+const GUN_NAMES = Object.fromEntries(Object.entries(GUNS).map(([k, g]) => [k, { name: g.name + (g.kind === 'pistol' ? ' (pistol)' : '') }]));
+pick('guns', GUN_NAMES, 'gun', (k) => runner.setGun(k));
 setRoom(pref.room);
 runner.look = pref.look; useEnv(pref.look);
 pick('rooms', ROOMS, 'room', setRoom);
@@ -160,7 +166,14 @@ pick('looks', LOOKS, 'look', (k) => { runner.setLook(k); useEnv(k); });
 // ---- sliders, one per hold value ----
 const SPEC = [
   ["Posture (degrees)",[["hipSway","Hip sway",0,15,0.5],["narrow","Legs in",-4,10,0.5],["chestLift","Chest up",-6,12,0.5],["shoulderDrop","Shoulders down",-6,10,0.5]]],
-  ["Gun",[["gunScale","Gun size",0.4,1.1,0.01],
+  ["Pistol (Marker, Pulse, Snare)",[["pLower","Arms down when not aiming",0,80,1],
+  ["pGripAlong","Grip along the palm",0.2,1,0.01],
+  ["pGripDepth","Grip off the palm",-0.05,0.06,0.005],
+  ["pRoll","Roll (deg)",-45,45,1],
+  ["pYaw","Turn (deg)",-30,30,1],
+  ["pPitch","Tilt (deg)",-40,40,1]]],
+  ["Power-Up gun size",[["nftScale","Size",0.5,1.6,0.01]]],
+  ["K-7 and rifles",[["gunScale","K-7 size",0.4,1.1,0.01],
   ["gunRoll","Roll (deg)",-45,45,1],
   ["gunYaw","Turn (deg)",-30,30,1],
   ["gunPitch","Tilt (deg)",-30,30,1]]],

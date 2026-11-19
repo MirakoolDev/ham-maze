@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { buildGun, BORE } from './gunmodel.js';
+import { NFT_GUNS, buildNftGun } from './nftguns.js';
 
 const HEIGHT = 1.75;
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -164,6 +165,9 @@ function reach(arm, fore, hand, target, pole) {
 }
 
 /** The hold. Positions are in the gun's own space (barrel along -z, x to its right, y up). */
+// every gun she can carry: the K-7 and the Power-Up guns
+export const GUNS = { k7: { name: 'K-7', kind: 'rifle' }, ...NFT_GUNS };
+
 export const HOLD = {
   gunScale: 0.95,                                   // near a real rifle on her; the slim grip fits her hand
   // where each wrist sits on the gun: the gun hangs from the right wrist and points toward the left
@@ -176,6 +180,11 @@ export const HOLD = {
   narrow: 3,                                        // legs drawn in toward the centre line (steps closer to one line)
   chestLift: 4,                                     // chest up and back
   shoulderDrop: 3,                                  // shoulders down and relaxed
+  // the Power-Up guns (src/nftguns.js): size, and for the pistols where the grip sits in the fist
+  nftScale: 1,
+  pGripAlong: 0.62, pGripDepth: 0.015,              // along the palm from wrist to knuckles; off the palm
+  pRoll: 0, pYaw: 0, pPitch: 0,                     // degrees, on top of the fist
+  pLower: 55,                                       // degrees the arms come down from the aim when not aiming
   // fingers, degrees added to the clip's own grip (curl closes toward the palm)
   rCurl: 0, rSpread: 0, rIndex: 0, rMiddle: 0, rRing: 0, rPinky: 0,
   rThumbBend: 0, rThumbAcross: 0, rThumbOut: 0, rThumbTwist: 0,
@@ -188,13 +197,23 @@ const UPPER = /^(Spine|Neck|Head|LeftShoulder|RightShoulder|LeftArm|RightArm|Lef
 
 export function createRunner(scene, opts = {}) {
   const root = new THREE.Group(); root.visible = false; scene.add(root);
-  const { group: gun, flash } = buildGun({ slim: true });
-  gun.visible = false; scene.add(gun);
-  gun.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  const MUZZLE = V(0, BORE, -0.66);
   const GRIP = V(), GUARD = V();
 
-  const r = { root, gun, ready: false, failed: false, show: false, hold: { ...HOLD }, holdWeight: 0, look: opts.look || 'rim' };
+  const r = { root, gun: null, ready: false, failed: false, show: false, hold: { ...HOLD }, holdWeight: 0, look: opts.look || 'rim', gunId: 'k7', kind: 'rifle' };
+  // the gun in her hands: the K-7 (rifle) or one of the Power-Up guns (rifle or pistol, src/nftguns.js)
+  let gun, flash, MUZZLE, GRIP0 = null, GUARD0 = null;
+  r.setGun = (id) => {
+    if (gun) scene.remove(gun);
+    if (NFT_GUNS[id]) {
+      const b = buildNftGun(id);
+      ({ group: gun, flash } = b); MUZZLE = b.muzzle; GRIP0 = b.grip; GUARD0 = b.guard; r.kind = b.kind; r.gunId = id;
+    } else {
+      ({ group: gun, flash } = buildGun({ slim: true })); MUZZLE = V(0, BORE, -0.66); GRIP0 = GUARD0 = null; r.kind = 'rifle'; r.gunId = 'k7';
+    }
+    gun.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    gun.visible = r.show && r.ready; scene.add(gun); r.gun = gun;
+    reloadT = -1;
+  };
   let model, mixer, bones, actions = {}, current = null, clipPose = null;
   const overlays = {};
 
@@ -318,8 +337,10 @@ export function createRunner(scene, opts = {}) {
   // Body facing is her own, apart from the camera (the free-orbit third person of open-world
   // shooters): she turns to the way she moves and keeps it when she stops, so the camera can swing
   // round to her face. Aiming or firing turns her to the camera, so shots leave where you look.
+  const PISTOL_RELOAD = 1.4;
   let bodyYaw = null, wasAir = false, wasAirPrev = false, jumpBaseY = null, landT = 0, aimYaw = 0, aimPitch = 0, reloadT = -1, reloadDir = null;
   const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+  r.setGun(opts.gun || 'k7');
   r.reload = () => { reloadT = 0; };
   r.reloading = () => reloadT >= 0;
 
@@ -327,8 +348,15 @@ export function createRunner(scene, opts = {}) {
   r.update = (dt, ctx) => {
     if (!r.ready) return;
     const H = r.hold;
-    gun.scale.setScalar(H.gunScale);
+    const pistol = r.kind === 'pistol';
+    const scale = GRIP0 ? H.nftScale : H.gunScale;
+    gun.scale.setScalar(scale);
     GRIP.set(H.gripX, H.gripY, H.gripZ); GUARD.set(H.supportX, H.supportY, H.supportZ);
+    // a Power-Up rifle has its own spots; the wrist sliders move them by how far they're off the K-7's
+    if (GRIP0) {
+      GRIP.copy(GRIP0).add(V(H.gripX - HOLD.gripX, H.gripY - HOLD.gripY, H.gripZ - HOLD.gripZ));
+      GUARD.copy(GUARD0).add(V(H.supportX - HOLD.supportX, H.supportY - HOLD.supportY, H.supportZ - HOLD.supportZ));
+    }
     if (bodyYaw === null) bodyYaw = ctx.yaw;
     const sp = ctx.speed;
     let rate = 0, target = bodyYaw;
@@ -357,10 +385,10 @@ export function createRunner(scene, opts = {}) {
     } else if (J && wasAir) { landT = jd - J.time; }
     if (!ctx.air && landT > 0) { landT -= dt; play('jump', 1); }
     else if (ctx.air) { /* jump, above */ }
-    else if (crouch && sp < 0.4) play('crouch', 1);
-    else if (sp < 0.4) play('idle', 1);
+    else if (crouch && sp < 0.4) play(pistol && actions.pistolCrouch ? 'pistolCrouch' : 'crouch', 1);
+    else if (sp < 0.4) play(pistol && actions.pistolAim ? 'pistolAim' : 'idle', 1);
     else if (sp < 4.2) play('walk', dirSign * THREE.MathUtils.clamp(sp / 1.7, 0.7, 2));
-    else play('run', dirSign * THREE.MathUtils.clamp(sp / 5.2, 0.85, 1.8));
+    else play(pistol && actions.pistolRun ? 'pistolRun' : 'run', dirSign * THREE.MathUtils.clamp(sp / (pistol ? 5.6 : 5.2), 0.85, 1.8));
     wasAir = !!ctx.air;
     // three's mixer only writes a bone when its keyed value changes, so a bone a clip holds still kept
     // last frame's tweaks and they stacked until the clip moved and snapped it back. Put the clip's
@@ -380,10 +408,28 @@ export function createRunner(scene, opts = {}) {
     } else jumpBaseY = null;
     wasAirPrev = !!ctx.air;
 
-    // aim over the upper body, then reload over that
-    if (overlays.aim) overlay('aim', mixer.time % overlays.aim.duration, w);
-    let rw = 0;
-    if (reloadT >= 0 && overlays.reload) {
+    // aim over the upper body, then reload over that. The pistol has no walk or jump of its own: those
+    // play the rifle legs with the pistol's arms laid over them
+    if (pistol) {
+      if (overlays.pistolAim && (current === actions.walk || current === actions.jump)) {
+        overlay('pistolAim', mixer.time % overlays.pistolAim.duration, 1);
+        // the pistol stance stands side-on, so on the rifle legs the arms point off to the left: turn the
+        // spine until the hands are in front of her again
+        root.updateMatrixWorld(true);
+        const h = P(bones.RightHand).add(P(bones.LeftHand)).multiplyScalar(0.5).sub(P(bones.Spine2)).setY(0).normalize();
+        const fwd = V(-Math.sin(bodyYaw), 0, -Math.cos(bodyYaw));
+        const off = Math.atan2(h.z * fwd.x - h.x * fwd.z, h.dot(fwd));
+        if (Math.abs(off * (1 - w)) > 0.001) turn(bones.Spine, V(0, 1, 0), off * (1 - w)); // aiming, the aim correction turns her
+      }
+    } else if (overlays.aim) overlay('aim', mixer.time % overlays.aim.duration, w);
+    let rw = 0, pr = 0, prT = 0;
+    // pistol reload, posed (no clip yet): the gun tips over, the left hand drops to the grip and back
+    if (pistol && reloadT >= 0) {
+      reloadT += dt; prT = reloadT / PISTOL_RELOAD;
+      if (prT >= 1) reloadT = -1;
+      else pr = THREE.MathUtils.smoothstep(prT, 0, 0.15) * (1 - THREE.MathUtils.smoothstep(prT, 0.8, 1));
+    }
+    if (!pistol && reloadT >= 0 && overlays.reload) {
       reloadT += dt;
       const d = overlays.reload.duration;
       if (reloadT >= d) reloadT = -1;
@@ -395,11 +441,41 @@ export function createRunner(scene, opts = {}) {
     const right = V(Math.cos(bodyYaw), 0, -Math.sin(bodyYaw));
     const lean = (ctx.pitch * 0.5 + aimPitch) * w;
     if (lean) { turn(bones.Spine1, right, lean); turn(bones.Spine2, right, lean); }
+    // the pistol clips all aim; not aiming (and while reloading) the arms come down to a low ready
+    if (pistol) {
+      const down = (H.pLower * (1 - w) + 28 * pr) * DEG;
+      if (down) { turn(bones.RightArm, right, -down); turn(bones.LeftArm, right, -down); }
+      if (pr) turn(bones.RightHand, P(bones.RightHand).sub(P(bones.RightForeArm)).normalize(), -40 * DEG * pr);
+    }
     tweakFingers('Right'); tweakFingers('Left');
 
+    // the pistol sits in the right fist, read off the hand's own frame (the first character page's
+    // hold): barrel along the knuckles' forward line, up along the pinky-to-index line
+    if (pistol) {
+      const hw = P(bones.RightHand), mid = P(bones.RightHandMiddle1);
+      const f = mid.clone().sub(hw).normalize();
+      const a = P(bones.RightHandIndex1).sub(P(bones.RightHandPinky1)); a.addScaledVector(f, -a.dot(f)).normalize();
+      const n = new THREE.Vector3().crossVectors(f, a).negate().normalize();
+      const fwd = f.clone().addScaledVector(a, -f.dot(a)).normalize();
+      const back = fwd.clone().negate(); // the gun's +z (barrel along -z)
+      gun.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3().crossVectors(a, back), a, back));
+      gun.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(H.pPitch * DEG, H.pYaw * DEG, H.pRoll * DEG, 'YXZ')));
+      const inFist = hw.clone().lerp(mid, H.pGripAlong).addScaledVector(n, H.pGripDepth);
+      gun.position.copy(inFist).sub(V(0, -0.01, 0.005).multiplyScalar(scale).applyQuaternion(gun.quaternion))
+        .addScaledVector(fwd, -(ctx.kick || 0) * 0.02);
+      gun.updateMatrixWorld(true);
+      // reloading: the left hand goes down to the bottom of the grip (the magazine) and comes back
+      const m = THREE.MathUtils.smoothstep(prT, 0.2, 0.4) * (1 - THREE.MathUtils.smoothstep(prT, 0.65, 0.85));
+      if (m > 0.001) {
+        const lq = Q(bones.LeftHand), wl = P(bones.LeftHand), goal = wl.clone().lerp(gun.localToWorld(V(0, -0.17, 0.02)), m);
+        reach(bones.LeftArm, bones.LeftForeArm, bones.LeftHand, goal, P(bones.LeftForeArm).sub(P(bones.LeftArm).lerp(wl, 0.5)));
+        setWorldQuat(bones.LeftHand, lq);
+      }
+    }
     // the gun: right wrist on the grip spot, barrel toward the left wrist, rolled with the right hand
     // aiming, the stock goes in the shoulder pocket: the gun then runs from the pocket toward the left hand
     const wr = P(bones.RightHand), wl = P(bones.LeftHand);
+    if (!pistol) {
     const pocket = P(bones.RightArm).lerp(P(bones.Neck).setY(P(bones.RightArm).y), 0.3); pocket.y -= 0.03;
     const toL = wl.clone().sub(wr).normalize().lerp(wl.clone().sub(pocket).normalize(), w).normalize();
     // reloading, the left hand leaves the gun: hold the barrel where it was when the reload began
@@ -414,7 +490,7 @@ export function createRunner(scene, opts = {}) {
     const gunF = new THREE.Matrix4().makeBasis(new THREE.Vector3().crossVectors(gy, span.clone().negate()), gy, span.clone().negate());
     gun.quaternion.setFromRotationMatrix(worldF.multiply(gunF.transpose()));
     gun.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(H.gunPitch * DEG, H.gunYaw * DEG, H.gunRoll * DEG, 'YXZ')));
-    gun.position.copy(wr).sub(GRIP.clone().multiplyScalar(H.gunScale).applyQuaternion(gun.quaternion))
+    gun.position.copy(wr).sub(GRIP.clone().multiplyScalar(scale).applyQuaternion(gun.quaternion))
       .addScaledVector(V(0, 0, 1).applyQuaternion(gun.quaternion), (ctx.kick || 0) * 0.04);
     gun.updateMatrixWorld(true);
     // left hand onto its spot on the handguard, keeping the clip's elbow plane and hand turn
@@ -427,8 +503,9 @@ export function createRunner(scene, opts = {}) {
       reach(bones.LeftArm, bones.LeftForeArm, bones.LeftHand, goal, pole);
       setWorldQuat(bones.LeftHand, lq);
     }
+    }
     // keep the barrel on the view while aiming: nudge the body turn and chest lean by what's left over
-    if (w > 0.5) {
+    if (w > 0.5 && !pr) {
       const dir = V(0, 0, -1).applyQuaternion(gun.quaternion);
       const yawErr = wrapAngle(Math.atan2(-dir.x, -dir.z) - ctx.yaw);
       const pitchErr = Math.asin(THREE.MathUtils.clamp(dir.y, -1, 1)) - ctx.pitch;
@@ -438,7 +515,7 @@ export function createRunner(scene, opts = {}) {
     }
 
     flash.visible = ctx.flash;
-    if (flash.visible) { flash.material.rotation = Math.random() * 6.28; flash.scale.setScalar((0.14 + Math.random() * 0.08) / H.gunScale); }
+    if (flash.visible) { flash.material.rotation = Math.random() * 6.28; flash.scale.setScalar((0.14 + Math.random() * 0.08) / scale); }
   };
 
   r.muzzle = () => gun.localToWorld(MUZZLE.clone());
