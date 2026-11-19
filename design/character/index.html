@@ -223,8 +223,8 @@ document.querySelectorAll('[data-move]').forEach((b) => b.addEventListener('clic
   st.move = b.dataset.move; document.querySelectorAll('[data-move]').forEach((x) => press(x, x === b));
 }));
 document.getElementById('reload').addEventListener('click', () => runner.reload());
-// Jump: one hop, about the game's own air time (a held toggle froze her at the top)
-document.getElementById('air').addEventListener('click', () => { st.air = true; setTimeout(() => { st.air = false; }, 650); });
+// Jump: one hop, as long as the clip's own time off the ground (a held toggle froze her at the top)
+document.getElementById('air').addEventListener('click', () => { st.air = true; setTimeout(() => { st.air = false; }, 450); });
 for (const k of ['aim', 'fire', 'crouch']) {
   const b = document.getElementById(k); press(b, st[k]);
   b.addEventListener('click', () => { st[k] = !st[k]; press(b, st[k]); });
