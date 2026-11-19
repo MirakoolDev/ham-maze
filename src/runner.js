@@ -125,7 +125,7 @@ function reach(arm, fore, hand, target, pole) {
 export const HOLD = {
   gunScale: 0.95,                                   // near a real rifle on her; the slim grip fits her hand
   // where each wrist sits on the gun: the gun hangs from the right wrist and points toward the left
-  gripX: 0, gripY: -0.085, gripZ: 0.12,
+  gripX: 0, gripY: -0.085, gripZ: 0.1,
   supportX: -0.02, supportY: -0.035, supportZ: -0.3,
   gunRoll: 0, gunYaw: 0, gunPitch: 0,               // degrees, on top of what the hands give
   supportPull: 1,                                   // 0..1: pull the left hand exactly onto its spot
