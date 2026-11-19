@@ -53,7 +53,7 @@
     <button id="copy">Copy values</button><button id="reset">Reset</button>
   </div>
   <p id="status" role="status"></p>
-  <p class="note">Drag to orbit, scroll to zoom. The support hand sliders only show while Aim or Fire is on.</p>
+  <p class="note">Drag to orbit, scroll to zoom. Hand and finger sliders act while Aim or Fire is on (the carry plays the clip's arms). Turn spins the hand about the gun's up axis, Tilt about the barrel, Roll about the hand's own fingers.</p>
 </div>
 
 <script type="importmap">
@@ -100,23 +100,25 @@ fit(); addEventListener('resize', fit);
 
 const runner = createRunner(scene);
 const KEY = 'ham.hold';
-try { Object.assign(runner.hold, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch {}
+// only keys the runner still knows (older saves had other names)
+try { const saved = JSON.parse(localStorage.getItem(KEY) || '{}'); for (const k in HOLD) if (typeof saved[k] === 'number') runner.hold[k] = saved[k]; } catch {}
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(runner.hold)); } catch {} };
 
 // ---- sliders, one per hold value ----
 const SPEC = [
   ['Gun', [['gunScale', 'Gun size', 0.4, 1.1, 0.01]]],
-  ['Shooting hand (right)', [['gripX', 'Wrist across', -0.1, 0.1, 0.005], ['gripY', 'Wrist up', -0.2, 0.05, 0.005], ['gripZ', 'Wrist back', -0.05, 0.25, 0.005], ['rightElbowOut', 'Elbow out', -0.5, 1.5, 0.05]]],
-  ['Support hand (left), aiming', [
-    ['supportX', 'Wrist across', -0.25, 0.1, 0.005], ['supportY', 'Wrist up', -0.25, 0.05, 0.005], ['supportZ', 'Wrist forward', -0.5, -0.1, 0.005],
-    ['supportFingersUp', 'Fingers up', -1, 1, 0.05], ['supportFingersAcross', 'Fingers across', -1, 1, 0.05], ['supportFingersFwd', 'Fingers forward', -1, 1, 0.05],
-    ['supportPalmUp', 'Palm up', -1, 1, 0.05], ['supportPalmAcross', 'Palm across', -1, 1, 0.05],
-    ['supportCurl', 'Finger curl', 0, 1.4, 0.02], ['leftElbowOut', 'Elbow out', -0.5, 1.5, 0.05]]],
+  ['Shooting hand (right): position', [['gripX', 'Wrist across', -0.1, 0.1, 0.005], ['gripY', 'Wrist up', -0.2, 0.05, 0.005], ['gripZ', 'Wrist back', -0.05, 0.25, 0.005], ['rightElbow', 'Elbow out (deg)', -60, 90, 1]]],
+  ['Shooting hand (right): rotation', [['rightTurn', 'Turn (deg)', -90, 90, 1], ['rightTilt', 'Tilt (deg)', -90, 90, 1], ['rightRoll', 'Roll (deg)', -120, 120, 1]]],
+  ['Shooting hand (right): fingers', [['rIndex', 'Index curl', 0, 1.6, 0.02], ['rMiddle', 'Middle curl', 0, 1.6, 0.02], ['rRing', 'Ring curl', 0, 1.6, 0.02], ['rPinky', 'Pinky curl', 0, 1.6, 0.02], ['rThumbBend', 'Thumb bend', -0.5, 2, 0.02], ['rThumbSide', 'Thumb swing', -60, 60, 1]]],
+  ['Support hand (left): position', [['supportX', 'Wrist across', -0.25, 0.1, 0.005], ['supportY', 'Wrist up', -0.25, 0.08, 0.005], ['supportZ', 'Wrist forward', -0.5, -0.1, 0.005], ['leftElbow', 'Elbow out (deg)', -60, 90, 1]]],
+  ['Support hand (left): rotation', [['supportTurn', 'Turn (deg)', -90, 90, 1], ['supportTilt', 'Tilt (deg)', -120, 120, 1], ['supportRoll', 'Roll (deg)', -120, 120, 1]]],
+  ['Support hand (left): fingers', [['lIndex', 'Index curl', 0, 1.6, 0.02], ['lMiddle', 'Middle curl', 0, 1.6, 0.02], ['lRing', 'Ring curl', 0, 1.6, 0.02], ['lPinky', 'Pinky curl', 0, 1.6, 0.02], ['lThumbBend', 'Thumb bend', -0.5, 2, 0.02], ['lThumbSide', 'Thumb swing', -60, 60, 1]]],
+  ['Forearms', [['forearmTwist', 'Twist into forearm', 0, 1, 0.01]]],
   ['Shoulder and stance', [['buttUp', 'Stock up', -0.15, 0.15, 0.005], ['buttFwd', 'Stock forward', -0.1, 0.2, 0.005], ['buttIn', 'Stock in', -0.1, 0.15, 0.005], ['stance', 'Body turn', 0, 1, 0.01]]],
   ['Carry (not aiming)', [['carryTilt', 'Barrel lift', 0, 1.5, 0.01]]],
 ];
 const box = document.getElementById('sliders');
-const fmt = (v, step) => (+v).toFixed(step < 0.01 ? 3 : 2);
+const fmt = (v, step) => (+v).toFixed(step >= 1 ? 0 : step < 0.01 ? 3 : 2);
 function buildSliders() {
   box.innerHTML = '';
   for (const [title, items] of SPEC) {
