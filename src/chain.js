@@ -90,6 +90,18 @@ export const chain = {
     };
   },
 
+  // The `count` days before `before` (a day number), newest first. Same fields as today(), plus
+  // whether the day has been settled (paid out).
+  async pastDays(before, count) {
+    const k = this.reader();
+    const days = Array.from({ length: count }, (_, i) => before - 1 - i).filter((d) => d >= 0);
+    const infos = await Promise.all(days.map((d) => k.dayInfo(d)));
+    return infos.map((info, i) => ({
+      day: days[i], pot: formatEther(info.pot), entries: Number(info.entryCount), settled: Number(info.settledAt) > 0,
+      top: info.top.map((a, j) => ({ who: a, points: Number(info.topPoints[j]), timeMs: Number(info.topTime[j]) })).filter((t) => t.who !== ZeroAddress),
+    }));
+  },
+
   /**
    * Checks the connected wallet actually has enough for `need` plus a small gas cushion before
    * sending anything, and throws our own plain message instead of letting it hit the chain and
