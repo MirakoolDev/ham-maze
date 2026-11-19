@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>HAM share card</title>
+<!-- Source for assets/og.png (1200x630). Render: node design/og/render.mjs -->
+<style>
+  @font-face { font-family: 'Bread Island'; src: url('../../assets/bread-island.otf') format('opentype'); }
+  @font-face { font-family: 'Cabinet Grotesk'; src: url('../../assets/cabinet-grotesk.otf') format('opentype'); }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; background: #2a2733; }
+  .card { position: relative; width: 1200px; height: 630px; display: grid; grid-template-columns: 560px 640px; }
+  .copy { position: relative; padding: 64px 56px 56px 72px; display: flex; flex-direction: column; color: #fffaf2; font-family: 'Cabinet Grotesk', sans-serif;
+    background: linear-gradient(rgba(42, 39, 51, .9), rgba(42, 39, 51, .9)), url('../../assets/concrete_albedo.jpg') 0 0 / 520px repeat, #2a2733; }
+  .mark { display: flex; align-items: center; gap: 16px; font: 900 40px/1 'Bread Island', serif; letter-spacing: .12em; color: #f6e4b4; }
+  .mark img { width: 52px; height: auto; }
+  h1 { font: 900 68px/1.02 'Bread Island', serif; color: #f6e4b4; margin-top: 54px; letter-spacing: .005em; }
+  p { font-size: 26px; line-height: 1.35; color: rgba(255, 250, 242, .82); margin-top: 26px; max-width: 430px; }
+  .foot { margin-top: auto; display: flex; align-items: center; gap: 14px; font-size: 22px; font-weight: 600; letter-spacing: .04em; }
+  .foot i { width: 11px; height: 11px; border-radius: 50%; background: #ff8fa6; box-shadow: 0 0 14px #ff8fa6; }
+  .foot span { color: rgba(255, 250, 242, .6); font-weight: 500; }
+  .shot { background: url('../hero.jpg') 46% 50% / cover no-repeat; position: relative; }
+  .shot::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 90px; background: linear-gradient(90deg, rgba(42, 39, 51, .55), rgba(42, 39, 51, 0)); }
+  .pot { position: absolute; right: 36px; bottom: 36px; font: 600 20px/1 'Cabinet Grotesk', sans-serif; letter-spacing: .2em; text-transform: uppercase; color: #2a2733;
+    background: #f6e4b4; border-radius: 12px; padding: 16px 20px 14px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .75), inset 0 -2px 0 rgba(120, 96, 52, .18), 0 2px 4px rgba(20, 16, 30, .3), 0 10px 30px rgba(20, 16, 30, .25); }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="copy">
+    <div class="mark"><img src="../../assets/logo.png" alt=""><span>HAM</span></div>
+    <h1>Everyone gets the same maze.</h1>
+    <p>Reach the monolith fastest and the top three split the pot. Every run is an NFT you keep.</p>
+    <div class="foot"><i></i>ham3d.fun <span>&middot; new maze daily</span></div>
+  </div>
+  <div class="shot"><div class="pot">Today&rsquo;s pot is open</div></div>
+</div>
+</body>
+</html>
