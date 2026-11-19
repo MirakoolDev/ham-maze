@@ -1,13 +1,18 @@
-// Bakes the runner's animation clips: retargets Mixamo idle / walk / run from the three.js example
-// rig (Xbot, same Mixamo skeleton) onto hamrunner.glb and writes them as plain three.js clip JSON,
-// so the game loads them with the model and never fetches anything else at runtime.
+// Bakes the runner's animation clips: retargets Mixamo's rifle set (design/character/clips/*.fbx,
+// downloaded from mixamo.com "Without Skin", 30 fps) onto hamrunner.glb and writes them as plain
+// three.js clip JSON, so the game loads them with the model and never fetches anything at runtime.
+// The rifle clips carry the whole hold (arms, elbows, fingers), so the game only places the gun.
 // Run: node design/character/bake-clips.mjs   ->  assets/runner.glb, assets/runner-clips.json
 import fs from 'node:fs';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 
-const XBOT = 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r180/examples/models/gltf/Xbot.glb';
-const CLIPS = { idle: 'idle', walk: 'walk', run: 'run' };
+const DIR = 'design/character/clips/';
+const CLIPS = {
+  idle: 'Rifle Idle.fbx', aim: 'Rifle Aiming Idle.fbx', walk: 'Rifle Walk.fbx', run: 'Rifle Run.fbx',
+  reload: 'Reloading.fbx', jump: 'Rifle Jump.fbx', crouch: 'Idle Crouching.fbx',
+};
 
 const parse = (buf) => new Promise((res, rej) => new GLTFLoader().parse(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength), '', res, rej));
 const P = (o) => o.getWorldPosition(new THREE.Vector3());
@@ -23,7 +28,9 @@ function standUp(wrap, root, b, height) {
   side.crossVectors(up, fwd).normalize().negate();
   wrap.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(side.clone().negate(), up, fwd)).invert();
   wrap.updateMatrixWorld(true);
-  const box = new THREE.Box3().setFromObject(root, true);
+  // a skeleton-only file (Mixamo "Without Skin") has no mesh to measure, so use the joints: head top to toes
+  let box = new THREE.Box3().setFromObject(root, true);
+  if (box.isEmpty()) { box = new THREE.Box3(); root.traverse((o) => { if (o.isBone) box.expandByPoint(P(o)); }); }
   wrap.scale.setScalar(height / (box.max.y - box.min.y));
   wrap.updateMatrixWorld(true);
 }
@@ -65,19 +72,22 @@ function retarget(clip, model, bones, rest, src, sb, sRest) {
 }
 
 const own = await parse(fs.readFileSync('design/character/hamrunner.glb'));
-const lib = await parse(Buffer.from(await (await fetch(XBOT)).arrayBuffer()));
 const model = own.scene, bones = boneMap(model);
 const wrap = new THREE.Group(); wrap.add(model); standUp(wrap, model, bones, 1.75);
 const rest = {}; for (const [k, b] of Object.entries(bones)) rest[k] = { q: Q(b), p: P(b) };
-const src = lib.scene, sb = boneMap(src);
-const sw = new THREE.Group(); sw.add(src); standUp(sw, src, sb, 1.75);
-const sRest = {}; for (const [k, b] of Object.entries(sb)) sRest[k] = { q: Q(b), p: P(b) };
 
 const out = {};
-for (const [key, name] of Object.entries(CLIPS)) {
-  const clip = lib.animations.find((a) => a.name === name);
-  if (!clip) throw new Error('missing clip ' + name);
+for (const [key, file] of Object.entries(CLIPS)) {
+  const buf = fs.readFileSync(DIR + file);
+  const src = new FBXLoader().parse(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength), '');
+  const sb = boneMap(src);
+  // measure the skeleton in its T-pose rest (all the Mixamo files share it), standing the same way as hers
+  const sw = new THREE.Group(); sw.add(src); standUp(sw, src, sb, 1.75);
+  const sRest = {}; for (const [k, b] of Object.entries(sb)) sRest[k] = { q: Q(b), p: P(b) };
+  const clip = src.animations[0];
+  clip.name = key;
   out[key] = THREE.AnimationClip.toJSON(retarget(clip, model, bones, rest, src, sb, sRest));
+  console.log(key.padEnd(7), file.padEnd(24), clip.duration.toFixed(2) + 's');
 }
 fs.writeFileSync('assets/runner-clips.json', JSON.stringify(out));
 fs.copyFileSync('design/character/hamrunner.glb', 'assets/runner.glb');

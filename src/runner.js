@@ -1,8 +1,9 @@
-// The runner: the player's own body for third person. hamrunner.glb with Mixamo idle / walk / run
-// (baked onto this rig by design/character/bake-clips.mjs), shaded like the HAM art: near-black gloss
-// with a neon rim, holding the same K-7 the first-person view uses. Aim and carry are posed in code on
-// top of the clips: the gun is placed first (shouldered along the view when aiming, low ready when
-// not), then both arms reach for it with two-bone IK and the fingers close around grip and handguard.
+// The runner: the player's own body for third person. hamrunner.glb with Mixamo's rifle set
+// (idle, aiming idle, walk, run, reload, jump, crouch; baked onto this rig by
+// design/character/bake-clips.mjs), shaded like the HAM art: near-black gloss with a neon rim, holding
+// the same K-7 the first-person view uses. The clips carry the whole hold, arms and fingers included,
+// the way a game engine plays authored weapon animations; the code only places the gun between the
+// hands, lays aim and reload over the upper body, and offers small tweaks on top.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { buildGun, BORE } from './gunmodel.js';
@@ -120,51 +121,35 @@ function reach(arm, fore, hand, target, pole) {
   point(fore, hand, S.addScaledVector(dir, dist).sub(P(fore)));
 }
 
-/** The hold, in the gun's own space (barrel along -z, x to the gun's right, y up) unless noted. */
+/** The hold. Positions are in the gun's own space (barrel along -z, x to its right, y up). */
 export const HOLD = {
-  gunScale: 0.72,                                   // the K-7 viewmodel is built chunky; shrink it on the body
-  // shooting hand (right): wrist behind the pistol grip, in gun space
-  gripX: 0, gripY: -0.085, gripZ: 0.11,
-  rightTurn: 0, rightTilt: 0, rightRoll: 0,         // degrees, on top of the base grip (fingers forward-down the grip)
-  rightElbow: 30,                                   // degrees the elbow swings out from straight down
-  rIndex: 1, rMiddle: 1, rRing: 1, rPinky: 1,       // finger curl (index is the trigger finger)
-  rThumbBend: 1, rThumbSide: 0,
-  // support hand (left): wrist under the handguard, in gun space
-  supportX: -0.105, supportY: -0.03, supportZ: -0.3,
-  supportTurn: 0, supportTilt: -20, supportRoll: 0, // degrees, on top of the base (palm up, fingers across, index forward)
-  leftElbow: 15,
-  lIndex: 1, lMiddle: 1, lRing: 1, lPinky: 1,
-  lThumbBend: 1, lThumbSide: 0,
-  forearmTwist: 0.5,                                // share of the wrist's roll carried by the forearm (no roll bones in this rig)
-  buttUp: 0.03, buttFwd: 0.05, buttIn: 0.03,        // stock in the shoulder pocket (world, from the shoulder joint)
-  stance: 0.55,                                     // radians the body turns right when aiming (left shoulder leads)
-  // carry (not aiming): barrel down from level, swung out, rolled; grip offset from the hanging wrist (world m)
-  carryDown: 72, carryOut: 14, carryRoll: 0, carryX: 0.075, carryY: 0, carryZ: 0.05,
+  gunScale: 0.95,                                   // near a real rifle on her; the slim grip fits her hand
+  // where each wrist sits on the gun: the gun hangs from the right wrist and points toward the left
+  gripX: 0, gripY: -0.085, gripZ: 0.12,
+  supportX: -0.02, supportY: -0.035, supportZ: -0.3,
+  gunRoll: 0, gunYaw: 0, gunPitch: 0,               // degrees, on top of what the hands give
+  supportPull: 1,                                   // 0..1: pull the left hand exactly onto its spot
+  // fingers, degrees added to the clip's own grip (curl closes toward the palm)
+  rCurl: 0, rSpread: 0, rIndex: 0, rMiddle: 0, rRing: 0, rPinky: 0,
+  rThumbBend: 0, rThumbAcross: 0, rThumbOut: 0, rThumbTwist: 0,
+  lCurl: 0, lSpread: 0, lIndex: 0, lMiddle: 0, lRing: 0, lPinky: 0,
+  lThumbBend: 0, lThumbAcross: 0, lThumbOut: 0, lThumbTwist: 0,
 };
+
+// bones the aim and reload clips drive (everything above the hips)
+const UPPER = /^(Spine|Neck|Head|LeftShoulder|RightShoulder|LeftArm|RightArm|LeftForeArm|RightForeArm|LeftHand|RightHand)/;
 
 export function createRunner(scene) {
   const root = new THREE.Group(); root.visible = false; scene.add(root);
-  const { group: gun, flash } = buildGun();
+  const { group: gun, flash } = buildGun({ slim: true });
   gun.visible = false; scene.add(gun);
   gun.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  const gunBox = new THREE.Box3().setFromObject(gun);
-  const BUTT = V(0, 0.01, gunBox.max.z - 0.01);           // stock end (barrel runs along -z)
   const MUZZLE = V(0, BORE, -0.66);
-  const GRIP_WRIST = V(), GUARD_WRIST = V();
-  let armBones = [];
-  // the clip's pose, kept so each frame's IK and leans start from it (see r.update)
-  let clipPose = null;
+  const GRIP = V(), GUARD = V();
 
-  // every number of the hold lives in r.hold (tunable live from the character page, design/character)
-  const r = { root, gun, ready: false, failed: false, show: false, hold: { ...HOLD } };
-  let GUN_SCALE = 1;
-  function applyHold() {
-    const h = r.hold;
-    GUN_SCALE = h.gunScale; gun.scale.setScalar(GUN_SCALE);
-    GRIP_WRIST.set(h.gripX, h.gripY, h.gripZ);
-    GUARD_WRIST.set(h.supportX, h.supportY, h.supportZ);
-  }
-  let model, mixer, bones, actions = {}, current = null;
+  const r = { root, gun, ready: false, failed: false, show: false, hold: { ...HOLD }, holdWeight: 0 };
+  let model, mixer, bones, actions = {}, current = null, clipPose = null;
+  const overlays = {};
 
   r.load = async (base = '', urls = {}) => {
     try {
@@ -184,9 +169,20 @@ export function createRunner(scene) {
         const kind = /eyelash/i.test(o.name) ? 'lash' : /eyebrow/i.test(o.name) ? 'brow' : null;
         if (o.isMesh && kind && o.geometry.attributes.uv) { cardCoords(o, skull); o.material = cardMaterial(kind, 0x5ff4ff); o.castShadow = false; }
       });
-      for (const s of ['Left', 'Right']) bones[s + 'Arm'].traverse((o) => { if (o.isBone) { armBones.push(o); o.userData.restQ = o.quaternion.clone(); } });
       mixer = new THREE.AnimationMixer(model);
-      for (const [k, json] of Object.entries(clips)) actions[k] = mixer.clipAction(THREE.AnimationClip.parse(json));
+      for (const [k, json] of Object.entries(clips)) {
+        const clip = THREE.AnimationClip.parse(json);
+        actions[k] = mixer.clipAction(clip);
+        // upper-body samplers for the clips laid over the legs (aim, reload)
+        overlays[k] = {
+          duration: clip.duration,
+          tracks: clip.tracks.filter((t) => t.name.endsWith('.quaternion')).map((t) => {
+            const name = t.name.replace(/\.quaternion$/, '').replace(/^mixamorig:?/, '');
+            return UPPER.test(name) && bones[name] ? { bone: bones[name], it: t.createInterpolant() } : null;
+          }).filter(Boolean),
+        };
+      }
+      if (actions.jump) { actions.jump.setLoop(THREE.LoopOnce, 1); actions.jump.clampWhenFinished = true; }
       current = actions.idle; current.play();
       r.ready = true;
     } catch (e) { r.failed = true; console.warn('runner model unavailable', e); }
@@ -195,200 +191,146 @@ export function createRunner(scene) {
 
   r.setVisible = (v) => { r.show = v; root.visible = v && r.ready; gun.visible = v && r.ready; };
 
-  function play(name, timeScale) {
+  function play(name, timeScale = 1) {
     const next = actions[name];
     if (!next) return;
     if (next !== current) { next.reset().setEffectiveWeight(1).fadeIn(0.22).play(); current.fadeOut(0.22); current = next; }
     next.timeScale = timeScale;
   }
+  // lay a clip's upper body over the current pose at time t, by weight w
+  const _o = new THREE.Quaternion();
+  function overlay(name, t, w) {
+    const o = overlays[name];
+    if (!o || w <= 0.001) return;
+    for (const { bone, it } of o.tracks) { _o.fromArray(it.evaluate(t)); bone.quaternion.slerp(_o, w); }
+  }
 
-  // gun basis: barrel (-z) along `dir`, up as close to world up as it can be
-  const _m = new THREE.Matrix4();
-  function placeGun(dir, butt, kick) {
-    const z = dir.clone().negate().normalize();
-    const y = V(0, 1, 0).addScaledVector(z, -z.y).normalize();
-    const x = new THREE.Vector3().crossVectors(y, z);
-    gun.quaternion.setFromRotationMatrix(_m.makeBasis(x, y, z));
-    gun.position.copy(butt).addScaledVector(dir, -kick * 0.05).sub(BUTT.clone().multiplyScalar(GUN_SCALE).applyQuaternion(gun.quaternion));
-    gun.updateMatrixWorld(true);
-  }
-  function orientHand(side, fD, aD) {
-    const hand = bones[side + 'Hand'];
-    const w = P(hand), mid = P(bones[side + 'HandMiddle1']);
-    const f = mid.sub(w).normalize();
-    const a = P(bones[side + 'HandIndex1']).sub(P(bones[side + 'HandPinky1'])); a.addScaledVector(f, -a.dot(f)).normalize();
-    const fd = fD.clone().normalize(), ad = aD.clone().addScaledVector(fd, -aD.dot(fd)).normalize();
-    const m1 = new THREE.Matrix4().makeBasis(f, a, new THREE.Vector3().crossVectors(f, a));
-    const m2 = new THREE.Matrix4().makeBasis(fd, ad, new THREE.Vector3().crossVectors(fd, ad));
-    _q.setFromRotationMatrix(m2.multiply(m1.transpose()));
-    setWorldQuat(hand, Q(hand).premultiply(_q));
-  }
-  // fingers: each one bent by its own factor; the thumb bends toward the palm and swings toward the index side
-  const BASE = { Right: { Index: [25, 45, 35], rest: [64, 135, 195] }, Left: { Index: [75, 150, 215], rest: [75, 150, 215] } };
-  function curl(side) {
-    const H = r.hold, p = side === 'Right' ? 'r' : 'l';
-    const s = side === 'Right' ? -1 : 1;
+  // fingers: degrees added on top of the clip. Curl turns each joint about the knuckle line, spread fans
+  // the first joints apart, the thumb bends at its two outer joints and swings / twists at its root.
+  const FAN = { Index: 1, Middle: 0.33, Ring: -0.33, Pinky: -1 };
+  function tweakFingers(side) {
+    const H = r.hold, p = side === 'Right' ? 'r' : 'l', sgn = side === 'Right' ? 1 : -1;
     const w = P(bones[side + 'Hand']), f = P(bones[side + 'HandMiddle1']).sub(w).normalize();
     const a = P(bones[side + 'HandIndex1']).sub(P(bones[side + 'HandPinky1'])); a.addScaledVector(f, -a.dot(f)).normalize();
-    const n = new THREE.Vector3().crossVectors(f, a).multiplyScalar(s).normalize();
-    const at = (deg, side = 0) => f.clone().multiplyScalar(Math.cos(deg * DEG) * Math.cos(side * DEG)).addScaledVector(n, Math.sin(deg * DEG) * Math.cos(side * DEG)).addScaledVector(a, Math.sin(side * DEG));
+    const n = new THREE.Vector3().crossVectors(f, a).multiplyScalar(-sgn).normalize(); // palm normal
+    const curlAxis = a.clone().multiplyScalar(sgn), fanAxis = n.clone().multiplyScalar(-sgn);
     for (const name of ['Index', 'Middle', 'Ring', 'Pinky']) {
-      const b = [1, 2, 3, 4].map((i) => bones[`${side}Hand${name}${i}`]);
-      if (!b[3]) continue;
-      const k = H[p + name], base = BASE[side][name] || BASE[side].rest;
-      for (let i = 0; i < 3; i++) point(b[i], b[i + 1], at(base[i] * k));
+      const c = (H[p + 'Curl'] + H[p + name]) * DEG, sp = H[p + 'Spread'] * FAN[name] * DEG;
+      if (sp) turn(bones[`${side}Hand${name}1`], fanAxis, sp);
+      if (c) for (let i = 1; i <= 3; i++) { const b = bones[`${side}Hand${name}${i}`]; if (b) turn(b, curlAxis, c); }
     }
-    const th = [2, 3, 4].map((i) => bones[`${side}HandThumb${i}`]);
-    if (th[2]) { const tb = H[p + 'ThumbBend'], ts = H[p + 'ThumbSide']; point(th[0], th[1], at(40 * tb, ts)); point(th[1], th[2], at(65 * tb, ts * 0.5)); }
+    const t1 = bones[side + 'HandThumb1'], t2 = bones[side + 'HandThumb2'], t3 = bones[side + 'HandThumb3'];
+    if (!t3) return;
+    if (H[p + 'ThumbAcross']) turn(t1, f, sgn * H[p + 'ThumbAcross'] * DEG);
+    if (H[p + 'ThumbOut']) turn(t1, n, sgn * H[p + 'ThumbOut'] * DEG);
+    if (H[p + 'ThumbTwist']) turn(t2, P(t3).sub(P(t2)).normalize(), H[p + 'ThumbTwist'] * DEG);
+    const tb = H[p + 'ThumbBend'] * DEG;
+    if (tb) { const td = P(t3).sub(P(t2)).normalize(), ax = new THREE.Vector3().crossVectors(td, n).normalize(); turn(t2, ax, tb); turn(t3, ax, tb); }
   }
-
-  // hand frame from turn / tilt / roll (degrees) on a base frame, all in gun space, then to world:
-  // turn about the gun's up axis, tilt about the barrel, roll about the hand's own finger axis
-  function handFrame(f0, a0, turn, tilt, roll) {
-    const q = new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), turn * DEG).multiply(new THREE.Quaternion().setFromAxisAngle(V(0, 0, 1), tilt * DEG));
-    const f = f0.clone().applyQuaternion(q), a = a0.clone().applyQuaternion(q);
-    a.applyAxisAngle(f, roll * DEG);
-    return [f.applyQuaternion(gun.quaternion), a.applyQuaternion(gun.quaternion)];
-  }
-  // hand the forearm part of the wrist's roll (about the forearm's long axis), so the wrist doesn't wring
-  // The twist angle is kept continuous frame to frame: taking the short way round each frame made it
-  // flip sides whenever the needed roll passed half a turn, snapping the forearm (the idle-aim glitch).
-  const lastTwist = { Left: 0, Right: 0 };
-  function shareTwist(side, share) {
-    const fore = bones[side + 'ForeArm'], hand = bones[side + 'Hand'];
-    const qh = Q(hand), local = Q(fore).invert().multiply(qh);
-    const axis = hand.position.clone().normalize();
-    const d = local.x * axis.x + local.y * axis.y + local.z * axis.z;
-    let ang = 2 * Math.atan2(d, local.w);
-    while (ang - lastTwist[side] > Math.PI) ang -= 2 * Math.PI;
-    while (ang - lastTwist[side] < -Math.PI) ang += 2 * Math.PI;
-    lastTwist[side] = ang;
-    fore.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(axis, ang * share));
-    fore.updateMatrixWorld(true);
-    setWorldQuat(hand, qh);
-  }
-  const elbowPole = (sideOut, deg) => V(0, -Math.cos(deg * DEG), 0).addScaledVector(sideOut, Math.sin(deg * DEG));
-  const R_F0 = V(0, -0.55, -1).normalize(), R_A0 = V(0, 1, 0).addScaledVector(R_F0, -R_F0.y).normalize();
-  const L_F0 = V(1, 0, 0), L_A0 = V(0, 0, -1);
 
   // Body facing is her own, apart from the camera (the free-orbit third person of open-world
   // shooters): she turns to the way she moves and keeps it when she stops, so the camera can swing
   // round to her face. Aiming or firing turns her to the camera, so shots leave where you look.
-  let bodyYaw = null, airT = 0, stance = 0;
+  let bodyYaw = null, wasAir = false, aimYaw = 0, aimPitch = 0, reloadT = -1, reloadDir = null;
   const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+  r.reload = () => { reloadT = 0; };
+  r.reloading = () => reloadT >= 0;
 
-  /** ctx: { pos, vel, yaw, pitch, speed, aim (0..1), kick, flash } (yaw/pitch: the camera's) */
+  /** ctx: { pos, vel, yaw, pitch, speed, aim (0..1), kick, flash, air, crouch } (yaw/pitch: the camera's) */
   r.update = (dt, ctx) => {
     if (!r.ready) return;
-    applyHold();
     const H = r.hold;
+    gun.scale.setScalar(H.gunScale);
+    GRIP.set(H.gripX, H.gripY, H.gripZ); GUARD.set(H.supportX, H.supportY, H.supportZ);
     if (bodyYaw === null) bodyYaw = ctx.yaw;
     const sp = ctx.speed;
     let rate = 0, target = bodyYaw;
     if (ctx.aim > 0.05 || ctx.flash) { target = ctx.yaw; rate = ctx.flash ? 40 : 16; }
     else if (sp > 0.4) { target = Math.atan2(-ctx.vel.x, -ctx.vel.z); rate = 9; }
     bodyYaw = wrapAngle(bodyYaw + wrapAngle(target - bodyYaw) * (1 - Math.exp(-rate * dt)));
+    const w = THREE.MathUtils.smoothstep(ctx.aim, 0, 1);
+    r.holdWeight = w;
     root.position.copy(ctx.pos);
-    // bladed stance: hips and chest turned right so the left shoulder leads and the support hand can
-    // reach out along the handguard (square to the target, the left arm cannot get there)
-    stance += (H.stance * ctx.aim - stance) * (1 - Math.exp(-8 * dt));
-    root.rotation.set(0, bodyYaw + Math.PI - stance, 0);
+    // aimYaw: the extra turn that brings the barrel onto the view (the aiming clip holds it a little off)
+    root.rotation.set(0, bodyYaw + Math.PI + aimYaw * w, 0);
 
-    // locomotion: idle / walk / run by ground speed; backing up only happens while aiming
+    // base clip by state: jump in the air, crouch when crouched and still, else idle / walk / run
     const along = -Math.sin(bodyYaw) * ctx.vel.x - Math.cos(bodyYaw) * ctx.vel.z;
     const dirSign = along < -0.5 ? -1 : 1;
-    if (sp < 0.4) play('idle', 1);
+    const crouch = (ctx.crouch || 0) > 0.5;
+    if (ctx.air) { if (!wasAir && actions.jump) actions.jump.reset(); play('jump', 1); }
+    else if (crouch && sp < 0.4) play('crouch', 1);
+    else if (sp < 0.4) play('idle', 1);
     else if (sp < 4.2) play('walk', dirSign * THREE.MathUtils.clamp(sp / 1.7, 0.7, 2));
     else play('run', dirSign * THREE.MathUtils.clamp(sp / 5.2, 0.85, 1.8));
-    // three's mixer only writes a bone when its keyed value changes, so a bone the clip holds still
-    // (the idle's chest) kept last frame's lean and IK and they stacked until the clip moved and
-    // snapped it back (the idle-aim glitch). Put the clip's pose back before the mixer runs.
+    wasAir = !!ctx.air;
+    // three's mixer only writes a bone when its keyed value changes, so a bone a clip holds still kept
+    // last frame's tweaks and they stacked until the clip moved and snapped it back. Put the clip's
+    // pose back before the mixer runs.
     if (!clipPose) { clipPose = []; root.traverse((o) => { if (o.isBone) clipPose.push({ o, q: o.quaternion.clone(), p: o.position.clone() }); }); }
     for (const c of clipPose) { c.o.quaternion.copy(c.q); c.o.position.copy(c.p); }
     mixer.update(dt);
     for (const c of clipPose) { c.q.copy(c.o.quaternion); c.p.copy(c.o.position); }
+    if (crouch && sp >= 0.4) root.position.y -= 0.3; // walking crouched: the walk, lowered
+
+    // aim over the upper body, then reload over that
+    if (overlays.aim) overlay('aim', mixer.time % overlays.aim.duration, w);
+    let rw = 0;
+    if (reloadT >= 0 && overlays.reload) {
+      reloadT += dt;
+      const d = overlays.reload.duration;
+      if (reloadT >= d) reloadT = -1;
+      else { rw = Math.max(0, Math.min(1, reloadT / 0.15, (d - reloadT) / 0.25)); overlay('reload', reloadT, rw); }
+    }
+    // lean the chest with the view, plus the correction that keeps the barrel on it
     root.updateMatrixWorld(true);
-
-    const up = V(0, 1, 0);
-    const fwd = V(-Math.sin(bodyYaw), 0, -Math.cos(bodyYaw));
     const right = V(Math.cos(bodyYaw), 0, -Math.sin(bodyYaw));
+    const lean = (ctx.pitch * 0.5 + aimPitch) * w;
+    if (lean) { turn(bones.Spine1, right, lean); turn(bones.Spine2, right, lean); }
+    tweakFingers('Right'); tweakFingers('Left');
 
-    // crouch and jump, posed on top of the clips (the clip library has neither): crouching drops the
-    // hips and the legs bend to keep the feet where the clip put them; in the air the feet tuck up.
-    const k = 1 - Math.exp(-10 * dt);
-    airT += ((ctx.air ? 1 : 0) - airT) * k;
-    const c = THREE.MathUtils.clamp(ctx.crouch || 0, 0, 1);
-    if (c > 0.01 || airT > 0.01) {
-      const feet = ['Left', 'Right'].map((s) => ({ s, p: P(bones[s + 'Foot']), q: Q(bones[s + 'Foot']) }));
-      root.position.y -= 0.46 * c;
-      root.updateMatrixWorld(true);
-      turn(bones.Spine, right, -0.32 * c);
-      for (const f of feet) {
-        const target = f.p.addScaledVector(up, 0.32 * airT).addScaledVector(fwd, 0.08 * airT);
-        const out = right.clone().multiplyScalar(f.s === 'Left' ? -0.15 : 0.15);
-        reach(bones[f.s + 'UpLeg'], bones[f.s + 'Leg'], bones[f.s + 'Foot'], target, fwd.clone().add(out));
-        setWorldQuat(bones[f.s + 'Foot'], f.q);
-      }
-    }
-    const view = V(-Math.sin(ctx.yaw) * Math.cos(ctx.pitch), Math.sin(ctx.pitch), -Math.cos(ctx.yaw) * Math.cos(ctx.pitch));
-
-    // lean the chest with the view so the gun can follow it up and down
-    turn(bones.Spine1, right, ctx.pitch * 0.22 * ctx.aim);
-    turn(bones.Spine2, right, ctx.pitch * 0.22 * ctx.aim);
-
-    // Two holds, blended by aim:
-    //  carry (not aiming or firing): the rifle hangs from the right hand and both arms play the clip,
-    //    so walking and running swing the arms freely; the left hand leaves the gun alone.
-    //  aim: shouldered along the view at cheek height, both arms posed onto it with IK.
-    const w = THREE.MathUtils.smoothstep(ctx.aim, 0, 1);
-    r.holdWeight = w;
-    // carry: barrel pointing down (a little forward and out), its grip in the hanging right hand,
-    // and that hand turned onto the grip; the arm itself plays the clip
-    const cd = H.carryDown * DEG, co = H.carryOut * DEG;
-    const cdir = fwd.clone().multiplyScalar(Math.cos(cd)).addScaledVector(up, -Math.sin(cd)).applyAxisAngle(up, -co);
-    const ctop = up.clone().multiplyScalar(Math.cos(cd)).addScaledVector(fwd, Math.sin(cd)).applyAxisAngle(up, -co).applyAxisAngle(cdir, H.carryRoll * DEG);
-    const cz = cdir.clone().negate();
-    const carryQ = new THREE.Quaternion().setFromRotationMatrix(_m.makeBasis(new THREE.Vector3().crossVectors(ctop, cz), ctop, cz));
-    const carryP = P(bones.RightHand).addScaledVector(right, H.carryX).addScaledVector(up, H.carryY).addScaledVector(fwd, H.carryZ)
-      .sub(GRIP_WRIST.clone().multiplyScalar(GUN_SCALE).applyQuaternion(carryQ));
-    gun.quaternion.copy(carryQ);
-    orientHand('Right', ...handFrame(R_F0, R_A0, H.rightTurn, H.rightTilt, H.rightRoll));
-    for (const b of armBones) b.userData.animQ = b.quaternion.clone();
-
-    // aim: butt in the shoulder pocket, sights up near the eye
-    const butt = P(bones.RightArm).addScaledVector(up, H.buttUp).addScaledVector(fwd, H.buttFwd).addScaledVector(right, -H.buttIn);
-    placeGun(view, butt, ctx.kick);
-    gun.quaternion.copy(carryQ.slerp(gun.quaternion, w));
-    gun.position.copy(carryP.lerp(gun.position, w));
+    // the gun: right wrist on the grip spot, barrel toward the left wrist, rolled with the right hand
+    // aiming, the stock goes in the shoulder pocket: the gun then runs from the pocket toward the left hand
+    const wr = P(bones.RightHand), wl = P(bones.LeftHand);
+    const pocket = P(bones.RightArm).lerp(P(bones.Neck).setY(P(bones.RightArm).y), 0.3); pocket.y -= 0.03;
+    const toL = wl.clone().sub(wr).normalize().lerp(wl.clone().sub(pocket).normalize(), w).normalize();
+    // reloading, the left hand leaves the gun: hold the barrel where it was when the reload began
+    if (rw > 0) { if (!reloadDir) reloadDir = toL.clone().applyQuaternion(Q(bones.RightHand).invert()); toL.lerp(reloadDir.clone().applyQuaternion(Q(bones.RightHand)), rw).normalize(); }
+    else reloadDir = null;
+    const upRef = P(bones.RightHandIndex1).sub(P(bones.RightHandPinky1));
+    const wy = upRef.addScaledVector(toL, -upRef.dot(toL)).normalize();
+    const worldF = new THREE.Matrix4().makeBasis(new THREE.Vector3().crossVectors(wy, toL.clone().negate()), wy, toL.clone().negate());
+    // the same frame in gun space: along grip spot -> support spot, up as near the gun's up as it goes
+    const span = GUARD.clone().sub(GRIP).normalize();
+    const gy = V(0, 1, 0).addScaledVector(span, -span.y).normalize();
+    const gunF = new THREE.Matrix4().makeBasis(new THREE.Vector3().crossVectors(gy, span.clone().negate()), gy, span.clone().negate());
+    gun.quaternion.setFromRotationMatrix(worldF.multiply(gunF.transpose()));
+    gun.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(H.gunPitch * DEG, H.gunYaw * DEG, H.gunRoll * DEG, 'YXZ')));
+    gun.position.copy(wr).sub(GRIP.clone().multiplyScalar(H.gunScale).applyQuaternion(gun.quaternion))
+      .addScaledVector(V(0, 0, 1).applyQuaternion(gun.quaternion), (ctx.kick || 0) * 0.04);
     gun.updateMatrixWorld(true);
-    const dir = V(0, 0, -1).applyQuaternion(gun.quaternion);
-    const gUp = V(0, 1, 0).applyQuaternion(gun.quaternion), gRight = V(1, 0, 0).applyQuaternion(gun.quaternion);
-
-    if (w > 0.001) {
-      // the IK starts from the rig's rest pose, not the clip's arms: turning the shortest way from an
-      // arm hanging down to one reaching up is near a half turn, so its roll flipped as the idle swayed
-      for (const s of ['Left', 'Right']) for (const k of ['Arm', 'ForeArm']) bones[s + k].quaternion.copy(bones[s + k].userData.restQ);
-      bones.RightShoulder.updateMatrixWorld(true); bones.LeftShoulder.updateMatrixWorld(true);
-      // shooting hand on the pistol grip
-      reach(bones.RightArm, bones.RightForeArm, bones.RightHand, gun.localToWorld(GRIP_WRIST.clone()), elbowPole(right, H.rightElbow));
-      orientHand('Right', ...handFrame(R_F0, R_A0, H.rightTurn, H.rightTilt, H.rightRoll));
-      shareTwist('Right', H.forearmTwist);
-      // support hand under the handguard: base is palm up, fingers across to the gun's right, index
-      // toward the muzzle (a left hand's palm = fingers x pinky->index)
-      reach(bones.LeftArm, bones.LeftForeArm, bones.LeftHand, gun.localToWorld(GUARD_WRIST.clone()), elbowPole(right.clone().negate(), H.leftElbow));
-      orientHand('Left', ...handFrame(L_F0, L_A0, H.supportTurn, H.supportTilt, H.supportRoll));
-      shareTwist('Left', H.forearmTwist);
-      curl('Left');
-      // blend both arms from the clip to the hold
-      for (const b of armBones) { b.quaternion.copy(b.userData.animQ.slerp(b.quaternion, w)); }
-      bones.RightShoulder.updateMatrixWorld(true); bones.LeftShoulder.updateMatrixWorld(true);
+    // left hand onto its spot on the handguard, keeping the clip's elbow plane and hand turn
+    // (not while reloading: that hand is off at the magazine)
+    const pull = H.supportPull * (1 - rw);
+    if (pull > 0.001) {
+      const lq = Q(bones.LeftHand), spot = gun.localToWorld(GUARD.clone());
+      const goal = wl.clone().lerp(spot, pull);
+      const pole = P(bones.LeftForeArm).sub(P(bones.LeftArm).lerp(wl, 0.5));
+      reach(bones.LeftArm, bones.LeftForeArm, bones.LeftHand, goal, pole);
+      setWorldQuat(bones.LeftHand, lq);
     }
-    curl('Right');
-    // head: looks where she walks, and down the sights when aiming
-    point(bones.Head, bones.HeadTop_End, up.clone().addScaledVector(fwd.clone().lerp(view, ctx.aim), 0.12 + 0.1 * ctx.aim));
+    // keep the barrel on the view while aiming: nudge the body turn and chest lean by what's left over
+    if (w > 0.5) {
+      const dir = V(0, 0, -1).applyQuaternion(gun.quaternion);
+      const yawErr = wrapAngle(Math.atan2(-dir.x, -dir.z) - ctx.yaw);
+      const pitchErr = Math.asin(THREE.MathUtils.clamp(dir.y, -1, 1)) - ctx.pitch;
+      const k = 1 - Math.exp(-10 * dt);
+      aimYaw = THREE.MathUtils.clamp(aimYaw - yawErr * k, -1.2, 1.2);
+      aimPitch = THREE.MathUtils.clamp(aimPitch - pitchErr * k, -0.8, 0.8);
+    }
 
     flash.visible = ctx.flash;
-    if (flash.visible) { flash.material.rotation = Math.random() * 6.28; flash.scale.setScalar((0.14 + Math.random() * 0.08) / GUN_SCALE); }
+    if (flash.visible) { flash.material.rotation = Math.random() * 6.28; flash.scale.setScalar((0.14 + Math.random() * 0.08) / H.gunScale); }
   };
 
   r.muzzle = () => gun.localToWorld(MUZZLE.clone());
