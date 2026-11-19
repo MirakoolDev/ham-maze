@@ -231,7 +231,7 @@ export function createRunner(scene) {
   // Body facing is her own, apart from the camera (the free-orbit third person of open-world
   // shooters): she turns to the way she moves and keeps it when she stops, so the camera can swing
   // round to her face. Aiming or firing turns her to the camera, so shots leave where you look.
-  let bodyYaw = null, wasAir = false, aimYaw = 0, aimPitch = 0, reloadT = -1, reloadDir = null;
+  let bodyYaw = null, wasAir = false, wasAirPrev = false, jumpBaseY = null, landT = 0, aimYaw = 0, aimPitch = 0, reloadT = -1, reloadDir = null;
   const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
   r.reload = () => { reloadT = 0; };
   r.reloading = () => reloadT >= 0;
@@ -258,7 +258,17 @@ export function createRunner(scene) {
     const along = -Math.sin(bodyYaw) * ctx.vel.x - Math.cos(bodyYaw) * ctx.vel.z;
     const dirSign = along < -0.5 ? -1 : 1;
     const crouch = (ctx.crouch || 0) > 0.5;
-    if (ctx.air) { if (!wasAir && actions.jump) actions.jump.reset(); play('jump', 1); }
+    // the jump clip is take-off, top, landing: in the air it plays to the top (halfway) and holds there
+    // however long the fall; touching down plays the second half as the landing
+    const J = actions.jump, apex = J ? J.getClip().duration * 0.5 : 0;
+    if (J && ctx.air) {
+      if (!wasAir) J.reset();
+      if (J.time >= apex) J.time = apex;
+      play('jump', J.time >= apex ? 0 : 1);
+      landT = 0;
+    } else if (J && wasAir) { J.time = Math.max(J.time, apex); landT = J.getClip().duration - J.time; }
+    if (!ctx.air && landT > 0) { landT -= dt; play('jump', 1); }
+    else if (ctx.air) { /* jump, above */ }
     else if (crouch && sp < 0.4) play('crouch', 1);
     else if (sp < 0.4) play('idle', 1);
     else if (sp < 4.2) play('walk', dirSign * THREE.MathUtils.clamp(sp / 1.7, 0.7, 2));
@@ -272,6 +282,15 @@ export function createRunner(scene) {
     mixer.update(dt);
     for (const c of clipPose) { c.q.copy(c.o.quaternion); c.p.copy(c.o.position); }
     if (crouch && sp >= 0.4) root.position.y -= 0.3; // walking crouched: the walk, lowered
+    // the jump clip lifts the hips itself; in the game the player's position already rises, so take the
+    // clip's lift back out unless the caller wants it (ctx.clipLift: the character page stays on the floor)
+    if (J && (ctx.air || landT > 0)) {
+      root.updateMatrixWorld(true);
+      const hy = P(bones.Hips).y;
+      if (ctx.air && !wasAirPrev) jumpBaseY = hy;
+      if (!ctx.clipLift && jumpBaseY !== null) root.position.y -= Math.max(0, hy - jumpBaseY);
+    } else jumpBaseY = null;
+    wasAirPrev = !!ctx.air;
 
     // aim over the upper body, then reload over that
     if (overlays.aim) overlay('aim', mixer.time % overlays.aim.duration, w);

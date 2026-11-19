@@ -170,7 +170,9 @@ document.querySelectorAll('[data-move]').forEach((b) => b.addEventListener('clic
   st.move = b.dataset.move; document.querySelectorAll('[data-move]').forEach((x) => press(x, x === b));
 }));
 document.getElementById('reload').addEventListener('click', () => runner.reload());
-for (const k of ['aim', 'fire', 'crouch', 'air']) {
+// Jump: one hop, about the game's own air time (a held toggle froze her at the top)
+document.getElementById('air').addEventListener('click', () => { st.air = true; setTimeout(() => { st.air = false; }, 650); });
+for (const k of ['aim', 'fire', 'crouch']) {
   const b = document.getElementById(k); press(b, st[k]);
   b.addEventListener('click', () => { st[k] = !st[k]; press(b, st[k]); });
 }
@@ -194,7 +196,7 @@ renderer.setAnimationLoop((now) => {
   crouch += ((st.crouch ? 1 : 0) - crouch) * (1 - Math.exp(-12 * dt));
   const sp = SPEEDS[st.move];
   runner.update(dt, { pos: new THREE.Vector3(0, 0, 0), vel: new THREE.Vector3(0, 0, -sp), yaw: 0, pitch: st.pitch,
-    speed: sp, air: st.air, crouch, aim, kick: firing ? 1 : 0, flash: firing });
+    speed: sp, air: st.air, clipLift: true, crouch, aim, kick: firing ? 1 : 0, flash: firing });
   controls.update();
   renderer.render(scene, camera);
 });
