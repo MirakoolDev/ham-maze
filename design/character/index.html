@@ -135,8 +135,23 @@ key.shadow.bias = -0.0004; key.shadow.normalBias = .02;
 scene.add(key);
 const rim = new THREE.DirectionalLight(0xffc4d4, 2.4); rim.position.set(-4, 3, -5); scene.add(rim);
 
+// The in-game look (src/runner.js rimMaterial): near-black gloss with a fresnel rim
+function rimMat(rimColor) {
+  const m = new THREE.MeshPhysicalMaterial({ color: 0x07060a, roughness: .12, clearcoat: 1, clearcoatRoughness: .08 });
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uRim = { value: new THREE.Color(rimColor) };
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 uRim;')
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += uRim * pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), 4.2) * 1.9;');
+  };
+  m.customProgramCacheKey = () => 'rim-' + rimColor;
+  return m;
+}
+
 // Body looks
 const SKINS = {
+  rim:   { name: 'Cyan rim (in game)', make: () => rimMat('#5ff4ff') },
+  warm:  { name: 'Warm rim', make: () => rimMat('#ffb07a') },
   file:  { name: 'As exported', make: () => new THREE.MeshPhysicalMaterial({ color: 0x050407, roughness: .08, metalness: 0, clearcoat: 1, clearcoatRoughness: .05 }) },
   ink:   { name: 'Ink',  make: () => new THREE.MeshPhysicalMaterial({ color: '#2a2733', roughness: .45, clearcoat: .6, clearcoatRoughness: .3, sheen: .6, sheenColor: new THREE.Color('#ff8fa6') }) },
   bone:  { name: 'Bone', make: () => new THREE.MeshPhysicalMaterial({ color: '#fffaf2', roughness: .55, sheen: .4, sheenColor: new THREE.Color('#f6e4b4') }) },
