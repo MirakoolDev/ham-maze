@@ -5,6 +5,7 @@
 //  - the pistols (Marker, Pulse, Snare) are real handgun size: a grip about 2.6 x 4.6 cm her fingers wrap,
 //    a slide about 3 cm wide, 17 to 22 cm long.
 import * as THREE from 'three';
+import { flashTexture } from './gunmodel.js';
 
 export const NFT_GUNS = {
   marker: { name: 'Marker', kind: 'pistol', body: '#fff6f8', mid: '#f7c3d3', accent: '#ff4f97', glow: '#ff7db4', len: 0.19, muzzle: 0.019 },
@@ -74,7 +75,7 @@ export function buildNftGun(id) {
     muzzle = new THREE.Vector3(0, BORE, -(front + 0.035));
     fist = new THREE.Vector3(0, -0.05, 0.035);
   }
-  const flash = new THREE.Sprite(new THREE.SpriteMaterial({ color: g.glow, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+  const flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: flashTexture(), color: g.glow, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
   flash.position.copy(muzzle); flash.visible = false; group.add(flash);
   return { group, flash, kind: g.kind, muzzle, fist };
 }

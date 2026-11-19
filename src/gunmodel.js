@@ -41,7 +41,7 @@ function dotTexture() {
   g.fillStyle = grd; g.fillRect(0, 0, 64, 64);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
-function flashTexture() {
+export function flashTexture() {
   const c = document.createElement('canvas'); c.width = c.height = 128;
   const g = c.getContext('2d'); g.translate(64, 64);
   for (let i = 0; i < 7; i++) {
