@@ -54,5 +54,35 @@ if (dev) {
   const rl = await esbuild.build({ entryPoints: ['src/leaderboard.js'], bundle: true, minify: true, format: 'iife', write: false, legalComments: 'none', target: 'es2020' });
   const ljs = rl.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
   fs.writeFileSync('dist/leaderboard.html', fill(fs.readFileSync('src/leaderboard.html', 'utf8'), '', `<script>\n${ljs}\n</script>`));
-  for (const f of ['dist/index.html', 'dist/artifact.html', 'dist/admin.html', 'dist/deploy.html', 'dist/leaderboard.html']) console.log(`${f}  ${(fs.statSync(f).size / 1024).toFixed(0)} KB`);
+  // the story page (/story) and the NFT preview (/nfts): written as claude.ai artifacts (no skeleton
+  // of their own), so wrap each in a real document here. They share design/nft/ham-art.js, the same
+  // art the contracts are generated from. "Play" points at the game on this same domain.
+  fs.copyFileSync('design/nft/ham-art.js', 'dist/ham-art.js');
+  const page = (src, out, desc) => {
+    const body = fs.readFileSync(src, 'utf8')
+      .replace(/<meta name="claude:viewport-fit-sides"[^>]*>\s*/, '')
+      .replaceAll('https://ham-maze.vercel.app', '/')
+      .replaceAll('src="ham-art.js"', 'src="/ham-art.js"');
+    const title = (body.match(/<title>([^<]*)<\/title>/) || [])[1] || 'HAM';
+    fs.writeFileSync(out, `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="${desc}">
+<meta property="og:title" content="${title}">
+<meta property="og:description" content="${desc}">
+<link rel="icon" href="/favicon.png">
+<link rel="apple-touch-icon" href="/favicon-180.png">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+${body}
+</body>
+</html>
+`);
+  };
+  page('site/story.html', 'dist/story.html', 'HAM is a daily maze shooter. Every run becomes a Score NFT, the top three split the pot, and nothing launches a new coin.');
+  page('site/nfts.html', 'dist/nfts.html', 'The HAM NFTs: Scores drawn from the day\'s real maze, and Power-Up guns sold in sealed packs.');
+  for (const f of ['dist/index.html', 'dist/artifact.html', 'dist/admin.html', 'dist/deploy.html', 'dist/leaderboard.html', 'dist/story.html', 'dist/nfts.html']) console.log(`${f}  ${(fs.statSync(f).size / 1024).toFixed(0)} KB`);
 }

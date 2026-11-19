@@ -1,0 +1,637 @@
+<title>HAM: Maze or Money</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: one long dark page in the portfolio's manner (quiet type, the art carries the colour),
+     structured like jack.art's Exchange story: a question, a flow that shows the whole mechanic,
+     three numbered choices, the art, the money, an honest checklist, a glossary. */
+  :root {
+    --bg: #0e0e10;
+    --surface: #151518;
+    --surface-2: #1c1c21;
+    --line: #27272d;
+    --ink: #f3f1ed;
+    --muted: #a19da8;
+    --faint: #6d6974;
+    --orange: #ff6a1f;
+    --orange-soft: #ff9a5c;
+    --pink: #ffccdd;
+    --blue: #bde2ff;
+    --lilac: #c9b6f0;
+    --holds: #8fe0b0;
+    --partly: #ffc56b;
+    --notyet: #7f7b88;
+    --display: 'Jost', Futura, 'Avenir Next', 'Century Gothic', sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body {
+    background: var(--bg); color: var(--ink); margin: 0;
+    font-family: var(--display); font-size: 16px; line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: rgba(14,14,16,0.86); }
+  a { color: inherit; }
+  .pad { padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
+  .wrap { max-width: 1160px; margin: 0 auto; }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  :focus-visible { outline: 2px solid var(--orange-soft); outline-offset: 3px; border-radius: 4px; }
+
+  /* nav */
+  header.nav {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 9;
+    background: rgba(14,14,16,0.86); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--line);
+  }
+  .nav .wrap { display: flex; align-items: center; gap: 28px; height: 60px; }
+  .mark { font-weight: 600; letter-spacing: 0.34em; font-size: 14px; text-decoration: none; white-space: nowrap; }
+  .links { display: flex; gap: 22px; overflow-x: auto; scrollbar-width: none; flex: 1; min-width: 0; }
+  .links::-webkit-scrollbar { display: none; }
+  .links a { color: var(--muted); text-decoration: none; font-size: 14px; white-space: nowrap; }
+  .links a:hover { color: var(--ink); }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; white-space: nowrap;
+    font: 500 14px/1 var(--display); letter-spacing: 0.02em; text-decoration: none;
+    padding: 13px 20px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink); background: transparent;
+  }
+  .btn:hover { border-color: var(--faint); }
+  .btn.hot { background: var(--orange); border-color: var(--orange); color: #1a0b03; }
+  .btn.hot:hover { background: var(--orange-soft); border-color: var(--orange-soft); }
+  .nav .btn { padding: 10px 16px; }
+  @media (max-width: 620px) { .nav .btn { display: none; } }
+
+  /* ticker */
+  .ticker { border-bottom: 1px solid var(--line); overflow: hidden; font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+  .ticker .wrap { display: flex; align-items: center; gap: 18px; height: 42px; }
+  .chip { flex: none; font-size: 10.5px; letter-spacing: 0.14em; color: var(--faint); border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px; }
+  .belt { overflow: hidden; flex: 1; min-width: 0; mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); }
+  .belt-in { display: inline-flex; gap: 40px; white-space: nowrap; animation: belt 60s linear infinite; }
+  .belt-in b { color: var(--ink); font-weight: 500; }
+  .belt-in .up { color: var(--holds); } .belt-in .warm { color: var(--orange-soft); }
+  @keyframes belt { to { transform: translateX(-50%); } }
+  @media (prefers-reduced-motion: reduce) { .belt-in { animation: none; } }
+
+  /* hero */
+  .hero { text-align: center; padding-block: 96px 40px; }
+  .pill { display: inline-flex; align-items: center; gap: 9px; font-size: 13px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px 6px 12px; }
+  .pill i { width: 7px; height: 7px; border-radius: 50%; background: var(--orange); box-shadow: 0 0 12px var(--orange); }
+  h1 { font-weight: 500; font-size: clamp(60px, 11.5vw, 136px); line-height: 0.95; letter-spacing: -0.035em; margin: 30px 0 26px; }
+  .hero p { max-width: 58ch; margin: 0 auto; color: var(--muted); font-size: 18px; }
+  .hero p b { color: var(--ink); font-weight: 500; }
+  .ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 34px; }
+
+  .flow { margin-top: 72px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); overflow-x: auto; }
+  .flow svg { display: block; width: 100%; min-width: 760px; height: auto; }
+  .flow-cap { display: grid; grid-template-columns: repeat(3, 1fr); font-size: 13px; color: var(--muted); padding-top: 14px; min-width: 0; }
+  .flow-cap span:nth-child(2) { text-align: center; } .flow-cap span:nth-child(3) { text-align: right; }
+
+  /* sections */
+  section.block { padding-block: 120px 0; }
+  .kicker { font-weight: 600; font-size: 12px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--muted); margin: 0 0 18px; }
+  h2 { font-weight: 500; font-size: clamp(36px, 5.6vw, 64px); line-height: 1.02; letter-spacing: -0.025em; margin: 0 0 22px; max-width: 16ch; text-wrap: balance; }
+  .intro { color: var(--muted); font-size: 18px; max-width: 60ch; margin: 0; }
+  .intro b { color: var(--ink); font-weight: 500; }
+
+  /* steps */
+  .steps { margin-top: 64px; border-top: 1px solid var(--line); }
+  .step { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; padding-block: 56px; border-bottom: 1px solid var(--line); align-items: center; }
+  .step-n { font-family: var(--mono); font-size: 13px; color: var(--orange-soft); }
+  .step h3 { font-weight: 500; font-size: 30px; letter-spacing: -0.015em; margin: 10px 0 14px; }
+  .step p { color: var(--muted); margin: 0 0 26px; max-width: 48ch; }
+  .facts { border-top: 1px solid var(--line); }
+  .facts div { display: flex; justify-content: space-between; gap: 16px; padding-block: 11px; border-bottom: 1px solid var(--line); font-size: 14px; }
+  .facts dt { color: var(--muted); } .facts dd { margin: 0; font-family: var(--mono); font-size: 13px; text-align: right; }
+
+  .receipt { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 26px; font-family: var(--mono); font-size: 13.5px; }
+  .receipt .head { display: flex; justify-content: space-between; color: var(--muted); padding-bottom: 16px; border-bottom: 1px dashed var(--line); }
+  .receipt .head b { color: var(--ink); font-weight: 500; }
+  .receipt ol { list-style: none; margin: 0; padding: 0; counter-reset: r; }
+  .receipt li { counter-increment: r; display: grid; grid-template-columns: 26px 1fr auto; gap: 8px; padding-block: 15px; border-bottom: 1px dashed var(--line); }
+  .receipt li::before { content: counter(r); color: var(--faint); }
+  .receipt li b { font-weight: 500; color: var(--orange-soft); }
+  .receipt .foot { padding-top: 16px; color: var(--muted); display: flex; justify-content: space-between; }
+
+  .art-frame { margin: 0; }
+  .art-frame svg { display: block; width: 100%; height: auto; border-radius: 6px; }
+  .art-frame figcaption { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-top: 10px; }
+
+  .timeline { list-style: none; margin: 0; padding: 0 0 0 4px; position: relative; }
+  .timeline::before { content: ""; position: absolute; left: 9px; top: 12px; bottom: 12px; width: 1px; background: linear-gradient(var(--orange), var(--line)); }
+  .timeline li { position: relative; padding: 0 0 26px 38px; }
+  .timeline li:last-child { padding-bottom: 0; }
+  .timeline li::before { content: ""; position: absolute; left: 0; top: 6px; width: 11px; height: 11px; border-radius: 50%; background: var(--bg); border: 1.5px solid var(--orange-soft); }
+  .timeline li.lock::before { background: var(--orange); box-shadow: 0 0 14px var(--orange); }
+  .timeline .when { font-family: var(--mono); font-size: 12px; color: var(--faint); display: block; }
+  .timeline .what { font-size: 17px; }
+  .timeline .why { color: var(--muted); font-size: 14px; display: block; }
+
+  /* lab */
+  .lab { margin-top: 64px; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 48px; align-items: start; }
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 28px; }
+  .ctl { padding-block: 16px; border-bottom: 1px solid var(--line); }
+  .ctl:first-child { padding-top: 0; }
+  .ctl label, .ctl .lbl { display: flex; justify-content: space-between; font-size: 14px; color: var(--muted); margin-bottom: 10px; }
+  .ctl output { font-family: var(--mono); color: var(--ink); font-size: 13px; }
+  input[type="date"] { width: 100%; font: 400 14px var(--mono); color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; }
+  input[type="range"] { width: 100%; accent-color: var(--orange); }
+  .seg { display: grid; grid-template-columns: 1fr 1fr; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 4px; gap: 4px; }
+  .seg input { position: absolute; opacity: 0; pointer-events: none; }
+  .seg label { margin: 0; justify-content: center; padding: 9px; border-radius: 9px; cursor: pointer; color: var(--muted); font-size: 14px; }
+  .seg input:checked + label { background: var(--ink); color: var(--bg); }
+  .seg input:focus-visible + label { outline: 2px solid var(--orange-soft); }
+  .readout { margin: 18px 0 0; }
+  .readout div { display: flex; justify-content: space-between; gap: 12px; padding-block: 8px; font-size: 14px; }
+  .readout dt { color: var(--muted); } .readout dd { margin: 0; font-family: var(--mono); font-size: 13px; }
+  .note { font-size: 12.5px; color: var(--faint); margin: 14px 0 0; }
+
+  .strip-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin: 80px 0 18px; flex-wrap: wrap; }
+  .strip-head h3 { font-weight: 500; font-size: 22px; margin: 0; }
+  .strip-head span { color: var(--muted); font-size: 14px; }
+  .strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+  .strip svg { display: block; width: 100%; height: auto; border-radius: 4px; }
+  .guns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .guns svg { display: block; width: 100%; height: auto; border-radius: 4px; }
+  .crates { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin: 0; }
+  .crates div { background: var(--surface); padding: 18px 20px; min-width: 0; }
+  .crates dt { font-weight: 500; font-size: 17px; margin-bottom: 6px; }
+  .crates dd { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+  .rooms { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+  .room { border-radius: 12px; height: 92px; padding: 12px 14px; display: flex; align-items: flex-end; font-size: 13px; font-weight: 500; letter-spacing: 0.06em; }
+
+  /* pot */
+  .bar { display: flex; height: 64px; border-radius: 14px; overflow: hidden; margin-top: 64px; gap: 3px; }
+  .bar div { display: flex; align-items: flex-end; padding: 10px 12px; font-family: var(--mono); font-size: 13px; color: #1a0b03; min-width: 0; }
+  .legend { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 28px; margin-top: 26px; }
+  .legend h4 { font-weight: 500; font-size: 16px; margin: 0 0 6px; display: flex; align-items: center; gap: 8px; }
+  .legend h4 i { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+  .legend p { color: var(--muted); font-size: 14px; margin: 0; }
+
+  /* built on */
+  .three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; margin-top: 64px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 22px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .card .vis { aspect-ratio: 1; max-width: 100%; border-radius: 10px; overflow: hidden; background: var(--surface-2); display: grid; place-items: center; }
+  .card .vis svg { width: 100%; height: 100%; display: block; }
+  .card h3 { font-weight: 500; font-size: 22px; margin: 0; }
+  .card p { color: var(--muted); font-size: 15px; margin: 0; }
+  .tag { font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
+
+  /* audit */
+  .audit { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 64px; }
+  .item { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 22px 24px; min-width: 0; }
+  .item .top { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+  .item h4 { font-weight: 500; font-size: 18px; margin: 0; }
+  .st { font-family: var(--mono); font-size: 12px; display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+  .st::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .st.holds { color: var(--holds); } .st.partly { color: var(--partly); }
+  .st.notyet { color: var(--notyet); } .st.notyet::before { background: transparent; border: 1.5px solid currentColor; width: 6px; height: 6px; }
+  .item p { color: var(--muted); font-size: 15px; margin: 0; }
+  .item .n { font-family: var(--mono); font-size: 11px; color: var(--faint); margin-top: 12px; }
+  .tally { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 26px; font-family: var(--mono); font-size: 13px; color: var(--muted); }
+
+  /* glossary */
+  .gloss { display: grid; grid-template-columns: 220px minmax(0, 1fr); margin-top: 56px; border-top: 1px solid var(--line); }
+  .gloss dt, .gloss dd { padding-block: 18px; border-bottom: 1px solid var(--line); margin: 0; }
+  .gloss dt { font-weight: 500; font-size: 17px; }
+  .gloss dd { color: var(--muted); }
+
+  footer { margin-top: 140px; border-top: 1px solid var(--line); padding-block: 40px 64px; }
+  footer .wrap { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; color: var(--muted); font-size: 14px; }
+  footer a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--line); }
+
+  @media (max-width: 900px) {
+    .step, .lab { grid-template-columns: minmax(0, 1fr); gap: 32px; }
+    .three { grid-template-columns: minmax(0, 1fr); }
+    .legend { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .audit { grid-template-columns: minmax(0, 1fr); }
+    .rooms { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  @media (max-width: 620px) {
+    .hero { padding-block: 64px 32px; }
+    section.block { padding-block: 88px 0; }
+    .strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .guns, .crates { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .bar div span { display: none; }
+    .gloss { grid-template-columns: minmax(0, 1fr); }
+    .gloss dt { border-bottom: none; padding-bottom: 2px; }
+    .gloss dd { padding-top: 0; }
+  }
+</style>
+
+<header class="nav pad">
+  <div class="wrap">
+    <a class="mark" href="#top">HAM</a>
+    <nav class="links" aria-label="Sections">
+      <a href="#how">How it works</a>
+      <a href="#scores">Scores</a>
+      <a href="#pot">The pot</a>
+      <a href="#built">Built on it</a>
+      <a href="#audit">Checklist</a>
+      <a href="#words">Glossary</a>
+    </nav>
+    <a class="btn hot" href="https://ham-maze.vercel.app" target="_blank" rel="noopener">Play today's maze</a>
+  </div>
+</header>
+
+<div class="ticker pad" aria-label="Example activity">
+  <div class="wrap">
+    <span class="chip">EXAMPLE</span>
+    <div class="belt"><div class="belt-in" id="belt"></div></div>
+  </div>
+</div>
+
+<main id="top">
+  <section class="hero pad">
+    <div class="wrap">
+      <span class="pill"><i></i>A daily maze with an on-chain pot</span>
+      <h1>Maze or money?</h1>
+      <p>Every run is a payment. Every run, finished or not, mints a <b>Score</b>: the day's maze, drawn as far as you got. When the day settles, the pot pays whoever <b>holds</b> the winning Scores, not whoever played them.</p>
+      <div class="ctas">
+        <a class="btn hot" href="https://ham-maze.vercel.app" target="_blank" rel="noopener">Play today's maze</a>
+        <a class="btn" href="#how">How it works</a>
+      </div>
+    </div>
+    <div class="wrap">
+      <div class="flow" id="flow" role="img" aria-label="Runs flow into the day's pot. The pot splits into 40, 20 and 10 percent for the top three Scores, 20 percent to the treasury and 10 percent into tomorrow's pot."></div>
+      <div class="flow-cap"><span>Today's runs</span><span>Today's pot</span><span>Where it goes</span></div>
+    </div>
+  </section>
+
+  <section class="block pad" id="how">
+    <div class="wrap">
+      <p class="kicker">How it works</p>
+      <h2>Each run is a choice.</h2>
+      <p class="intro">A run costs the entry fee, and losing costs the same. There are no free retries and nothing happens on its own. You decide when to play, when to sell and when to claim.</p>
+
+      <div class="steps">
+        <div class="step">
+          <div>
+            <span class="step-n">01</span>
+            <h3>Pay and play</h3>
+            <p>One transaction does everything. It pays the fee, checks the referee's signature on your result, mints your Score and ranks it. There is no separate enter-then-submit step to abandon halfway.</p>
+            <dl class="facts">
+              <div><dt>Entry fee</dt><dd>0.01 ETH, capped at 1 ETH</dd></div>
+              <div><dt>Free runs</dt><dd>1 a day for holders</dd></div>
+              <div><dt>Retry after a loss</dt><dd>a new fee</dd></div>
+            </dl>
+          </div>
+          <div class="receipt" aria-label="What one playRun transaction does">
+            <div class="head"><b>playRun()</b><span>1 transaction</span></div>
+            <ol>
+              <li><span>Pay the entry fee</span><b>0.01 ETH</b></li>
+              <li><span>Check the referee's signature</span><b>valid</b></li>
+              <li><span>Mint the Score</span><b>No. 142</b></li>
+              <li><span>Rank it for today</span><b>2nd</b></li>
+            </ol>
+            <div class="foot"><span>Lost the run?</span><span>Still minted, still ranked</span></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div>
+            <span class="step-n">02</span>
+            <h3>Keep the Score</h3>
+            <p>Win, lose or die in the first corridor, the run becomes an NFT in your wallet. It ranks on points for the day. You can hold it, or sell it to anyone at any price before it's claimed.</p>
+            <dl class="facts">
+              <div><dt>Mints on</dt><dd>every run</dd></div>
+              <div><dt>Ranked</dt><dd>top 3 by points</dd></div>
+              <div><dt>Transferable</dt><dd>until its claim starts</dd></div>
+            </dl>
+          </div>
+          <figure class="art-frame">
+            <div id="stepArt"></div>
+            <figcaption>Today's maze, run to the monolith</figcaption>
+          </figure>
+        </div>
+
+        <div class="step">
+          <div>
+            <span class="step-n">03</span>
+            <h3>Settle, then claim</h3>
+            <p>After the day ends it settles and the top three Scores get their prizes. Claiming takes two steps. Declaring intent freezes the Score, and you collect ten minutes later. A seller can't take the sale price and the prize at once.</p>
+            <dl class="facts">
+              <div><dt>Settles</dt><dd>15 min after the day ends</dd></div>
+              <div><dt>Claim delay</dt><dd>10 minutes</dd></div>
+              <div><dt>Claim window</dt><dd>7 days</dd></div>
+            </dl>
+          </div>
+          <ol class="timeline">
+            <li><span class="when">00:00 UTC</span><span class="what">The day ends</span><span class="why">No more runs count toward it.</span></li>
+            <li><span class="when">+15 min</span><span class="what">Settled</span><span class="why">Prizes are fixed to the top three Scores, whoever holds them.</span></li>
+            <li class="lock"><span class="when">Whenever you choose</span><span class="what">Claim intent</span><span class="why">The Score freezes. It can't be sold or sent from here on.</span></li>
+            <li><span class="when">+10 min</span><span class="what">Collect</span><span class="why">Paid to the wallet holding the frozen Score.</span></li>
+            <li><span class="when">+7 days</span><span class="what">Unclaimed returns</span><span class="why">The prize goes back into the pot.</span></li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block pad" id="scores">
+    <div class="wrap">
+      <p class="kicker">The Score</p>
+      <h2>The maze, as far as you got.</h2>
+      <p class="intro">Every Score draws the day's real maze, built on chain from the date with the same generator the game uses. The art never gives the maze away. <b>While the day is live</b>, every Score is sealed to the entrance corner everyone sees at spawn. <b>After 00:00 UTC</b> that maze is retired for good and the Score develops: walls rise in a circle around the entrance, as far as your run got. A radius, never a route.</p>
+
+      <div class="lab">
+        <figure class="art-frame">
+          <div id="labArt" aria-live="polite"></div>
+          <figcaption id="labCap"></figcaption>
+        </figure>
+        <div class="panel">
+          <div class="ctl">
+            <label for="labDate">Day <output id="labDateOut"></output></label>
+            <input type="date" id="labDate" min="2024-01-01" max="2030-12-31">
+          </div>
+          <div class="ctl">
+            <span class="lbl">When you look</span>
+            <div class="seg">
+              <input type="radio" name="phase" id="phLive" value="live"><label for="phLive">Day live, sealed</label>
+              <input type="radio" name="phase" id="phOver" value="over" checked><label for="phOver">Day over, developed</label>
+            </div>
+          </div>
+          <div class="ctl">
+            <span class="lbl">Outcome</span>
+            <div class="seg">
+              <input type="radio" name="outcome" id="outFound" value="found" checked><label for="outFound">Found it</label>
+              <input type="radio" name="outcome" id="outLost" value="lost"><label for="outLost">Signal lost</label>
+            </div>
+          </div>
+          <div class="ctl">
+            <label for="labTime">Time survived <output id="labTimeOut"></output></label>
+            <input type="range" id="labTime" min="10" max="300" step="5" value="95">
+          </div>
+          <div class="ctl">
+            <label for="labKills">Kills <output id="labKillsOut"></output></label>
+            <input type="range" id="labKills" min="0" max="12" step="1" value="3">
+          </div>
+          <dl class="readout">
+            <div><dt>Room</dt><dd id="roRoom"></dd></div>
+            <div><dt>The figure stands</dt><dd id="roFig"></dd></div>
+            <div><dt>Walls shown</dt><dd id="roReach"></dd></div>
+            <div><dt>Points</dt><dd id="roPoints"></dd></div>
+          </dl>
+          <p class="note">The pink ring marks START, where every run spawns. The dotted line is a straight sightline to where the run ended, not a path. Points come from the referee's signed result; the ones here are examples.</p>
+        </div>
+      </div>
+
+      <div class="strip-head"><h3>One day, many runs</h3><span>Same maze, different reach. A day's Scores form a set.</span></div>
+      <div class="strip" id="strip"></div>
+
+      <div class="strip-head"><h3>Five rooms</h3><span>Each day draws one, after the portfolio.</span></div>
+      <div class="rooms" id="rooms"></div>
+    </div>
+  </section>
+
+  <section class="block pad" id="pot">
+    <div class="wrap">
+      <p class="kicker">The pot</p>
+      <h2>Where every fee goes.</h2>
+      <p class="intro">Every entry fee goes into the day's pot. When the day settles it splits five ways. Holder bonuses and referral rewards come out of the treasury's share, so the winners' shares stay as shown.</p>
+      <div class="bar" aria-hidden="true">
+        <div style="flex:40; background: var(--orange)"><span>40%</span></div>
+        <div style="flex:20; background: var(--orange-soft)"><span>20%</span></div>
+        <div style="flex:10; background: #ffc9a3"><span>10%</span></div>
+        <div style="flex:20; background: var(--blue)"><span>20%</span></div>
+        <div style="flex:10; background: var(--lilac)"><span>10%</span></div>
+      </div>
+      <div class="legend">
+        <div><h4><i style="background: var(--orange)"></i>First, 40%</h4><p>To whoever holds the highest-scoring Score.</p></div>
+        <div><h4><i style="background: var(--orange-soft)"></i>Second, 20%</h4><p>To the holder of the runner-up.</p></div>
+        <div><h4><i style="background: #ffc9a3"></i>Third, 10%</h4><p>To the holder of third place.</p></div>
+        <div><h4><i style="background: var(--blue)"></i>Backers and buyback, 20%</h4><p>10% to backers, always. The other 10% pays holder bonuses and referrals, then buys $PFWA.</p></div>
+        <div><h4><i style="background: var(--lilac)"></i>Rollover, 10%</h4><p>Starts tomorrow's pot, so no day opens at zero.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block pad" id="built">
+    <div class="wrap">
+      <p class="kicker">Built on the pot</p>
+      <h2>What grows on top of it.</h2>
+      <p class="intro">Two things reward people for staying and for bringing friends. A third is something HAM chose not to make.</p>
+      <div class="three">
+        <article class="card">
+          <div class="vis" id="crewVis"></div>
+          <span class="tag">01 &middot; Crew bonus</span>
+          <h3>Bring three, double the cut</h3>
+          <p>A referrer earns 5% of each referred player's prize. Once three of them play on the same day, it becomes 10% for the rest of that day.</p>
+        </article>
+        <article class="card">
+          <div class="vis" id="pupVis"></div>
+          <span class="tag">02 &middot; Power-Ups</span>
+          <h3>Guns you keep</h3>
+          <p>Everyone starts with the K-7. A Power-Up is a gun NFT that trades raw damage for one move, with a few charges per run. Every gun comes in a sealed pack at one price: the day's first is about $1, and it goes ten times dearer every 100 packs sold. Back to $1 at midnight UTC. 10,000 packs. Strip one to see what you got.</p>
+        </article>
+        <article class="card">
+          <div class="vis" id="tokenVis"></div>
+          <span class="tag">03 &middot; No new token</span>
+          <h3>The pot buys $PFWA</h3>
+          <p>HAM doesn't launch a coin. Its treasury buys $PFWA, the one token behind everything this builder ships, starting with a prediction market. Every new project feeds the same token.</p>
+        </article>
+      </div>
+
+      <div class="strip-head"><h3>The arsenal</h3><span>Five Power-Ups and the starter gun. Each acts its move out on a plinth of maze concrete.</span></div>
+      <div class="guns" id="guns"></div>
+
+      <div class="strip-head"><h3>Crates, inside every run</h3><span>Not NFTs. Hold one at a time, like item boxes in a kart racer.</span></div>
+      <dl class="crates">
+        <div><dt>Blink</dt><dd>Jumps you to an open cell up to 3 cells closer to the monolith.</dd></div>
+        <div><dt>Freeze</dt><dd>The nearest rival in sight stops for 3 seconds.</dd></div>
+        <div><dt>Steal</dt><dd>Takes a rival's power-up, or 10 rounds if they hold none.</dd></div>
+        <div><dt>Sonar</dt><dd>Every rival shows on your compass for 6 seconds. Once per match.</dd></div>
+        <div><dt>Shield</dt><dd>Blocks the next hit, Freeze or Steal.</dd></div>
+        <div><dt>Decoy</dt><dd>A copy of you walks off another way. Sentries and Sonar follow it.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="block pad" id="audit">
+    <div class="wrap">
+      <p class="kicker">Held to account</p>
+      <h2>Is this money, or just points?</h2>
+      <p class="intro">This list is checked against the contract, not the pitch. Items that are still open say so.</p>
+      <div class="audit">
+        <div class="item"><div class="top"><h4>No new token</h4><span class="st holds">Holds</span></div><p>No HAM coin exists. The treasury's share buys $PFWA.</p><div class="n">01</div></div>
+        <div class="item"><div class="top"><h4>Results can't be forged</h4><span class="st holds">Holds</span></div><p>The referee signs each result for one player, one attempt and one day. A changed score or a reused signature fails.</p><div class="n">02</div></div>
+        <div class="item"><div class="top"><h4>No double-dip on a sale</h4><span class="st holds">Holds</span></div><p>Starting a claim freezes the Score. A sale either completes first, and the buyer claims, or it fails.</p><div class="n">03</div></div>
+        <div class="item"><div class="top"><h4>Prizes don't disappear</h4><span class="st holds">Holds</span></div><p>A prize left unclaimed for 7 days goes back into the pot, not to the owner.</p><div class="n">04</div></div>
+        <div class="item"><div class="top"><h4>What the owner can do</h4><span class="st partly">Partly</span></div><p>The owner can pause new runs, set the fee up to 1 ETH and tune the maze within fixed limits. It can't move prizes or edit a signed result.</p><div class="n">05</div></div>
+        <div class="item"><div class="top"><h4>One referee key</h4><span class="st partly">Partly</span></div><p>A single key signs results. If it leaked, fake runs could be signed until it's replaced.</p><div class="n">06</div></div>
+        <div class="item"><div class="top"><h4>Deployed and audited</h4><span class="st notyet">Not yet</span></div><p>73 contract tests pass. There is no mainnet deployment or outside audit yet.</p><div class="n">07</div></div>
+        <div class="item"><div class="top"><h4>Buyback running</h4><span class="st notyet">Not yet</span></div><p>Each pot pays a fixed 10% to backers and 10% to the buyback. The contract that turns the buyback share into $PFWA isn't built yet.</p><div class="n">08</div></div>
+      </div>
+      <div class="tally"><span>4 hold</span><span>2 partly</span><span>2 not yet</span></div>
+    </div>
+  </section>
+
+  <section class="block pad" id="words">
+    <div class="wrap">
+      <p class="kicker">Glossary</p>
+      <h2>Plain words.</h2>
+      <dl class="gloss">
+        <dt>Run</dt><dd>One paid attempt at the day's maze. It pays the fee, records the signed result and mints a Score, all in one transaction.</dd>
+        <dt>Score</dt><dd>The NFT a run becomes: the day's maze drawn as far as you got, with points, time, kills and whether you found the monolith.</dd>
+        <dt>Monolith</dt><dd>The orange glass shaft at the centre of every maze. Reaching it finishes the run.</dd>
+        <dt>Settle</dt><dd>Fixes the day's top three Scores and their prizes, 15 minutes after the day ends.</dd>
+        <dt>Claim intent</dt><dd>The first half of a claim. It freezes the Score so it can't change hands.</dd>
+        <dt>Collect</dt><dd>The second half, ten minutes later. It pays whoever holds the frozen Score.</dd>
+        <dt>Crew</dt><dd>The players one person referred who played that day. Three of them doubles the referral cut.</dd>
+        <dt>Power-Up</dt><dd>A gun NFT you keep: Marker, Frost dart, Pulse, Blinker or Snare. Each swaps raw damage for one move with a few charges per run.</dd>
+        <dt>Crate</dt><dd>A one-use pickup found inside a run: Blink, Freeze, Steal, Sonar, Shield or Decoy.</dd>
+        <dt>Sealed</dt><dd>How every Score looks while its day is live: only the entrance corner, so the art never helps anyone solve today's maze.</dd>
+        <dt>$PFWA</dt><dd>One token behind everything this builder ships. It began with a prediction market; HAM is the latest to plug in. The letters mean nothing. That's the point. HAM has no coin of its own: its pot buys $PFWA.</dd>
+      </dl>
+    </div>
+  </section>
+</main>
+
+<footer class="pad">
+  <div class="wrap">
+    <span>HAM &middot; Home's a Maze</span>
+    <span>Made by <a href="https://miracleotugo.art" target="_blank" rel="noopener">Miracle Otugo</a></span>
+  </div>
+</footer>
+
+<script src="ham-art.js"></script>
+<script>
+(function () {
+  const A = window.HAMArt;
+  const today = new Date();
+  const todaySeed = A.seedFromDate(today);
+  const nest = (svg, x, y, w) => svg.replace('<svg ', `<svg x="${x}" y="${y}" width="${w}" height="${w}" `);
+
+  // ticker, clearly marked as example activity until the contract is live
+  const items = [
+    '<b>No. 142</b> claimed <span class="warm">0.0184 ETH</span>',
+    'Run entered &middot; <b>0.01 ETH</b>',
+    '<b>No. 151</b> sold for <b>0.006 ETH</b>',
+    'Crew bonus <span class="up">unlocked</span>',
+    '<b>No. 160</b> signal lost at 0:41',
+    'Frost dart <b>No. 112</b> carried on its <span class="warm">40th</span> run',
+    'Day settled &middot; <b>3</b> Scores paid',
+    '<b>No. 147</b> found the monolith in 2:18',
+  ];
+  document.getElementById('belt').innerHTML = [...items, ...items].map((t) => `<span>${t}</span>`).join('');
+
+  // hero flow: runs into the pot, the pot out to five places
+  (function flow() {
+    const Wd = 1160, Hd = 480, r = new A.DotNetRandom(todaySeed), rnd = () => r.next(10000) / 10000;
+    const potX = 600, potTop = 70, potBot = 410;
+    const out = [`<svg viewBox="0 0 ${Wd} ${Hd}" xmlns="http://www.w3.org/2000/svg"><defs>
+      <linearGradient id="fpot" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#ff7a2e" stop-opacity="0.95"/><stop offset="0.55" stop-color="#ff9a5c" stop-opacity="0.45"/><stop offset="1" stop-color="#ffc39a" stop-opacity="0"/></linearGradient>
+      <filter id="fblur" x="-100%" y="-20%" width="300%" height="140%"><feGaussianBlur stdDeviation="16"/></filter></defs>`];
+    const runs = [], cols = 3, rows = 13;
+    for (let c = 0; c < cols; c++) for (let k = 0; k < rows; k++) runs.push({ x: 34 + c * 22, y: 52 + k * 29, found: rnd() < 0.2, hue: rnd() });
+    const runCol = (u) => (u.found ? '#ff8a3d' : u.hue < 0.5 ? '#ffccdd' : '#bde2ff');
+    const curve = (x0, y0, x1, y1) => `M${x0} ${y0}C${x0 + (x1 - x0) * 0.5} ${y0} ${x1 - (x1 - x0) * 0.5} ${y1} ${x1} ${y1}`;
+    for (const u of runs) {
+      const ty = potTop + 60 + rnd() * (potBot - potTop - 80);
+      out.push(`<path d="${curve(u.x + 12, u.y + 6, potX - 6, ty)}" fill="none" stroke="${runCol(u)}" stroke-opacity="${u.found ? 0.7 : 0.32}" stroke-width="1"/>`);
+    }
+    for (const u of runs) out.push(`<rect x="${u.x}" y="${u.y}" width="12" height="12" rx="2.5" fill="${runCol(u)}" opacity="${u.found ? 1 : 0.85}"/>`);
+
+    const dests = [
+      { y: 92, n: 16, col: '#ff6a1f', label: 'First', pct: '40%', sub: 'to the holder of No. 142', art: { tokenId: 142, points: 8420, timeMs: 112000, kills: 4, completed: true } },
+      { y: 178, n: 8, col: '#ff9a5c', label: 'Second', pct: '20%', sub: 'to the holder of No. 147', art: { tokenId: 147, points: 7160, timeMs: 138000, kills: 2, completed: true } },
+      { y: 264, n: 4, col: '#ffc9a3', label: 'Third', pct: '10%', sub: 'to the holder of No. 151', art: { tokenId: 151, points: 3110, timeMs: 95000, kills: 6, completed: false } },
+      { y: 342, n: 8, col: '#bde2ff', label: 'Backers + buyback', pct: '20%', sub: '10% backers, 10% buys $PFWA' },
+      { y: 412, n: 4, col: '#c9b6f0', label: 'Rollover', pct: '10%', sub: "into tomorrow's pot" },
+    ];
+    const dx = 900;
+    for (const d of dests) for (let i = 0; i < d.n; i++) {
+      const sy = potTop + 60 + rnd() * (potBot - potTop - 80), ty = d.y + (i - d.n / 2) * 1.3;
+      out.push(`<path d="${curve(potX + 6, sy, dx - 4, ty)}" fill="none" stroke="${d.col}" stroke-opacity="0.55" stroke-width="1"/>`);
+    }
+    out.push(`<rect x="${potX - 40}" y="${potTop}" width="80" height="${potBot - potTop}" fill="#ff7a2e" opacity="0.35" filter="url(#fblur)"/>`);
+    out.push(`<rect x="${potX - 13}" y="${potTop}" width="26" height="${potBot - potTop}" fill="url(#fpot)"/>`);
+    out.push(`<rect x="${potX - 2}" y="${potTop}" width="4" height="${potBot - potTop}" fill="#fff4e8" opacity="0.8"/>`);
+    out.push(`<text x="${potX}" y="${potBot + 34}" text-anchor="middle" fill="#f3f1ed" font-family="IBM Plex Mono, monospace" font-size="14">0.34 ETH</text>`);
+    out.push(`<text x="${potX}" y="${potBot + 54}" text-anchor="middle" fill="#6d6974" font-family="IBM Plex Mono, monospace" font-size="11.5">39 runs, example day</text>`);
+    dests.forEach((d, i) => {
+      if (d.art) out.push(nest(A.scoreSVG({ ...d.art, seed: todaySeed, uid: 'f' + i }), dx, d.y - 26, 52));
+      else out.push(`<rect x="${dx + 8}" y="${d.y - 18}" width="36" height="36" rx="18" fill="none" stroke="${d.col}" stroke-width="1.5"/><circle cx="${dx + 26}" cy="${d.y}" r="6" fill="${d.col}"/>`);
+      out.push(`<text x="${dx + 70}" y="${d.y - 3}" fill="#f3f1ed" font-family="Jost, sans-serif" font-size="17" font-weight="500">${d.label} <tspan fill="${d.col}" font-family="IBM Plex Mono, monospace" font-size="14">${d.pct}</tspan></text>`);
+      out.push(`<text x="${dx + 70}" y="${d.y + 17}" fill="#a19da8" font-family="Jost, sans-serif" font-size="13">${d.sub}</text>`);
+    });
+    out.push('</svg>');
+    document.getElementById('flow').innerHTML = out.join('');
+  })();
+
+  document.getElementById('stepArt').innerHTML = A.scoreSVG({ seed: todaySeed, uid: 'st', tokenId: 142, points: 8420, timeMs: 112000, kills: 4, completed: true, sealed: true });
+
+  // the lab
+  const $ = (id) => document.getElementById(id);
+  const iso = (d) => d.toISOString().slice(0, 10);
+  $('labDate').value = iso(today);
+  const clock = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  let raf = 0;
+  function renderLab() {
+    raf = 0;
+    const d = new Date($('labDate').value + 'T00:00:00Z');
+    if (isNaN(d)) return;
+    const seed = A.seedFromDate(d), found = $('outFound').checked;
+    const sec = +$('labTime').value, kills = +$('labKills').value, info = A.describe(seed);
+    const points = found ? 4000 + kills * 300 + Math.max(0, 300 - sec) * 15 : kills * 300 + sec * 12;
+    const sealed = $('phLive').checked;
+    const prog = found ? 9.3 : Math.max(2, Math.min(7.4, 1.5 + sec / 20 + kills * 0.5));
+    const short = 6 - Math.max(0, Math.min(5, Math.round((prog - 0.6) / Math.SQRT2)));
+    $('labArt').innerHTML = A.scoreSVG({ seed, uid: 'lab', tokenId: 142, points, timeMs: sec * 1000, kills, completed: found, sealed });
+    $('labDateOut').textContent = A.dateLabel(seed);
+    $('labTimeOut').textContent = clock(sec);
+    $('labKillsOut').textContent = kills;
+    $('roRoom').textContent = info.room.name;
+    $('roFig').textContent = found ? 'beside the monolith' : `${short} ${short === 1 ? 'cell' : 'cells'} short of it`;
+    $('roReach').textContent = sealed ? 'entrance corner only' : `a ${prog.toFixed(1)}-cell radius`;
+    $('roPoints').textContent = points.toLocaleString('en-US');
+    $('labCap').textContent = `${A.dateLabel(seed)} · ${info.room.name} · ${found ? 'monolith found' : 'signal lost'} · ${sealed ? 'sealed' : 'developed'}`;
+    const key = seed + (sealed ? 's' : 'd');
+    if (renderLab.key !== key) { renderLab.key = key; renderStrip(seed, sealed); }
+  }
+  const queue = () => { if (!raf) raf = requestAnimationFrame(renderLab); };
+  ['labDate', 'labTime', 'labKills', 'outFound', 'outLost', 'phLive', 'phOver'].forEach((id) => $(id).addEventListener('input', queue));
+  ['outFound', 'outLost', 'phLive', 'phOver'].forEach((id) => $(id).addEventListener('change', queue));
+
+  function renderStrip(seed, sealed) {
+    const set = [
+      { tokenId: 147, points: 7160, timeMs: 138000, kills: 2, completed: true },
+      { tokenId: 151, points: 3110, timeMs: 95000, kills: 6, completed: false },
+      { tokenId: 160, points: 1930, timeMs: 41000, kills: 1, completed: false },
+      { tokenId: 170, points: 960, timeMs: 18000, kills: 0, completed: false },
+    ];
+    $('strip').innerHTML = set.map((s, i) => A.scoreSVG({ ...s, seed, sealed, uid: 'sp' + i })).join('');
+  }
+  renderLab();
+
+  $('rooms').innerHTML = A.ROOMS.map((r) => `<div class="room" style="background: linear-gradient(${r.top}, ${r.bottom}); color: ${r.ink}">${r.name}</div>`).join('');
+
+  // built-on visuals
+  $('pupVis').innerHTML = A.packSVG({ uid: 'pv', tokenId: 4213 });
+  $('guns').innerHTML = ['marker', 'frost', 'pulse', 'blinker', 'snare', 'k7'].map((g, i) => A.powerUpSVG({ uid: 'g' + i, gun: g, tokenId: [41, 112, 87, 9, 23, 0][i], runs: [17, 40, 39, 50, 61, 0][i] })).join('');
+  $('crewVis').innerHTML = (function crew() {
+    const s = ['<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="cbg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#58b8b0"/><stop offset="1" stop-color="#d7efe9"/></linearGradient><filter id="cgl" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="2.4"/></filter></defs><rect width="400" height="400" fill="url(#cbg)"/>'];
+    const fig = (x, y, sc, rim, lit) => {
+      const body = 'M-5,-16.8C-2.2,-18.6 2.2,-18.6 5,-16.8L5.6,-7.4L4,-7.2L3.4,0L1,0L0.5,-6.6L-0.5,-6.6L-1,0L-3.4,0L-4,-7.2L-5.6,-7.4Z';
+      const shp = (a) => `<path d="${body}" ${a}/><circle cx="0" cy="-21.6" r="3.5" ${a}/>`;
+      return `<g transform="translate(${x} ${y}) scale(${sc})"><ellipse cx="0" cy="0.5" rx="7" ry="2.4" fill="#0f2f2c" opacity="0.25"/><g filter="url(#cgl)">${shp(`fill="none" stroke="${rim}" stroke-width="2.6"`)}</g>${shp(`fill="#0b0a10" stroke="${rim}" stroke-width="0.7"`)}</g>`;
+    };
+    s.push('<g fill="none" stroke="#ffffff" stroke-opacity="0.7" stroke-width="1.4" stroke-dasharray="0.1 7" stroke-linecap="round"><path d="M200 214 L104 300"/><path d="M200 214 L200 318"/><path d="M200 214 L296 300"/></g>');
+    s.push(fig(200, 214, 3.2, '#ffe2c6'));
+    s.push(fig(104, 300, 2.2, '#d8f4ff'), fig(200, 318, 2.2, '#d8f4ff'), fig(296, 300, 2.2, '#d8f4ff'));
+    s.push('<g font-family="Jost, sans-serif" fill="#0f2f2c"><text x="28" y="44" font-size="13" font-weight="600" letter-spacing="3">CREW OF 3</text><text x="372" y="44" text-anchor="end" font-size="13" font-family="IBM Plex Mono, monospace">5% &#8594; 10%</text></g></svg>');
+    return s.join('');
+  })();
+  $('tokenVis').innerHTML = (function token() {
+    return `<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="tbg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7c9fd9"/><stop offset="1" stop-color="#f4d0bb"/></linearGradient><linearGradient id="tbeam" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#ff7a2e" stop-opacity="0.95"/><stop offset="1" stop-color="#ffc39a" stop-opacity="0"/></linearGradient><filter id="tgl" x="-100%" y="-20%" width="300%" height="140%"><feGaussianBlur stdDeviation="12"/></filter><radialGradient id="tcoin" cx="0.38" cy="0.32" r="0.8"><stop offset="0" stop-color="#ffffff"/><stop offset="0.45" stop-color="#d9ecff"/><stop offset="1" stop-color="#8fb3e3"/></radialGradient></defs>
+      <rect width="400" height="400" fill="url(#tbg)"/>
+      <rect x="96" y="40" width="44" height="280" fill="#ff7a2e" opacity="0.35" filter="url(#tgl)"/><rect x="108" y="40" width="20" height="280" fill="url(#tbeam)"/>
+      <path d="M128 250 C190 250 220 210 258 206" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-dasharray="0.1 7" stroke-linecap="round"/>
+      <ellipse cx="292" cy="300" rx="44" ry="9" fill="#1d1b27" opacity="0.18"/>
+      <circle cx="292" cy="206" r="54" fill="url(#tcoin)"/><circle cx="292" cy="206" r="40" fill="none" stroke="#ffffff" stroke-opacity="0.6"/>
+      <text x="292" y="212" text-anchor="middle" font-family="Jost, sans-serif" font-size="17" font-weight="600" letter-spacing="2" fill="#1d1b27">PFWA</text>
+      <g fill="#1d1b27"><text x="28" y="44" font-family="Jost, sans-serif" font-size="13" font-weight="600" letter-spacing="3">TREASURY</text><text x="372" y="44" text-anchor="end" font-size="13" font-family="IBM Plex Mono, monospace">20% &#8594; buyback</text></g></svg>`;
+  })();
+})();
+</script>
