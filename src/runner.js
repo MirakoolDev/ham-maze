@@ -182,7 +182,7 @@ export function createRunner(scene) {
         const kind = /eyelash/i.test(o.name) ? 'lash' : /eyebrow/i.test(o.name) ? 'brow' : null;
         if (o.isMesh && kind && o.geometry.attributes.uv) { cardCoords(o, skull); o.material = cardMaterial(kind, 0x5ff4ff); o.castShadow = false; }
       });
-      for (const s of ['Left', 'Right']) bones[s + 'Arm'].traverse((o) => { if (o.isBone) armBones.push(o); });
+      for (const s of ['Left', 'Right']) bones[s + 'Arm'].traverse((o) => { if (o.isBone) { armBones.push(o); o.userData.restQ = o.quaternion.clone(); } });
       mixer = new THREE.AnimationMixer(model);
       for (const [k, json] of Object.entries(clips)) actions[k] = mixer.clipAction(THREE.AnimationClip.parse(json));
       current = actions.idle; current.play();
@@ -249,13 +249,19 @@ export function createRunner(scene) {
     return [f.applyQuaternion(gun.quaternion), a.applyQuaternion(gun.quaternion)];
   }
   // hand the forearm part of the wrist's roll (about the forearm's long axis), so the wrist doesn't wring
+  // The twist angle is kept continuous frame to frame: taking the short way round each frame made it
+  // flip sides whenever the needed roll passed half a turn, snapping the forearm (the idle-aim glitch).
+  const lastTwist = { Left: 0, Right: 0 };
   function shareTwist(side, share) {
     const fore = bones[side + 'ForeArm'], hand = bones[side + 'Hand'];
     const qh = Q(hand), local = Q(fore).invert().multiply(qh);
     const axis = hand.position.clone().normalize();
     const d = local.x * axis.x + local.y * axis.y + local.z * axis.z;
-    const twist = new THREE.Quaternion(axis.x * d, axis.y * d, axis.z * d, local.w).normalize();
-    fore.quaternion.multiply(new THREE.Quaternion().slerp(twist, share));
+    let ang = 2 * Math.atan2(d, local.w);
+    while (ang - lastTwist[side] > Math.PI) ang -= 2 * Math.PI;
+    while (ang - lastTwist[side] < -Math.PI) ang += 2 * Math.PI;
+    lastTwist[side] = ang;
+    fore.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(axis, ang * share));
     fore.updateMatrixWorld(true);
     setWorldQuat(hand, qh);
   }
@@ -351,6 +357,10 @@ export function createRunner(scene) {
     const gUp = V(0, 1, 0).applyQuaternion(gun.quaternion), gRight = V(1, 0, 0).applyQuaternion(gun.quaternion);
 
     if (w > 0.001) {
+      // the IK starts from the rig's rest pose, not the clip's arms: turning the shortest way from an
+      // arm hanging down to one reaching up is near a half turn, so its roll flipped as the idle swayed
+      for (const s of ['Left', 'Right']) for (const k of ['Arm', 'ForeArm']) bones[s + k].quaternion.copy(bones[s + k].userData.restQ);
+      bones.RightShoulder.updateMatrixWorld(true); bones.LeftShoulder.updateMatrixWorld(true);
       // shooting hand on the pistol grip
       reach(bones.RightArm, bones.RightForeArm, bones.RightHand, gun.localToWorld(GRIP_WRIST.clone()), elbowPole(right, H.rightElbow));
       orientHand('Right', ...handFrame(R_F0, R_A0, H.rightTurn, H.rightTilt, H.rightRoll));
