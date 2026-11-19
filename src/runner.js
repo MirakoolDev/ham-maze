@@ -138,7 +138,8 @@ export const HOLD = {
   forearmTwist: 0.5,                                // share of the wrist's roll carried by the forearm (no roll bones in this rig)
   buttUp: 0.03, buttFwd: 0.05, buttIn: 0.03,        // stock in the shoulder pocket (world, from the shoulder joint)
   stance: 0.55,                                     // radians the body turns right when aiming (left shoulder leads)
-  carryTilt: 0.45,                                  // carried: smaller = barrel hangs steeper
+  // carry (not aiming): barrel down from level, swung out, rolled; grip offset from the hanging wrist (world m)
+  carryDown: 72, carryOut: 14, carryRoll: 0, carryX: 0.075, carryY: 0, carryZ: 0.05,
 };
 
 export function createRunner(scene) {
@@ -149,7 +150,7 @@ export function createRunner(scene) {
   const gunBox = new THREE.Box3().setFromObject(gun);
   const BUTT = V(0, 0.01, gunBox.max.z - 0.01);           // stock end (barrel runs along -z)
   const MUZZLE = V(0, BORE, -0.66);
-  const GRIP_WRIST = V(), GUARD_WRIST = V(), GRIP_BASIS_T = new THREE.Matrix4();
+  const GRIP_WRIST = V(), GUARD_WRIST = V();
   let armBones = [];
 
   // every number of the hold lives in r.hold (tunable live from the character page, design/character)
@@ -160,10 +161,6 @@ export function createRunner(scene) {
     GUN_SCALE = h.gunScale; gun.scale.setScalar(GUN_SCALE);
     GRIP_WRIST.set(h.gripX, h.gripY, h.gripZ);
     GUARD_WRIST.set(h.supportX, h.supportY, h.supportZ);
-    // the right hand's grip in gun space, transposed, so a hand frame times this gives the gun's
-    // rotation for the carry (fingers steep on the grip: barrel forward and down, stock clear of the arm)
-    const gf = V(0, -1, -h.carryTilt).normalize(), ga = V(0, 1, 0).addScaledVector(gf, -gf.y).normalize();
-    GRIP_BASIS_T.makeBasis(gf, ga, new THREE.Vector3().crossVectors(gf, ga)).transpose();
   }
   let model, mixer, bones, actions = {}, current = null;
 
@@ -331,14 +328,18 @@ export function createRunner(scene) {
     //  aim: shouldered along the view at cheek height, both arms posed onto it with IK.
     const w = THREE.MathUtils.smoothstep(ctx.aim, 0, 1);
     r.holdWeight = w;
+    // carry: barrel pointing down (a little forward and out), its grip in the hanging right hand,
+    // and that hand turned onto the grip; the arm itself plays the clip
+    const cd = H.carryDown * DEG, co = H.carryOut * DEG;
+    const cdir = fwd.clone().multiplyScalar(Math.cos(cd)).addScaledVector(up, -Math.sin(cd)).applyAxisAngle(up, -co);
+    const ctop = up.clone().multiplyScalar(Math.cos(cd)).addScaledVector(fwd, Math.sin(cd)).applyAxisAngle(up, -co).applyAxisAngle(cdir, H.carryRoll * DEG);
+    const cz = cdir.clone().negate();
+    const carryQ = new THREE.Quaternion().setFromRotationMatrix(_m.makeBasis(new THREE.Vector3().crossVectors(ctop, cz), ctop, cz));
+    const carryP = P(bones.RightHand).addScaledVector(right, H.carryX).addScaledVector(up, H.carryY).addScaledVector(fwd, H.carryZ)
+      .sub(GRIP_WRIST.clone().multiplyScalar(GUN_SCALE).applyQuaternion(carryQ));
+    gun.quaternion.copy(carryQ);
+    orientHand('Right', ...handFrame(R_F0, R_A0, H.rightTurn, H.rightTilt, H.rightRoll));
     for (const b of armBones) b.userData.animQ = b.quaternion.clone();
-
-    // carry: the gun in the animated right hand, in the same grip the aim pose uses
-    const hw = P(bones.RightHand), hf = P(bones.RightHandMiddle1).sub(hw).normalize();
-    const ha = P(bones.RightHandIndex1).sub(P(bones.RightHandPinky1)); ha.addScaledVector(hf, -ha.dot(hf)).normalize();
-    _m.makeBasis(hf, ha, new THREE.Vector3().crossVectors(hf, ha)).multiply(GRIP_BASIS_T);
-    const carryQ = new THREE.Quaternion().setFromRotationMatrix(_m);
-    const carryP = hw.clone().sub(GRIP_WRIST.clone().multiplyScalar(GUN_SCALE).applyQuaternion(carryQ));
 
     // aim: butt in the shoulder pocket, sights up near the eye
     const butt = P(bones.RightArm).addScaledVector(up, H.buttUp).addScaledVector(fwd, H.buttFwd).addScaledVector(right, -H.buttIn);

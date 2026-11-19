@@ -66,7 +66,8 @@
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createRunner, HOLD } from '../../src/runner.js';
+// always the current runner code: the local server lets the browser cache modules, so bust it per load
+const { createRunner, HOLD } = await import(`../../src/runner.js?v=${Date.now()}`);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -115,7 +116,7 @@ const SPEC = [
   ['Support hand (left): fingers', [['lIndex', 'Index curl', 0, 1.6, 0.02], ['lMiddle', 'Middle curl', 0, 1.6, 0.02], ['lRing', 'Ring curl', 0, 1.6, 0.02], ['lPinky', 'Pinky curl', 0, 1.6, 0.02], ['lThumbBend', 'Thumb bend', -0.5, 2, 0.02], ['lThumbSide', 'Thumb swing', -60, 60, 1]]],
   ['Forearms', [['forearmTwist', 'Twist into forearm', 0, 1, 0.01]]],
   ['Shoulder and stance', [['buttUp', 'Stock up', -0.15, 0.15, 0.005], ['buttFwd', 'Stock forward', -0.1, 0.2, 0.005], ['buttIn', 'Stock in', -0.1, 0.15, 0.005], ['stance', 'Body turn', 0, 1, 0.01]]],
-  ['Carry (not aiming)', [['carryTilt', 'Barrel lift', 0, 1.5, 0.01]]],
+  ['Carry (not aiming)', [['carryDown', 'Barrel down (deg)', -10, 90, 1], ['carryOut', 'Swing out (deg)', -60, 60, 1], ['carryRoll', 'Roll (deg)', -90, 90, 1], ['carryX', 'Grip out', -0.15, 0.15, 0.005], ['carryY', 'Grip up', -0.15, 0.15, 0.005], ['carryZ', 'Grip forward', -0.15, 0.15, 0.005]]],
 ];
 const box = document.getElementById('sliders');
 const fmt = (v, step) => (+v).toFixed(step >= 1 ? 0 : step < 0.01 ? 3 : 2);
@@ -158,7 +159,7 @@ pitch.nextElementSibling.value = '0.00';
 await runner.load('', { glb: '../../assets/runner.glb', clips: '../../assets/runner-clips.json' });
 document.getElementById('load').remove();
 runner.setVisible(true);
-window.preview = { runner, camera, controls, st };
+window.preview = { runner, camera, controls, st, HOLD };
 
 // she stays on the spot (a treadmill); the clip plays at the chosen speed facing -z
 const SPEEDS = { idle: 0, walk: 1.7, run: 5.2 };
