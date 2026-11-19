@@ -185,7 +185,7 @@ export const HOLD = {
   nftScale: 1,
   pGripAlong: 0.62, pGripDepth: 0.015,              // along the palm from wrist to knuckles; off the palm
   pRoll: 0, pYaw: 0, pPitch: 0,                     // degrees, on top of the fist
-  pCarryOut: 0.03, pCarryFwd: 0.04,                 // metres the gun hand hangs out from the shoulder line, and forward
+  pCarryOut: 0.05, pCarryFwd: 0.04,                 // metres the gun hand hangs out from the shoulder line, and forward
   pCarryTilt: 25,                                   // degrees the barrel points forward of straight down
   pSwing: 0.35,                                     // arm swing with the stride
   // fingers, degrees added to the clip's own grip (curl closes toward the palm)
@@ -204,14 +204,14 @@ export function createRunner(scene, opts = {}) {
 
   const r = { root, gun: null, ready: false, failed: false, show: false, hold: { ...HOLD }, holdWeight: 0, look: opts.look || 'rim', gunId: 'k7', kind: 'rifle' };
   // the gun in her hands: the K-7 (rifle) or one of the Power-Up guns (rifle or pistol, src/nftguns.js)
-  let gun, flash, MUZZLE, FIST = null, nft = false;
+  let gun, flash, MUZZLE, FIST = null, GUARD0 = null, nft = false;
   r.setGun = (id) => {
     if (gun) scene.remove(gun);
     if (NFT_GUNS[id]) {
       const b = buildNftGun(id);
-      ({ group: gun, flash } = b); MUZZLE = b.muzzle; FIST = b.fist; nft = true; r.kind = b.kind; r.gunId = id;
+      ({ group: gun, flash } = b); MUZZLE = b.muzzle; FIST = b.fist; GUARD0 = b.guard; nft = true; r.kind = b.kind; r.gunId = id;
     } else {
-      ({ group: gun, flash } = buildGun({ slim: true })); MUZZLE = V(0, BORE, -0.66); FIST = null; nft = false; r.kind = 'rifle'; r.gunId = 'k7';
+      ({ group: gun, flash } = buildGun({ slim: true })); MUZZLE = V(0, BORE, -0.66); FIST = null; GUARD0 = null; nft = false; r.kind = 'rifle'; r.gunId = 'k7';
     }
     gun.traverse((o) => { if (o.isMesh) o.castShadow = true; });
     gun.visible = r.show && r.ready; scene.add(gun); r.gun = gun;
@@ -391,6 +391,8 @@ export function createRunner(scene, opts = {}) {
     const scale = pistol ? H.nftScale : H.gunScale;
     gun.scale.setScalar(scale);
     GRIP.set(H.gripX, H.gripY, H.gripZ); GUARD.set(H.supportX, H.supportY, H.supportZ);
+    // a Power-Up rifle has a thin barrel where the K-7 has a handguard: its own support spot, moved by the sliders
+    if (GUARD0) GUARD.copy(GUARD0).add(V(H.supportX - HOLD.supportX, H.supportY - HOLD.supportY, H.supportZ - HOLD.supportZ));
     if (bodyYaw === null) bodyYaw = ctx.yaw;
     const sp = ctx.speed;
     let rate = 0, target = bodyYaw;
