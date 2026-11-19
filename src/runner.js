@@ -40,12 +40,14 @@ export function rimMaterial({ color = 0x07060a, rim = 0x5ff4ff, edge = 0xeafcff,
 /** Translucent glow: a milky see-through body lit from inside, brightest at the edges (the glowing
  *  translucent objects of the HAM renders). Transmission lets the room tint through; the fresnel rim is
  *  added as emission so it reads as light, not paint. */
-export function glowMaterial({ color = '#f4f2ff', tint = '#cfe6ff', rim = '#ffffff', glow = '#e6efff', transmission = 0.55, power = 2.0, strength = 1.9, core = 0.38 } = {}) {
+// Kept below the bloom threshold over the body (only the outer edge blooms): brighter settings lit the
+// whole figure past it and the bloom washed into the room.
+export function glowMaterial({ color = '#cfcadc', tint = '#cfe6ff', rim = '#ffffff', glow = '#e6efff', transmission = 0.55, power = 2.8, strength = 0.95, core = 0.05 } = {}) {
   const m = new THREE.MeshPhysicalMaterial({
     color, roughness: 0.22, metalness: 0, transmission, thickness: 0.45, ior: 1.3,
     attenuationColor: new THREE.Color(tint), attenuationDistance: 0.7,
     clearcoat: 1, clearcoatRoughness: 0.12, emissive: new THREE.Color(glow), emissiveIntensity: core,
-    sheen: 0.5, sheenColor: new THREE.Color(rim), sheenRoughness: 0.4,
+    sheen: 0.25, sheenColor: new THREE.Color(rim), sheenRoughness: 0.4,
   });
   const uniforms = { uRim: { value: new THREE.Color(rim) }, uRimPow: { value: power }, uRimStr: { value: strength } };
   m.userData.rim = uniforms;
@@ -64,8 +66,8 @@ export const LOOKS = {
   rim: { name: 'Blue glow', body: () => rimMaterial(), eyes: '#9ff8ff' },
   pearl: { name: 'Pearl glow', body: () => glowMaterial(), eyes: '#bff8ff' },
 
-  pink: { name: 'Pink glow', body: () => glowMaterial({ color: '#ffd3e0', tint: '#ff9cbc', rim: '#ffe6ee', glow: '#ff6fa3', core: 0.4 }), eyes: '#ffffff' },
-  frost: { name: 'Frost glass', body: () => glowMaterial({ color: '#e4f4ff', tint: '#8fd4ff', rim: '#dff6ff', glow: '#5fd0ff', transmission: 0.75, core: 0.3 }), eyes: '#5ff4ff' },
+  pink: { name: 'Pink glow', body: () => glowMaterial({ color: '#e8bccb', tint: '#ff9cbc', rim: '#ffe6ee', glow: '#ff6fa3', core: 0.07 }), eyes: '#ffffff' },
+  frost: { name: 'Frost glass', body: () => glowMaterial({ color: '#c9dcea', tint: '#8fd4ff', rim: '#dff6ff', glow: '#5fd0ff', transmission: 0.75, core: 0.05 }), eyes: '#5ff4ff' },
   ember: { name: 'Ember (Blender export)', body: () => rimMaterial({ rim: 0xff5a2e, edge: 0xffe2d0 }), eyes: '#ffb08a' },
 };
 
@@ -289,15 +291,17 @@ export function createRunner(scene, opts = {}) {
   // posture on top of the clip: hip sway synced to the feet (the stance side's hip rides up, the
   // spine takes most of it back so the chest stays level), legs drawn in, chest lifted, shoulders down
   let sway = 0;
-  function posture() {
+  function posture(dt) {
     const H = r.hold;
     root.updateMatrixWorld(true);
     const yaw = root.rotation.y - Math.PI;
     const fwd = V(-Math.sin(yaw), 0, -Math.cos(yaw)), right = V(Math.cos(yaw), 0, -Math.sin(yaw));
     const moving = current === actions.walk || current === actions.run;
     const lf = P(bones.LeftFoot).y, rf = P(bones.RightFoot).y;
-    const target = moving ? THREE.MathUtils.clamp((rf - lf) / 0.08, -1, 1) : 0;
-    sway += (target - sway) * 0.35;
+    // a soft curve of the feet's height difference (tanh, not a hard clamp, so it never flips like a
+    // switch), eased over time so the pelvis rolls from side to side instead of snapping
+    const target = moving ? Math.tanh((rf - lf) / 0.14) : 0;
+    sway += (target - sway) * (1 - Math.exp(-7 * dt));
     const hs = H.hipSway * DEG * sway;
     if (hs) { turn(bones.Hips, fwd, hs); turn(bones.Spine, fwd, -hs * 0.8); }
     if (H.narrow) {
@@ -341,15 +345,16 @@ export function createRunner(scene, opts = {}) {
     const along = -Math.sin(bodyYaw) * ctx.vel.x - Math.cos(bodyYaw) * ctx.vel.z;
     const dirSign = along < -0.5 ? -1 : 1;
     const crouch = (ctx.crouch || 0) > 0.5;
-    // the jump clip is take-off, top, landing: in the air it plays to the top (halfway) and holds there
-    // however long the fall; touching down plays the second half as the landing
-    const J = actions.jump, apex = J ? J.getClip().duration * 0.5 : 0;
+    // the jump clip is take-off, top, way down, landing. In the air it plays at its own pace; only a
+    // long fall reaches the way down (three quarters in), where it eases to a drift and waits for the
+    // ground instead of freezing at the top. Touching down plays the rest as the landing.
+    const J = actions.jump, jd = J ? J.getClip().duration : 0, fall = jd * 0.75;
     if (J && ctx.air) {
       if (!wasAir) J.reset();
-      if (J.time >= apex) J.time = apex;
-      play('jump', J.time >= apex ? 0 : 1);
+      if (J.time > fall) J.time = fall;
+      play('jump', THREE.MathUtils.clamp((fall - J.time) / 0.08, 0.05, 1));
       landT = 0;
-    } else if (J && wasAir) { J.time = Math.max(J.time, apex); landT = J.getClip().duration - J.time; }
+    } else if (J && wasAir) { landT = jd - J.time; }
     if (!ctx.air && landT > 0) { landT -= dt; play('jump', 1); }
     else if (ctx.air) { /* jump, above */ }
     else if (crouch && sp < 0.4) play('crouch', 1);
@@ -384,7 +389,7 @@ export function createRunner(scene, opts = {}) {
       if (reloadT >= d) reloadT = -1;
       else { rw = Math.max(0, Math.min(1, reloadT / 0.15, (d - reloadT) / 0.25)); overlay('reload', reloadT, rw); }
     }
-    posture(); // after the overlays, so aiming keeps it too
+    posture(dt); // after the overlays, so aiming keeps it too
     // lean the chest with the view, plus the correction that keeps the barrel on it
     root.updateMatrixWorld(true);
     const right = V(Math.cos(bodyYaw), 0, -Math.sin(bodyYaw));
