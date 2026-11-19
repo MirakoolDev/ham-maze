@@ -47,13 +47,17 @@
     <button id="aim" aria-pressed="true">Aim</button><button id="fire">Fire</button><button id="reload">Reload</button><button id="crouch">Crouch</button><button id="air">Jump</button>
   </div>
   <label class="sl">Look up / down<input type="range" id="pitch" min="-0.8" max="0.8" step="0.01" value="0"><output></output></label>
-  <h2>Hold</h2>
+  <h2>Body</h2>
+  <div class="row" id="looks"></div>
+  <h2>Room</h2>
+  <div class="row" id="rooms"></div>
+  <h2>Hold and posture</h2>
   <div id="sliders"></div>
   <div class="row" style="margin-top:10px">
     <button id="copy">Copy values</button><button id="reset">Reset</button>
   </div>
   <p id="status" role="status"></p>
-  <p class="note">Drag to orbit, scroll to zoom. The gun hangs from the right wrist and points at the left one, so it follows the animation. Wrist spots move where each hand sits on the gun. Finger sliders add degrees to the clip's own grip.</p>
+  <p class="note">Drag to orbit, scroll to zoom. Posture softens the rifle clips (a man's motion capture): the pelvis sways over the standing foot, the legs draw in, the chest lifts and the shoulders relax. The gun hangs from the right wrist and points at the left one, so it follows the animation. Wrist spots move where each hand sits on the gun. Finger sliders add degrees to the clip's own grip.</p>
 </div>
 
 <script type="importmap">
@@ -66,8 +70,13 @@
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 // always the current runner code: the local server lets the browser cache modules, so bust it per load
-const { createRunner, HOLD } = await import(`../../src/runner.js?v=${Date.now()}`);
+const { createRunner, HOLD, LOOKS } = await import(`../../src/runner.js?v=${Date.now()}`);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -77,13 +86,31 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 document.body.prepend(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color('#cdbfd3');
+// the see-through looks need something to see through and reflect; the glossy dark ones go grey in it
+// (the clear coat mirrors the bright studio), so it's only on for those
+const studioEnv = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.6;
+const SEE_THROUGH = new Set(['pearl', 'pink', 'frost']);
+const useEnv = (look) => { scene.environment = SEE_THROUGH.has(look) ? studioEnv : null; };
 scene.add(new THREE.HemisphereLight('#f4ecff', '#b7a7b8', 1.4));
 const sun = new THREE.DirectionalLight('#fff4e6', 2.2); sun.position.set(2.5, 5, 2); sun.castShadow = true;
 sun.shadow.mapSize.set(1024, 1024); sun.shadow.camera.left = -2; sun.shadow.camera.right = 2; sun.shadow.camera.top = 3; sun.shadow.camera.bottom = -1;
 scene.add(sun);
-const floor = new THREE.Mesh(new THREE.CircleGeometry(4, 48), new THREE.MeshStandardMaterial({ color: '#e7dfe6', roughness: 0.9 }));
+const floor = new THREE.Mesh(new THREE.CircleGeometry(30, 64), new THREE.MeshStandardMaterial({ color: '#e7dfe6', roughness: 0.9 }));
 floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+scene.fog = new THREE.Fog(0xffffff, 8, 22);
+// rooms: the game's two maze walls, the NFT studio, the night of the site, and this page's lilac
+const ROOMS = {
+  lilac: { name: 'Lilac', bg: '#cdbfd3', floor: '#e7dfe6' },
+  pink: { name: 'Pink wall', bg: new THREE.Color().setRGB(1, 0.8, 0.87, THREE.SRGBColorSpace), floor: '#f3c1cf' },
+  blue: { name: 'Blue wall', bg: new THREE.Color().setRGB(0.74, 0.885, 1, THREE.SRGBColorSpace), floor: '#b9d6f0' },
+  studio: { name: 'Studio', bg: '#d9dbe3', floor: '#f3efea' },
+  night: { name: 'Night', bg: '#111111', floor: '#1b1a20' },
+};
+function setRoom(k) {
+  const r = ROOMS[k]; const bg = new THREE.Color(r.bg);
+  scene.background = bg; scene.fog.color.copy(bg); floor.material.color.set(r.floor);
+}
 
 // she faces -z; her left (the support side) is -x. Start on the support side, in front.
 const camera = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 0.05, 50);
@@ -91,8 +118,14 @@ camera.position.set(-1.7, 1.55, -2.1);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 1.25, 0); controls.enableDamping = true; controls.update();
 // frame her to the right of the panel (the scene shifts left by half the panel's width)
+// the game's bloom (src/post.js: strength 0.3, radius 0.7, threshold 0.92), so glows read as light here too
+const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(innerWidth, innerHeight, { type: THREE.HalfFloatType, samples: 4 }));
+composer.addPass(new RenderPass(scene, camera));
+// (threshold above the game's 0.92: this sunlit floor is brighter than the maze; only emission should bloom)
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.45, 0.6, 1.25));
+composer.addPass(new OutputPass());
 function fit() {
-  renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight;
+  renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight;
   const shift = innerWidth > 560 ? Math.min(354, innerWidth * 0.45) / 2 : 0;
   camera.setViewOffset(innerWidth, innerHeight, -shift, 0, innerWidth, innerHeight);
   camera.updateProjectionMatrix();
@@ -104,9 +137,29 @@ const KEY = 'ham.hold.v2'; // v2: the hold rides on the rifle clips; older saves
 // only keys the runner still knows (older saves had other names)
 try { const saved = JSON.parse(localStorage.getItem(KEY) || '{}'); for (const k in HOLD) if (typeof saved[k] === 'number') runner.hold[k] = saved[k]; } catch {}
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(runner.hold)); } catch {} };
+// body look and room: kept per viewer
+const PREF = 'ham.preview.v1';
+let pref = { look: 'rim', room: 'lilac' };
+try { Object.assign(pref, JSON.parse(localStorage.getItem(PREF) || '{}')); } catch {}
+const savePref = () => { try { localStorage.setItem(PREF, JSON.stringify(pref)); } catch {} };
+function pick(boxId, table, key, apply) {
+  const box = document.getElementById(boxId); box.innerHTML = '';
+  for (const [k, v] of Object.entries(table)) {
+    const b = document.createElement('button'); b.textContent = v.name; b.setAttribute('aria-pressed', String(pref[key] === k));
+    b.addEventListener('click', () => { pref[key] = k; savePref(); apply(k); box.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); });
+    box.append(b);
+  }
+}
+if (!ROOMS[pref.room]) pref.room = 'lilac';
+if (!LOOKS[pref.look]) pref.look = 'rim';
+setRoom(pref.room);
+runner.look = pref.look; useEnv(pref.look);
+pick('rooms', ROOMS, 'room', setRoom);
+pick('looks', LOOKS, 'look', (k) => { runner.setLook(k); useEnv(k); });
 
 // ---- sliders, one per hold value ----
 const SPEC = [
+  ["Posture (degrees)",[["hipSway","Hip sway",0,15,0.5],["narrow","Legs in",-4,10,0.5],["chestLift","Chest up",-6,12,0.5],["shoulderDrop","Shoulders down",-6,10,0.5]]],
   ["Gun",[["gunScale","Gun size",0.4,1.1,0.01],
   ["gunRoll","Roll (deg)",-45,45,1],
   ["gunYaw","Turn (deg)",-30,30,1],
@@ -198,7 +251,7 @@ renderer.setAnimationLoop((now) => {
   runner.update(dt, { pos: new THREE.Vector3(0, 0, 0), vel: new THREE.Vector3(0, 0, -sp), yaw: 0, pitch: st.pitch,
     speed: sp, air: st.air, clipLift: true, crouch, aim, kick: firing ? 1 : 0, flash: firing });
   controls.update();
-  renderer.render(scene, camera);
+  composer.render();
 });
 </script>
 </body>
