@@ -127,14 +127,16 @@ export const HOLD = {
   gripX: 0, gripY: -0.085, gripZ: 0.11,
   rightTurn: 0, rightTilt: 0, rightRoll: 0,         // degrees, on top of the base grip (fingers forward-down the grip)
   rightElbow: 30,                                   // degrees the elbow swings out from straight down
+  rFingers: 1, rSpread: 0,                          // all four fingers: curl together, fan apart (degrees)
   rIndex: 1, rMiddle: 1, rRing: 1, rPinky: 1,       // finger curl (index is the trigger finger)
-  rThumbBend: 1, rThumbSide: 0,
+  rThumbBend: 1, rThumbSide: 0, rThumbTwist: 0,
   // support hand (left): wrist under the handguard, in gun space
-  supportX: -0.105, supportY: -0.03, supportZ: -0.3,
+  supportX: -0.096, supportY: -0.01, supportZ: -0.3,  // the slim handguard's underside is at y -0.008
   supportTurn: 0, supportTilt: -20, supportRoll: 0, // degrees, on top of the base (palm up, fingers across, index forward)
   leftElbow: 15,
+  lFingers: 1, lSpread: 0,
   lIndex: 1, lMiddle: 1, lRing: 1, lPinky: 1,
-  lThumbBend: 1, lThumbSide: 0,
+  lThumbBend: 1, lThumbSide: 0, lThumbTwist: 0,
   forearmTwist: 0.5,                                // share of the wrist's roll carried by the forearm (no roll bones in this rig)
   buttUp: 0.03, buttFwd: 0.05, buttIn: 0.03,        // stock in the shoulder pocket (world, from the shoulder joint)
   stance: 0.55,                                     // radians the body turns right when aiming (left shoulder leads)
@@ -144,7 +146,7 @@ export const HOLD = {
 
 export function createRunner(scene) {
   const root = new THREE.Group(); root.visible = false; scene.add(root);
-  const { group: gun, flash } = buildGun();
+  const { group: gun, flash } = buildGun({ slim: true });
   gun.visible = false; scene.add(gun);
   gun.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   const gunBox = new THREE.Box3().setFromObject(gun);
@@ -232,14 +234,20 @@ export function createRunner(scene) {
     const a = P(bones[side + 'HandIndex1']).sub(P(bones[side + 'HandPinky1'])); a.addScaledVector(f, -a.dot(f)).normalize();
     const n = new THREE.Vector3().crossVectors(f, a).multiplyScalar(s).normalize();
     const at = (deg, side = 0) => f.clone().multiplyScalar(Math.cos(deg * DEG) * Math.cos(side * DEG)).addScaledVector(n, Math.sin(deg * DEG) * Math.cos(side * DEG)).addScaledVector(a, Math.sin(side * DEG));
+    // spread fans the four apart toward the index and pinky sides, the middle finger nearly still
+    const fan = { Index: 1, Middle: 0.33, Ring: -0.33, Pinky: -1 };
     for (const name of ['Index', 'Middle', 'Ring', 'Pinky']) {
       const b = [1, 2, 3, 4].map((i) => bones[`${side}Hand${name}${i}`]);
       if (!b[3]) continue;
-      const k = H[p + name], base = BASE[side][name] || BASE[side].rest;
-      for (let i = 0; i < 3; i++) point(b[i], b[i + 1], at(base[i] * k));
+      const k = H[p + name] * H[p + 'Fingers'], base = BASE[side][name] || BASE[side].rest, sp = H[p + 'Spread'] * fan[name];
+      for (let i = 0; i < 3; i++) point(b[i], b[i + 1], at(base[i] * k, sp));
     }
     const th = [2, 3, 4].map((i) => bones[`${side}HandThumb${i}`]);
-    if (th[2]) { const tb = H[p + 'ThumbBend'], ts = H[p + 'ThumbSide']; point(th[0], th[1], at(40 * tb, ts)); point(th[1], th[2], at(65 * tb, ts * 0.5)); }
+    if (th[2]) { const tb = H[p + 'ThumbBend'], ts = H[p + 'ThumbSide']; point(th[0], th[1], at(40 * tb, ts)); point(th[1], th[2], at(65 * tb, ts * 0.5));
+      // twist turns the thumb about its own length (which way the pad faces)
+      const tw = H[p + 'ThumbTwist'];
+      if (tw) { const ax = P(th[1]).sub(P(th[0])).normalize(); setWorldQuat(th[0], Q(th[0]).premultiply(new THREE.Quaternion().setFromAxisAngle(ax, tw * DEG))); }
+    }
   }
 
   // hand frame from turn / tilt / roll (degrees) on a base frame, all in gun space, then to world:

@@ -54,7 +54,9 @@ function flashTexture() {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 
-export function buildGun() {
+/** slim: the third-person body's gun. Her hands are small for her height, so the grip and handguard
+ *  are narrowed until the fingers can wrap them; the first-person viewmodel keeps the chunky ones. */
+export function buildGun({ slim = false } = {}) {
   const grain = grainTexture();
   const M = {
     metal: new THREE.MeshStandardMaterial({ color: srgb(0.36, 0.34, 0.45), metalness: 0.35, roughness: 0.42, roughnessMap: grain }),
@@ -89,16 +91,19 @@ export function buildGun() {
   for (const f of [-0.07, 0.1]) { const g = new THREE.CylinderGeometry(0.0045, 0.0045, 0.0495, 10); g.rotateZ(Math.PI / 2); g.translate(0, -0.012, -f); add('dark', g); } // pins
 
   // ---- pistol grip (angled, with a finger swell) ----
-  add('tan', side([[-0.052, -0.035], [-0.014, -0.035], [-0.022, -0.06], [-0.031, -0.1], [-0.038, -0.148], [-0.06, -0.156], [-0.083, -0.15], [-0.078, -0.1], [-0.07, -0.06]], 0.034, { bevel: 0.004 }));
-  add('rubber', side([[-0.031, -0.1], [-0.038, -0.148], [-0.06, -0.156], [-0.083, -0.15], [-0.078, -0.1]], 0.036, { bevel: 0.002 }));
+  const gw = slim ? 0.026 : 0.034;
+  add('tan', side([[-0.052, -0.035], [-0.014, -0.035], [-0.022, -0.06], [-0.031, -0.1], [-0.038, -0.148], [-0.06, -0.156], [-0.083, -0.15], [-0.078, -0.1], [-0.07, -0.06]], gw, { bevel: slim ? 0.003 : 0.004 }));
+  add('rubber', side([[-0.031, -0.1], [-0.038, -0.148], [-0.06, -0.156], [-0.083, -0.15], [-0.078, -0.1]], gw + 0.002, { bevel: 0.002 }));
 
   // ---- handguard with slots (barrel shows through) ----
   const slots = [];
   for (let i = 0; i < 5; i++) slots.push(rr(0.192 + i * 0.044, 0.016, 0.222 + i * 0.044, 0.028, 0.005));
-  for (let i = 0; i < 4; i++) slots.push(rr(0.214 + i * 0.044, -0.012, 0.244 + i * 0.044, 0.0, 0.005));
-  add('tan', side(rr(0.168, -0.03, 0.43, 0.057, 0.012), 0.062, { bevel: 0.003, holes: slots }));
-  add('metal', cyl(0.033, 0.012, 0.432, 0.014, 24)); // end cap
-  add('accent', cyl(0.0335, 0.004, 0.441, 0.014, 24));
+  for (let i = 0; i < 4; i++) slots.push(slim ? rr(0.214 + i * 0.044, 0.001, 0.244 + i * 0.044, 0.009, 0.004) : rr(0.214 + i * 0.044, -0.012, 0.244 + i * 0.044, 0.0, 0.005));
+  // slim: 4.4 x 6.5 cm before the body's gun scale (about 3.2 x 4.7 cm on her), near a real slim handguard for her hand
+  add('tan', side(slim ? rr(0.168, -0.008, 0.43, 0.057, 0.012) : rr(0.168, -0.03, 0.43, 0.057, 0.012), slim ? 0.044 : 0.062, { bevel: 0.003, holes: slots }));
+  const capR = slim ? 0.028 : 0.033, capY = slim ? 0.0245 : 0.014;
+  add('metal', cyl(capR, 0.012, 0.432, capY, 24)); // end cap
+  add('accent', cyl(capR + 0.0005, 0.004, 0.441, capY, 24));
 
   // ---- barrel, gas block, muzzle brake ----
   add('metal', cyl(0.0105, 0.48, 0.34));
