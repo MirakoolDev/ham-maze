@@ -62,7 +62,12 @@ function retarget(clip, model, bones, rest, src, sb, sRest) {
       if (i && loc.x * out[k][i * 4 - 4] + loc.y * out[k][i * 4 - 3] + loc.z * out[k][i * 4 - 2] + loc.w * out[k][i * 4 - 1] < 0) loc.set(-loc.x, -loc.y, -loc.z, -loc.w);
       loc.toArray(out[k], i * 4);
     }
-    const dp = P(sb.Hips).sub(sRest.Hips.p); dp.z = 0;
+    // drop the clip's forward travel (Mixamo walks along +z) in the source's own frame, where y is
+    // exactly up: dropping it after standing the rig up let a degree or two of lean turn the forward
+    // travel into a slow rise that snapped down at each loop (the walk's upward glitch)
+    const own = src.parent, hl = own.worldToLocal(P(sb.Hips)), rl = own.worldToLocal(sRest.Hips.p.clone());
+    hl.z = rl.z;
+    const dp = own.localToWorld(hl).sub(sRest.Hips.p);
     rest.Hips.p.clone().add(dp).applyMatrix4(hipsToLocal).toArray(hips, i * 3);
   }
   const round = (a, d) => Array.from(a, (v) => Math.round(v * d) / d);
