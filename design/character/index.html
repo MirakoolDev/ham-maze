@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>HAM Runner Preview</title>
+<style>
+  @font-face { font-family: 'Bread Island'; src: url('../../assets/bread-island.otf') format('opentype'); font-display: swap; }
+  @font-face { font-family: 'Cabinet Grotesk'; src: url('../../assets/cabinet-grotesk.otf') format('opentype'); font-display: swap; }
+  :root {
+    color-scheme: dark;
+    --ink: #2a2733; --line: rgba(255, 250, 242, .14); --bone: #fffaf2; --muted: rgba(255, 250, 242, .68);
+    --cream: #f6e4b4; --signal: #ff8fa6;
+    --head: 'Bread Island', Georgia, serif; --text: 'Cabinet Grotesk', 'Segoe UI', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--ink); color: var(--bone); font: 14px/1.45 var(--text); overflow: hidden; }
+  #stage { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
+  .panel { position: fixed; top: max(14px, env(safe-area-inset-top, 0px)); left: max(14px, env(safe-area-inset-left, 0px)); width: 300px; max-height: calc(100% - 28px); overflow: auto;
+    background: rgba(42, 39, 51, .86); backdrop-filter: blur(10px); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+  h1 { font: 900 22px/1 var(--head); color: var(--cream); margin: 0 0 4px; letter-spacing: .02em; }
+  .sub { color: var(--muted); margin: 0 0 14px; font-size: 13px; }
+  h2 { font: 600 11px/1 var(--text); letter-spacing: .2em; text-transform: uppercase; color: var(--muted); margin: 16px 0 8px; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; }
+  button { font: 600 13px/1 var(--text); color: var(--bone); background: rgba(255, 250, 242, .06); border: 1px solid var(--line); border-radius: 9px; padding: 9px 11px; cursor: pointer;
+    box-shadow: inset 0 1px 0 rgba(255, 250, 242, .12), inset 0 -1px 0 rgba(0, 0, 0, .18); }
+  button:hover { background: rgba(255, 250, 242, .12); }
+  button[aria-pressed="true"] { background: var(--cream); color: var(--ink); border-color: var(--cream); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .75), inset 0 -2px 0 rgba(120, 96, 52, .18); }
+  button .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 0; }
+  label.sl { display: grid; grid-template-columns: 64px 1fr 44px; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin: 6px 0; }
+  label.sl output { text-align: right; color: var(--bone); font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; accent-color: var(--signal); }
+  .parts label { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); margin: 0 10px 6px 0; }
+  .note { font-size: 12px; color: var(--muted); margin: 12px 0 0; border-top: 1px solid var(--line); padding-top: 10px; }
+  .hint { position: fixed; right: max(14px, env(safe-area-inset-right, 0px)); bottom: max(14px, env(safe-area-inset-bottom, 0px)); font-size: 12px; color: rgba(42, 39, 51, .7); }
+  #load { position: fixed; inset: 0; display: grid; place-items: center; font: 900 20px var(--head); color: var(--cream); pointer-events: none; }
+  @media (max-width: 560px) { .panel { top: auto; bottom: max(10px, env(safe-area-inset-bottom, 0px)); left: 10px; right: 10px; width: auto; max-height: 46%; } .hint { display: none; } }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<div id="load">Loading the runner&hellip;</div>
+
+<aside class="panel">
+  <h1>HAM Runner</h1>
+  <p class="sub">hamrunner.glb with each gun in hand. Drag to orbit, scroll to zoom.</p>
+
+  <h2>Move</h2>
+  <div class="row" id="moves"></div>
+  <label class="sl" id="scrubRow" hidden>Clip time<input type="range" id="scrub" min="0" max="1" step="0.001" value="0"><output id="scrubV">0.0s</output></label>
+  <label class="sl">Speed<input type="range" id="speed" min="0" max="2" step="0.05" value="1"><output id="speedV">1.00</output></label>
+
+  <h2>Gun</h2>
+  <div class="row" id="guns"></div>
+
+  <h2>Body</h2>
+  <div class="row" id="skins"></div>
+
+  <h2>Room</h2>
+  <div class="row" id="rooms"></div>
+
+  <h2>Parts in the file</h2>
+  <div class="parts" id="parts"></div>
+
+  <p class="note" id="info">&nbsp;</p>
+</aside>
+<div class="hint">Drag to orbit &middot; scroll to zoom &middot; double-click to fire</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const $ = (id) => document.getElementById(id);
+const canvas = $('stage');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+
+const scene = new THREE.Scene();
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+const camera = new THREE.PerspectiveCamera(32, 1, 0.05, 100);
+camera.position.set(2.6, 1.6, 4.6);
+const controls = new OrbitControls(camera, canvas);
+controls.target.set(0, 0.95, 0);
+controls.enableDamping = true;
+controls.minDistance = 1.2; controls.maxDistance = 12;
+controls.maxPolarAngle = Math.PI * 0.53;
+
+// Rooms: the game's two maze walls plus the NFT studio
+const ROOMS = {
+  pink:   { name: 'Pink wall', bg: new THREE.Color().setRGB(1, .8, .87, THREE.SRGBColorSpace),  floor: '#f3c1cf' },
+  blue:   { name: 'Blue wall', bg: new THREE.Color().setRGB(.74, .885, 1, THREE.SRGBColorSpace), floor: '#b9d6f0' },
+  studio: { name: 'Studio',    bg: new THREE.Color('#d9dbe3'), floor: '#f3efea' },
+};
+const floorMat = new THREE.MeshStandardMaterial({ roughness: .9 });
+const floor = new THREE.Mesh(new THREE.CircleGeometry(30, 64), floorMat);
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+const plinth = new THREE.Mesh(new THREE.CylinderGeometry(.75, .8, .06, 64), new THREE.MeshStandardMaterial({ color: '#fffaf2', roughness: .5 }));
+plinth.position.y = .03; plinth.receiveShadow = true; scene.add(plinth);
+scene.fog = new THREE.Fog(0xffffff, 8, 22);
+function setRoom(k) {
+  const r = ROOMS[k];
+  scene.background = r.bg; scene.fog.color.copy(r.bg);
+  floorMat.color.set(r.floor);
+}
+
+scene.add(new THREE.HemisphereLight(0xfff6f0, 0x6a5f78, 1.1));
+const key = new THREE.DirectionalLight(0xffffff, 2.2);
+key.position.set(3, 6, 4); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+Object.assign(key.shadow.camera, { left: -3, right: 3, top: 3, bottom: -3, near: .5, far: 20 });
+key.shadow.bias = -0.0004; key.shadow.normalBias = .02;
+scene.add(key);
+const rim = new THREE.DirectionalLight(0xffc4d4, 2.4); rim.position.set(-4, 3, -5); scene.add(rim);
+
+// Body looks
+const SKINS = {
+  file:  { name: 'As exported', make: () => new THREE.MeshPhysicalMaterial({ color: 0x050407, roughness: .08, metalness: 0, clearcoat: 1, clearcoatRoughness: .05 }) },
+  ink:   { name: 'Ink',  make: () => new THREE.MeshPhysicalMaterial({ color: '#2a2733', roughness: .45, clearcoat: .6, clearcoatRoughness: .3, sheen: .6, sheenColor: new THREE.Color('#ff8fa6') }) },
+  bone:  { name: 'Bone', make: () => new THREE.MeshPhysicalMaterial({ color: '#fffaf2', roughness: .55, sheen: .4, sheenColor: new THREE.Color('#f6e4b4') }) },
+  glow:  { name: 'Pink glow', make: () => new THREE.MeshPhysicalMaterial({ color: '#ffb3c6', roughness: .18, transmission: .55, thickness: .6, ior: 1.35, emissive: '#ff4f97', emissiveIntensity: .22, clearcoat: 1 }) },
+  frost: { name: 'Frost glass', make: () => new THREE.MeshPhysicalMaterial({ color: '#dcf1ff', roughness: .25, transmission: .7, thickness: .8, ior: 1.4, emissive: '#5fd0ff', emissiveIntensity: .12 }) },
+};
+
+// The six guns from the NFT art (ham-art.js GUNS), built as little 3D props, barrel along +z, grip at the origin
+const GUNS = {
+  k7:      { name: 'K-7 carbine', body: '#fff0f5', mid: '#f3a9c2', accent: '#ff7aa8', glow: '#ff6f9f', len: .42, bore: .018, rpm: 620 },
+  marker:  { name: 'Marker',      body: '#fff6f8', mid: '#f7c3d3', accent: '#ff4f97', glow: '#ff7db4', len: .22, bore: .03,  rpm: 140 },
+  frost:   { name: 'Frost dart',  body: '#ffffff', mid: '#dcf1ff', accent: '#5fd0ff', glow: '#9fe6ff', len: .46, bore: .012, rpm: 70 },
+  pulse:   { name: 'Pulse',       body: '#f6f1ff', mid: '#d9c8ff', accent: '#b58cff', glow: '#cdb0ff', len: .26, bore: .04,  rpm: 90 },
+  blinker: { name: 'Blinker',     body: '#fff4ec', mid: '#ffd0b3', accent: '#ff7a2e', glow: '#ff9a5c', len: .32, bore: .022, rpm: 50, pearl: true },
+  snare:   { name: 'Snare',       body: '#effffb', mid: '#c4f5ea', accent: '#7dffe0', glow: '#9ffff0', len: .24, bore: .05,  rpm: 60 },
+};
+function buildGun(g) {
+  const grp = new THREE.Group();
+  const shell = new THREE.MeshPhysicalMaterial({ color: g.body, roughness: .3, clearcoat: 1, clearcoatRoughness: .15, sheen: g.pearl ? 1 : 0, sheenColor: new THREE.Color(g.glow), iridescence: g.pearl ? .8 : 0 });
+  const mid = new THREE.MeshPhysicalMaterial({ color: g.mid, roughness: .4, clearcoat: .6 });
+  const glass = new THREE.MeshPhysicalMaterial({ color: g.glow, emissive: g.accent, emissiveIntensity: 1.6, roughness: .1, transmission: .4, thickness: .2 });
+  const add = (geo, mat, x, y, z, rx = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.x = rx; m.castShadow = true; grp.add(m); return m; };
+  const L = g.len, R = (w, h, d, r = .012) => roundedBox(w, h, d, r);
+  add(R(.05, .07, L * .62), shell, 0, .055, L * .18);                    // receiver
+  add(new THREE.CylinderGeometry(g.bore + .008, g.bore + .01, L * .5, 24), mid, 0, .07, L * .62, Math.PI / 2); // barrel
+  add(new THREE.CylinderGeometry(g.bore * .7, g.bore * .7, .012, 20), glass, 0, .07, L * .87 + .002, Math.PI / 2); // muzzle glow
+  add(R(.038, .1, .05, .01), mid, 0, -.01, -.005, -.25);                // grip
+  add(R(.012, .016, L * .5, .004), glass, 0, .093, L * .16);           // glowing spine
+  if (L > .3) add(R(.044, .06, .12, .012), shell, 0, .05, -L * .2);     // stock
+  if (g.name === 'Pulse' || g.name === 'Snare') add(new THREE.SphereGeometry(.035, 24, 16), glass, 0, .05, L * .3); // core
+  grp.userData.muzzle = new THREE.Vector3(0, .07, L * .88);
+  return grp;
+}
+function roundedBox(w, h, d, r) {
+  // a plain box with chamfered look via slight bevel: cheap and reads fine at this size
+  const s = new THREE.Shape();
+  const x = w / 2 - r, y = h / 2 - r;
+  s.moveTo(-x, -h / 2); s.lineTo(x, -h / 2); s.quadraticCurveTo(w / 2, -h / 2, w / 2, -y); s.lineTo(w / 2, y);
+  s.quadraticCurveTo(w / 2, h / 2, x, h / 2); s.lineTo(-x, h / 2); s.quadraticCurveTo(-w / 2, h / 2, -w / 2, y);
+  s.lineTo(-w / 2, -y); s.quadraticCurveTo(-w / 2, -h / 2, -x, -h / 2);
+  const geo = new THREE.ExtrudeGeometry(s, { depth: d, bevelEnabled: false, curveSegments: 4 });
+  geo.translate(0, 0, -d / 2);
+  return geo;
+}
+
+// Muzzle flash and tracer
+const flash = new THREE.PointLight(0xffffff, 0, 2.5); scene.add(flash);
+const flashBall = new THREE.Mesh(new THREE.SphereGeometry(.035, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, toneMapped: false }));
+scene.add(flashBall);
+const tracer = new THREE.Mesh(new THREE.CylinderGeometry(.006, .006, 1, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, toneMapped: false }));
+tracer.geometry.rotateX(Math.PI / 2); tracer.geometry.translate(0, 0, .5); scene.add(tracer);
+
+// State
+const state = { move: 'idle', gun: 'k7', skin: 'file', room: 'pink', speed: 1, fireT: 9, nextShot: 0, recoil: 0 };
+let model, mixer, action, clipDur = 0, bones = {}, gunObj, meshes = [], hipsLock = null;
+
+const loader = new GLTFLoader();
+loader.load('hamrunner.glb', (gltf) => {
+  model = gltf.scene;
+  model.traverse((o) => {
+    if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; meshes.push(o); }
+    if (o.isBone) bones[o.name.replace(/^mixamorig:?/, '')] = o;
+  });
+
+  // Stand it up: the file's armature carries an odd rotation. Measure the rig in bind pose and turn
+  // a wrapper so hips->head is +y and the chest faces +z, then scale it to 1.75 m and plant it on the plinth.
+  const wrap = new THREE.Group(); wrap.add(model); scene.add(wrap);
+  wrap.updateMatrixWorld(true);
+  const P = (b) => b.getWorldPosition(new THREE.Vector3());
+  const up = P(bones.Head).sub(P(bones.Hips)).normalize();
+  const side = P(bones.RightArm).sub(P(bones.LeftArm)).normalize();      // toward the character's right
+  const fwd = new THREE.Vector3().crossVectors(side, up).normalize().negate();
+  side.crossVectors(up, fwd).normalize().negate();
+  const basis = new THREE.Matrix4().makeBasis(side.clone().negate(), up, fwd); // character left = +x when facing +z
+  wrap.quaternion.setFromRotationMatrix(basis).invert();
+  wrap.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(model, true);
+  const h = box.max.y - box.min.y;
+  wrap.scale.setScalar(1.75 / h);
+  wrap.updateMatrixWorld(true);
+  box.setFromObject(model, true);
+  const c = box.getCenter(new THREE.Vector3());
+  wrap.position.set(-c.x, .06 - box.min.y, -c.z);
+  wrap.updateMatrixWorld(true);
+  state.wrap = wrap;
+
+  // Animation from the file
+  mixer = new THREE.AnimationMixer(model);
+  const clip = gltf.animations[0];
+  if (clip) {
+    clipDur = clip.duration;
+    action = mixer.clipAction(clip);
+    // If the hips travel (root motion), keep the runner on the plinth: lock the axis that drifts.
+    const tr = clip.tracks.find((t) => t.name === bones.Hips.name + '.position');
+    if (tr) {
+      const v = tr.values, n = v.length / 3, lock = [];
+      for (let a = 0; a < 3; a++) {
+        let lo = Infinity, hi = -Infinity;
+        for (let i = 0; i < n; i++) { lo = Math.min(lo, v[i * 3 + a]); hi = Math.max(hi, v[i * 3 + a]); }
+        if (Math.abs(v[(n - 1) * 3 + a] - v[a]) > (hi - lo) * .5 && hi - lo > 1e-3) lock.push(a);
+      }
+      if (lock.length) hipsLock = { axes: lock, base: bones.Hips.position.clone() };
+    }
+  }
+
+  // Parts list
+  $('parts').innerHTML = meshes.map((m, i) => `<label><input type="checkbox" data-i="${i}" checked>${m.name.replace(/\d*\.?obj(mesh)?.*$/, '').replace(/_/g, ' ')}</label>`).join('');
+  $('parts').addEventListener('change', (e) => { const m = meshes[e.target.dataset.i]; if (m) m.visible = e.target.checked; });
+
+  $('info').textContent = `${meshes.length} meshes, ${Object.keys(bones).length} Mixamo bones, ${gltf.animations.length} clip (${clipDur.toFixed(1)}s). Idle, Aim and Shoot are posed in code on top of the rig; more Mixamo clips can drop straight in.`;
+  model.traverse((o) => { if (o.isBone) o.userData.rest = { p: o.position.clone(), q: o.quaternion.clone() }; });
+  setSkin(state.skin); setGun(state.gun); setMove(state.move);
+  $('load').hidden = true;
+}, undefined, (err) => { $('load').textContent = 'Could not load hamrunner.glb'; console.error(err); });
+
+function setSkin(k) {
+  state.skin = k;
+  const mat = SKINS[k].make();
+  for (const m of meshes) m.material = mat;
+  press('skins', k);
+}
+function setGun(k) {
+  state.gun = k;
+  if (gunObj) scene.remove(gunObj);
+  gunObj = buildGun(GUNS[k]); scene.add(gunObj);
+  flash.color.set(GUNS[k].glow); flashBall.material.color.set(GUNS[k].glow); tracer.material.color.set(GUNS[k].glow);
+  press('guns', k);
+}
+function setMove(k) {
+  state.move = k;
+  const clipMove = k === 'clip' || k === 'rungun';
+  if (action) { if (clipMove) { action.reset().play(); action.paused = false; } else { action.stop(); } }
+  $('scrubRow').hidden = !clipMove;
+  press('moves', k);
+}
+function press(group, k) { for (const b of $(group).children) b.setAttribute('aria-pressed', String(b.dataset.k === k)); }
+
+// UI
+const MOVES = { idle: 'Idle', aim: 'Aim', shoot: 'Shoot', clip: 'Clip from file', rungun: 'Clip + gun' };
+const mk = (box, items, fn, dot) => { for (const [k, v] of Object.entries(items)) {
+  const b = document.createElement('button'); b.dataset.k = k;
+  b.innerHTML = (dot ? `<span class="dot" style="background:${dot(v)}"></span>` : '') + (v.name || v);
+  b.onclick = () => fn(k); $(box).append(b); } };
+mk('moves', MOVES, setMove);
+mk('guns', GUNS, setGun, (g) => g.accent);
+mk('skins', SKINS, setSkin);
+mk('rooms', ROOMS, (k) => { setRoom(k); press('rooms', k); }, (r) => '#' + r.bg.getHexString());
+setRoom(state.room); press('rooms', state.room);
+$('speed').oninput = (e) => { state.speed = +e.target.value; $('speedV').textContent = state.speed.toFixed(2); };
+$('scrub').oninput = (e) => { if (action) { action.time = +e.target.value * clipDur; action.paused = true; } };
+$('scrub').onchange = () => { if (action) action.paused = false; };
+canvas.addEventListener('dblclick', () => fire(true));
+
+// Pose helpers: turn a bone so the direction to its child points along `dir` (world space), blended by w.
+const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _q = new THREE.Quaternion(), _pq = new THREE.Quaternion(), _wq = new THREE.Quaternion();
+function point(bone, child, dir, w = 1) {
+  bone.getWorldPosition(_a); child.getWorldPosition(_b);
+  const cur = _b.sub(_a).normalize();
+  _q.setFromUnitVectors(cur, dir.clone().normalize());
+  if (w < 1) _q.slerp(new THREE.Quaternion(), 1 - w);
+  bone.getWorldQuaternion(_wq);
+  _wq.premultiply(_q);
+  bone.parent.getWorldQuaternion(_pq);
+  bone.quaternion.copy(_pq.invert().multiply(_wq));
+  bone.updateMatrixWorld(true);
+}
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const UP = V(0, 1, 0), FWD = V(0, 0, 1), RIGHT = V(-1, 0, 0);
+
+function fire(force) {
+  if (!force && state.move !== 'shoot' && state.move !== 'rungun') return;
+  state.fireT = 0; state.recoil = 1;
+}
+
+const clock = new THREE.Clock();
+function tick() {
+  const dt = Math.min(clock.getDelta(), .05) * state.speed;
+  const t = clock.elapsedTime;
+  if (model) {
+    const m = state.move;
+    // reset to bind pose for code-posed moves, run the clip otherwise
+    if (m === 'clip' || m === 'rungun') {
+      mixer.update(dt);
+      if (hipsLock) for (const a of hipsLock.axes) bones.Hips.position.setComponent(a, hipsLock.base.getComponent(a));
+      if (!$('scrubRow').hidden && action && !action.paused) $('scrub').value = (action.time % clipDur) / clipDur;
+      $('scrubV').textContent = (action ? action.time % clipDur : 0).toFixed(1) + 's';
+    } else {
+      model.traverse((o) => { if (o.isBone && o.userData.rest) { o.position.copy(o.userData.rest.p); o.quaternion.copy(o.userData.rest.q); } });
+    }
+    model.updateMatrixWorld(true);
+
+    const aiming = m === 'aim' || m === 'shoot' || m === 'rungun';
+    const breathe = Math.sin(t * 2.1 * state.speed) * .5 + .5;
+    if (m !== 'clip' && m !== 'rungun') {
+      // stand: arms down, slight breathing
+      point(bones.Spine2, bones.Neck, V(0, 1, .04 + breathe * .02));
+      point(bones.LeftArm, bones.LeftForeArm, V(.18, -1, .02));
+      point(bones.LeftForeArm, bones.LeftHand, V(.08, -1, .22));
+      point(bones.Head, bones.HeadTop_End, V(0, 1, .08));
+    }
+    if (m === 'idle') {
+      point(bones.RightArm, bones.RightForeArm, V(-.2, -1, .05));
+      point(bones.RightForeArm, bones.RightHand, V(-.05, -.55, .85)); // gun held low, pointing ahead
+    }
+    if (aiming) {
+      // two-handed aim, gun at eye line in front of the chest; recoil kicks the arms up
+      const chest = bones.Spine2.getWorldPosition(new THREE.Vector3());
+      const sh = bones.RightArm.getWorldPosition(new THREE.Vector3());
+      const aimPt = chest.clone().add(V(-.04, .2, .42));
+      point(bones.RightArm, bones.RightForeArm, aimPt.clone().sub(sh));
+      point(bones.RightForeArm, bones.RightHand, V(0, .02 + state.recoil * .3, 1)); // barrel level, kicks up on each shot
+      const grip = bones.RightHand.getWorldPosition(new THREE.Vector3()).add(V(0, -.02, .04));
+      point(bones.LeftArm, bones.LeftForeArm, grip.clone().sub(bones.LeftArm.getWorldPosition(new THREE.Vector3())));
+      point(bones.LeftForeArm, bones.LeftHand, grip.clone().sub(bones.LeftForeArm.getWorldPosition(new THREE.Vector3())));
+      point(bones.Head, bones.HeadTop_End, V(0, 1, .2));
+    }
+
+    // gun in the right hand, barrel along the forearm
+    const hand = bones.RightHand.getWorldPosition(new THREE.Vector3());
+    const fore = bones.RightForeArm.getWorldPosition(new THREE.Vector3());
+    const dir = hand.clone().sub(fore).normalize();
+    gunObj.position.copy(hand).addScaledVector(dir, .03 - state.recoil * .03);
+    gunObj.up.copy(UP);
+    gunObj.lookAt(gunObj.position.clone().add(dir));
+
+    // auto fire
+    if ((m === 'shoot' || m === 'rungun') && t >= state.nextShot) { fire(); state.nextShot = t + 60 / GUNS[state.gun].rpm / Math.max(state.speed, .1); }
+  }
+  // flash, tracer, recoil decay
+  state.fireT += dt; state.recoil = Math.max(0, state.recoil - dt * 9);
+  if (gunObj) {
+    const mz = gunObj.localToWorld(gunObj.userData.muzzle.clone());
+    const on = state.fireT < .06;
+    flash.position.copy(mz); flash.intensity = on ? 3 : 0;
+    flashBall.position.copy(mz); flashBall.material.opacity = on ? 1 - state.fireT / .06 : 0;
+    flashBall.scale.setScalar(1 + state.fireT * 20);
+    tracer.position.copy(mz); tracer.quaternion.copy(gunObj.getWorldQuaternion(_wq));
+    tracer.scale.set(1, 1, 6 * Math.min(1, state.fireT / .03));
+    tracer.material.opacity = Math.max(0, 1 - state.fireT / .12);
+  }
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+}
+
+function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize); resize();
+tick();
+</script>
+</body>
+</html>
