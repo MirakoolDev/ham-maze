@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>HAM Runner Preview</title>
+<style>
+  @font-face { font-family: 'Bread Island'; src: url('../../assets/bread-island.otf') format('opentype'); font-display: swap; }
+  @font-face { font-family: 'Cabinet Grotesk'; src: url('../../assets/cabinet-grotesk.otf') format('opentype'); font-display: swap; }
+  :root {
+    color-scheme: dark;
+    --ink: #2a2733; --line: rgba(255, 250, 242, .14); --bone: #fffaf2; --muted: rgba(255, 250, 242, .68);
+    --cream: #f6e4b4; --signal: #ff8fa6;
+    --head: 'Bread Island', Georgia, serif; --text: 'Cabinet Grotesk', 'Segoe UI', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--ink); color: var(--bone); font: 14px/1.45 var(--text); overflow: hidden; }
+  #stage { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
+  .panel { position: fixed; top: max(14px, env(safe-area-inset-top, 0px)); left: max(14px, env(safe-area-inset-left, 0px)); width: 300px; max-height: calc(100% - 28px); overflow: auto;
+    background: rgba(42, 39, 51, .86); backdrop-filter: blur(10px); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+  h1 { font: 900 22px/1 var(--head); color: var(--cream); margin: 0 0 4px; letter-spacing: .02em; }
+  .sub { color: var(--muted); margin: 0 0 14px; font-size: 13px; }
+  h2 { font: 600 11px/1 var(--text); letter-spacing: .2em; text-transform: uppercase; color: var(--muted); margin: 16px 0 8px; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; }
+  button { font: 600 13px/1 var(--text); color: var(--bone); background: rgba(255, 250, 242, .06); border: 1px solid var(--line); border-radius: 9px; padding: 9px 11px; cursor: pointer;
+    box-shadow: inset 0 1px 0 rgba(255, 250, 242, .12), inset 0 -1px 0 rgba(0, 0, 0, .18); }
+  button:hover { background: rgba(255, 250, 242, .12); }
+  button[aria-pressed="true"] { background: var(--cream); color: var(--ink); border-color: var(--cream); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .75), inset 0 -2px 0 rgba(120, 96, 52, .18); }
+  button .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 0; }
+  label.sl { display: grid; grid-template-columns: 64px 1fr 44px; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin: 6px 0; }
+  label.sl output { text-align: right; color: var(--bone); font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; accent-color: var(--signal); }
+  .pose-h { font-size: 12px; color: var(--cream); margin: 10px 0 2px; }
+  #pose label.sl { grid-template-columns: 112px 1fr 44px; font-size: 12px; margin: 3px 0; }
+  #pose + .row { margin-top: 8px; }
+  #poseNote { word-break: break-all; user-select: all; }
+  .parts label { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); margin: 0 10px 6px 0; }
+  .note { font-size: 12px; color: var(--muted); margin: 12px 0 0; border-top: 1px solid var(--line); padding-top: 10px; }
+  .hint { position: fixed; right: max(14px, env(safe-area-inset-right, 0px)); bottom: max(14px, env(safe-area-inset-bottom, 0px)); font-size: 12px; color: rgba(42, 39, 51, .7); }
+  #load { position: fixed; inset: 0; display: grid; place-items: center; font: 900 20px var(--head); color: var(--cream); pointer-events: none; }
+  @media (max-width: 560px) { .panel { top: auto; bottom: max(10px, env(safe-area-inset-bottom, 0px)); left: 10px; right: 10px; width: auto; max-height: 46%; } .hint { display: none; } }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<div id="load">Loading the runner&hellip;</div>
+
+<aside class="panel">
+  <h1>HAM Runner</h1>
+  <p class="sub">hamrunner.glb with each gun in hand. Drag to orbit, scroll to zoom.</p>
+
+  <h2>Move</h2>
+  <div class="row" id="moves"></div>
+  <label class="sl">Speed<input type="range" id="speed" min="0" max="2" step="0.05" value="1"><output id="speedV">1.00</output></label>
+
+  <h2>Gun</h2>
+  <div class="row" id="guns"></div>
+
+  <h2>Body</h2>
+  <div class="row" id="skins"></div>
+
+  <h2>Pose</h2>
+  <div id="pose"></div>
+  <div class="row"><button id="poseCopy">Copy values</button><button id="poseReset">Reset</button></div>
+  <p class="note" id="poseNote" hidden></p>
+
+  <h2>Room</h2>
+  <div class="row" id="rooms"></div>
+
+  <h2>Parts in the file</h2>
+  <div class="parts" id="parts"></div>
+
+  <p class="note" id="info">&nbsp;</p>
+</aside>
+<div class="hint">Drag to orbit &middot; scroll to zoom &middot; double-click to fire</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const $ = (id) => document.getElementById(id);
+const canvas = $('stage');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+
+const scene = new THREE.Scene();
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+const camera = new THREE.PerspectiveCamera(32, 1, 0.05, 100);
+camera.position.set(2.6, 1.6, 4.6);
+const controls = new OrbitControls(camera, canvas);
+controls.target.set(0, 0.95, 0);
+controls.enableDamping = true;
+controls.minDistance = 1.2; controls.maxDistance = 12;
+controls.maxPolarAngle = Math.PI * 0.53;
+window.preview = { camera, controls }; // for framing screenshots from the console
+
+// Rooms: the game's two maze walls plus the NFT studio
+const ROOMS = {
+  pink:   { name: 'Pink wall', bg: new THREE.Color().setRGB(1, .8, .87, THREE.SRGBColorSpace),  floor: '#f3c1cf' },
+  blue:   { name: 'Blue wall', bg: new THREE.Color().setRGB(.74, .885, 1, THREE.SRGBColorSpace), floor: '#b9d6f0' },
+  studio: { name: 'Studio',    bg: new THREE.Color('#d9dbe3'), floor: '#f3efea' },
+};
+const floorMat = new THREE.MeshStandardMaterial({ roughness: .9 });
+const floor = new THREE.Mesh(new THREE.CircleGeometry(30, 64), floorMat);
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+const plinth = new THREE.Mesh(new THREE.CylinderGeometry(.75, .8, .06, 64), new THREE.MeshStandardMaterial({ color: '#fffaf2', roughness: .5 }));
+plinth.position.y = .03; plinth.receiveShadow = true; scene.add(plinth);
+scene.fog = new THREE.Fog(0xffffff, 8, 22);
+function setRoom(k) {
+  const r = ROOMS[k];
+  scene.background = r.bg; scene.fog.color.copy(r.bg);
+  floorMat.color.set(r.floor);
+}
+
+scene.add(new THREE.HemisphereLight(0xfff6f0, 0x6a5f78, 1.1));
+const key = new THREE.DirectionalLight(0xffffff, 2.2);
+key.position.set(3, 6, 4); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+Object.assign(key.shadow.camera, { left: -3, right: 3, top: 3, bottom: -3, near: .5, far: 20 });
+key.shadow.bias = -0.0004; key.shadow.normalBias = .02;
+scene.add(key);
+const rim = new THREE.DirectionalLight(0xffc4d4, 2.4); rim.position.set(-4, 3, -5); scene.add(rim);
+
+// The in-game look (src/runner.js rimMaterial): near-black gloss with a fresnel rim
+function rimMat(rimColor) {
+  const m = new THREE.MeshPhysicalMaterial({ color: 0x07060a, roughness: .12, clearcoat: 1, clearcoatRoughness: .08 });
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uRim = { value: new THREE.Color(rimColor) };
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 uRim;')
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += uRim * pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), 4.2) * 1.9;');
+  };
+  m.customProgramCacheKey = () => 'rim-' + rimColor;
+  return m;
+}
+
+// Body looks
+const SKINS = {
+  rim:   { name: 'Cyan rim (in game)', make: () => rimMat('#5ff4ff') },
+  warm:  { name: 'Warm rim', make: () => rimMat('#ffb07a') },
+  file:  { name: 'As exported', make: () => new THREE.MeshPhysicalMaterial({ color: 0x050407, roughness: .08, metalness: 0, clearcoat: 1, clearcoatRoughness: .05 }) },
+  ink:   { name: 'Ink',  make: () => new THREE.MeshPhysicalMaterial({ color: '#2a2733', roughness: .45, clearcoat: .6, clearcoatRoughness: .3, sheen: .6, sheenColor: new THREE.Color('#ff8fa6') }) },
+  bone:  { name: 'Bone', make: () => new THREE.MeshPhysicalMaterial({ color: '#fffaf2', roughness: .55, sheen: .4, sheenColor: new THREE.Color('#f6e4b4') }) },
+  glow:  { name: 'Pink glow', make: () => new THREE.MeshPhysicalMaterial({ color: '#ffb3c6', roughness: .18, transmission: .55, thickness: .6, ior: 1.35, emissive: '#ff4f97', emissiveIntensity: .22, clearcoat: 1 }) },
+  frost: { name: 'Frost glass', make: () => new THREE.MeshPhysicalMaterial({ color: '#dcf1ff', roughness: .25, transmission: .7, thickness: .8, ior: 1.4, emissive: '#5fd0ff', emissiveIntensity: .12 }) },
+};
+
+// The six guns from the NFT art (ham-art.js GUNS), built as little 3D props, barrel along +z, grip at the origin
+const GUNS = {
+  k7:      { name: 'K-7 carbine', body: '#fff0f5', mid: '#f3a9c2', accent: '#ff7aa8', glow: '#ff6f9f', len: .42, bore: .018, rpm: 620 },
+  marker:  { name: 'Marker',      body: '#fff6f8', mid: '#f7c3d3', accent: '#ff4f97', glow: '#ff7db4', len: .22, bore: .03,  rpm: 140 },
+  frost:   { name: 'Frost dart',  body: '#ffffff', mid: '#dcf1ff', accent: '#5fd0ff', glow: '#9fe6ff', len: .46, bore: .012, rpm: 70 },
+  pulse:   { name: 'Pulse',       body: '#f6f1ff', mid: '#d9c8ff', accent: '#b58cff', glow: '#cdb0ff', len: .26, bore: .04,  rpm: 90 },
+  blinker: { name: 'Blinker',     body: '#fff4ec', mid: '#ffd0b3', accent: '#ff7a2e', glow: '#ff9a5c', len: .32, bore: .022, rpm: 50, pearl: true },
+  snare:   { name: 'Snare',       body: '#effffb', mid: '#c4f5ea', accent: '#7dffe0', glow: '#9ffff0', len: .24, bore: .05,  rpm: 60 },
+};
+function buildGun(g) {
+  const grp = new THREE.Group();
+  const shell = new THREE.MeshPhysicalMaterial({ color: g.body, roughness: .3, clearcoat: 1, clearcoatRoughness: .15, sheen: g.pearl ? 1 : 0, sheenColor: new THREE.Color(g.glow), iridescence: g.pearl ? .8 : 0 });
+  const mid = new THREE.MeshPhysicalMaterial({ color: g.mid, roughness: .4, clearcoat: .6 });
+  const glass = new THREE.MeshPhysicalMaterial({ color: g.glow, emissive: g.accent, emissiveIntensity: 1.6, roughness: .1, transmission: .4, thickness: .2 });
+  const add = (geo, mat, x, y, z, rx = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.x = rx; m.castShadow = true; grp.add(m); return m; };
+  const L = g.len, R = (w, h, d, r = .012) => roundedBox(w, h, d, r);
+  add(R(.05, .07, L * .62), shell, 0, .055, L * .18);                    // receiver
+  add(new THREE.CylinderGeometry(g.bore + .008, g.bore + .01, L * .5, 24), mid, 0, .07, L * .62, Math.PI / 2); // barrel
+  add(new THREE.CylinderGeometry(g.bore * .7, g.bore * .7, .012, 20), glass, 0, .07, L * .87 + .002, Math.PI / 2); // muzzle glow
+  add(R(.038, .1, .05, .01), mid, 0, -.01, -.005, -.25);                // grip
+  add(R(.012, .016, L * .5, .004), glass, 0, .093, L * .16);           // glowing spine
+  if (L > .3) add(R(.044, .06, .12, .012), shell, 0, .05, -L * .2);     // stock
+  if (g.name === 'Pulse' || g.name === 'Snare') add(new THREE.SphereGeometry(.035, 24, 16), glass, 0, .05, L * .3); // core
+  grp.userData.muzzle = new THREE.Vector3(0, .07, L * .88);
+  return grp;
+}
+function roundedBox(w, h, d, r) {
+  // a plain box with chamfered look via slight bevel: cheap and reads fine at this size
+  const s = new THREE.Shape();
+  const x = w / 2 - r, y = h / 2 - r;
+  s.moveTo(-x, -h / 2); s.lineTo(x, -h / 2); s.quadraticCurveTo(w / 2, -h / 2, w / 2, -y); s.lineTo(w / 2, y);
+  s.quadraticCurveTo(w / 2, h / 2, x, h / 2); s.lineTo(-x, h / 2); s.quadraticCurveTo(-w / 2, h / 2, -w / 2, y);
+  s.lineTo(-w / 2, -y); s.quadraticCurveTo(-w / 2, -h / 2, -x, -h / 2);
+  const geo = new THREE.ExtrudeGeometry(s, { depth: d, bevelEnabled: false, curveSegments: 4 });
+  geo.translate(0, 0, -d / 2);
+  return geo;
+}
+
+// Muzzle flash and tracer
+const flash = new THREE.PointLight(0xffffff, 0, 2.5); scene.add(flash);
+const flashBall = new THREE.Mesh(new THREE.SphereGeometry(.035, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, toneMapped: false }));
+scene.add(flashBall);
+const tracer = new THREE.Mesh(new THREE.CylinderGeometry(.006, .006, 1, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, toneMapped: false }));
+tracer.geometry.rotateX(Math.PI / 2); tracer.geometry.translate(0, 0, .5); scene.add(tracer);
+
+// Pose: every number the hold is built from, editable live in the panel. "Copy values" gives the
+// JSON to bake back in as the defaults. Your edits are remembered in this browser.
+const POSE_SPEC = [
+  ['Carry (Idle, Walk, Run)'],
+  ['carryForward', 'Muzzle forward', -.5, 1.5, .3],
+  ['carryDown', 'Wrist down', -.5, 1, .25],
+  ['carryOut', 'Away from body', -.4, .4, .05],
+  ['Aim (Aim, Shoot, Run + shoot)'],
+  ['aimHeight', 'Hand height', 0, 1.2, .5],
+  ['aimReach', 'Reach', .15, .6, .36],
+  ['aimSide', 'Sideways', -.2, .2, .03],
+  ['aimTilt', 'Barrel tilt', -.4, .4, .02],
+  ['elbowOut', 'Elbows out', 0, 2, .7],
+  ['Support hand (aim)'],
+  ['supportX', 'Left / right', -.05, .2, .075],
+  ['supportY', 'Up / down', -.15, .1, -.07],
+  ['supportZ', 'Forward / back', -.15, .15, .05],
+  ['supportYaw', 'Fingers turn', -120, 60, -70.735],
+  ['supportPitch', 'Fingers tilt', -80, 80, 10.945],
+  ['supportRoll', 'Palm roll', -120, 120, -39.16],
+  ['supportCurl', 'Finger curl', 0, 1.4, .5],
+  ['Grip (both)'],
+  ['gripAlong', 'Gun along palm', .3, 1.2, .62],
+  ['gripDepth', 'Gun off palm', -.02, .08, .015],
+  ['curl', 'Finger curl', 0, 1.3, .795],
+];
+const POSE_DEFAULT = Object.fromEntries(POSE_SPEC.filter((s) => s.length > 1).map((s) => [s[0], s[4]]));
+const POSE = { ...POSE_DEFAULT };
+try { Object.assign(POSE, JSON.parse(localStorage.getItem('ham.pose') || '{}')); } catch {}
+function buildPose() {
+  $('pose').innerHTML = POSE_SPEC.map((s) => s.length === 1
+    ? `<div class="pose-h">${s[0]}</div>`
+    : `<label class="sl">${s[1]}<input type="range" data-k="${s[0]}" min="${s[2]}" max="${s[3]}" step="0.005" value="${POSE[s[0]]}"><output>${(+POSE[s[0]]).toFixed(3)}</output></label>`).join('');
+}
+buildPose();
+window.preview.pose = POSE;
+$('pose').addEventListener('input', (e) => {
+  const k = e.target.dataset.k; if (!k) return;
+  POSE[k] = +e.target.value;
+  e.target.nextElementSibling.textContent = POSE[k].toFixed(3);
+  try { localStorage.setItem('ham.pose', JSON.stringify(POSE)); } catch {}
+});
+$('poseReset').onclick = () => { Object.assign(POSE, POSE_DEFAULT); try { localStorage.removeItem('ham.pose'); } catch {} buildPose(); };
+$('poseCopy').onclick = async () => {
+  const txt = JSON.stringify(Object.fromEntries(Object.entries(POSE).map(([k, v]) => [k, +(+v).toFixed(3)])));
+  const note = $('poseNote'); note.hidden = false;
+  try { await navigator.clipboard.writeText(txt); note.textContent = 'Copied. Paste it to Claude to make it the default.'; }
+  catch { note.textContent = txt; getSelection().selectAllChildren(note); }
+};
+
+// State
+const state = { move: 'idle', gun: 'k7', skin: 'rim', room: 'pink', speed: 1, fireT: 9, nextShot: 0, recoil: 0 };
+let model, mixer, bones = {}, gunObj, meshes = [], actions = {}, current = null, fallback = false;
+const P = (o) => o.getWorldPosition(new THREE.Vector3());
+const Q = (o) => o.getWorldQuaternion(new THREE.Quaternion());
+const boneMap = (root) => { const m = {}; root.traverse((o) => { if (o.isBone) m[o.name.replace(/^mixamorig:?/, '')] = o; }); return m; };
+
+// Stand a rig up: turn its wrapper so hips->head is +y and the chest faces +z, scale it to `height`,
+// and (for the runner) plant it on the plinth. Works whatever rotation the file's armature carries.
+function standUp(wrap, root, b, height, plant) {
+  wrap.updateMatrixWorld(true);
+  const up = P(b.Head).sub(P(b.Hips)).normalize();
+  const side = P(b.RightArm).sub(P(b.LeftArm)).normalize();
+  const fwd = new THREE.Vector3().crossVectors(side, up).normalize().negate();
+  side.crossVectors(up, fwd).normalize().negate();
+  wrap.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(side.clone().negate(), up, fwd)).invert();
+  wrap.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(root, true);
+  wrap.scale.setScalar(height / (box.max.y - box.min.y));
+  wrap.updateMatrixWorld(true);
+  if (!plant) return;
+  box.setFromObject(root, true);
+  const c = box.getCenter(new THREE.Vector3());
+  wrap.position.set(-c.x, .06 - box.min.y, -c.z);
+  wrap.updateMatrixWorld(true);
+}
+
+// Retarget a clip from another Mixamo rig onto the runner. The two files store different rest
+// rotations per bone, so tracks can't be copied as they are: sample the source at 30 fps, take each
+// bone's world-space turn away from its rest pose, apply that turn to the runner's matching bone,
+// and convert back to local rotations. Hips height follows too; forward drift is dropped so it runs in place.
+function retarget(clip, src, sb, sRest, rest) {
+  const order = [];
+  model.traverse((o) => { if (o.isBone) { const k = o.name.replace(/^mixamorig:?/, ''); if (sb[k] && rest[k]) order.push(k); } });
+  const keyOf = new Map(order.map((k) => [bones[k], k]));
+  const fixedParent = {};
+  for (const k of order) if (!keyOf.has(bones[k].parent)) fixedParent[k] = Q(bones[k].parent);
+  const hipsToLocal = bones.Hips.parent.matrixWorld.clone().invert();
+  const mx = new THREE.AnimationMixer(src);
+  mx.clipAction(clip).play();
+  const fps = 30, n = Math.max(2, Math.ceil(clip.duration * fps) + 1);
+  const times = new Float32Array(n), hips = new Float32Array(n * 3), out = {};
+  for (const k of order) out[k] = new Float32Array(n * 4);
+  const world = {}, inv = new THREE.Quaternion(), loc = new THREE.Quaternion();
+  for (let i = 0; i < n; i++) {
+    const t = Math.min(i / fps, clip.duration);
+    times[i] = t;
+    mx.setTime(t);
+    src.updateMatrixWorld(true);
+    for (const k of order) {
+      const w = Q(sb[k]).multiply(inv.copy(sRest[k].q).invert()).multiply(rest[k].q);
+      world[k] = w;
+      const pw = keyOf.has(bones[k].parent) ? world[keyOf.get(bones[k].parent)] : fixedParent[k];
+      loc.copy(pw).invert().multiply(w);
+      if (i && loc.x * out[k][i * 4 - 4] + loc.y * out[k][i * 4 - 3] + loc.z * out[k][i * 4 - 2] + loc.w * out[k][i * 4 - 1] < 0) loc.set(-loc.x, -loc.y, -loc.z, -loc.w);
+      loc.toArray(out[k], i * 4);
+    }
+    const dp = P(sb.Hips).sub(sRest.Hips.p); dp.z = 0;
+    rest.Hips.p.clone().add(dp).applyMatrix4(hipsToLocal).toArray(hips, i * 3);
+  }
+  const tracks = order.map((k) => new THREE.QuaternionKeyframeTrack(bones[k].name + '.quaternion', times, out[k]));
+  tracks.push(new THREE.VectorKeyframeTrack(bones.Hips.name + '.position', times, hips));
+  return new THREE.AnimationClip(clip.name, clip.duration, tracks);
+}
+
+// Clips: Mixamo moves from the three.js example rig (Xbot), retargeted onto the runner
+const LIB = 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r180/examples/models/gltf/Xbot.glb';
+const LIB_CLIPS = { idle: 'idle', walk: 'walk', run: 'run', agree: 'agree', shake: 'headShake' };
+const MOVES = { idle: 'Idle', walk: 'Walk', run: 'Run', agree: 'Nod', shake: 'Head shake', aim: 'Aim', shoot: 'Shoot', rungun: 'Run + shoot' };
+const BASE = { idle: 'idle', walk: 'walk', run: 'run', agree: 'agree', shake: 'shake', aim: 'idle', shoot: 'idle', rungun: 'run' };
+
+const loader = new GLTFLoader();
+try {
+  const gltf = await loader.loadAsync('hamrunner.glb');
+  model = gltf.scene;
+  model.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; meshes.push(o); } });
+  bones = boneMap(model);
+  const wrap = new THREE.Group(); wrap.add(model); scene.add(wrap);
+  standUp(wrap, model, bones, 1.75, true);
+  const rest = {};
+  for (const [k, b] of Object.entries(bones)) rest[k] = { q: Q(b), p: P(b) };
+  model.traverse((o) => { if (o.isBone) o.userData.rest = { p: o.position.clone(), q: o.quaternion.clone() }; });
+  mixer = new THREE.AnimationMixer(model);
+
+  $('parts').innerHTML = meshes.map((m, i) => `<label><input type="checkbox" data-i="${i}" checked>${m.name.replace(/\d*\.?obj(mesh)?.*$/, '').replace(/_/g, ' ')}</label>`).join('');
+  $('parts').addEventListener('change', (e) => { const m = meshes[e.target.dataset.i]; if (m) m.visible = e.target.checked; });
+  setSkin(state.skin); setGun(state.gun);
+  $('load').textContent = 'Fitting the moves…';
+
+  try {
+    const lib = await loader.loadAsync(LIB);
+    const src = lib.scene, sb = boneMap(src);
+    const sw = new THREE.Group(); sw.add(src);
+    standUp(sw, src, sb, 1.75, false);
+    const sRest = {};
+    for (const [k, b] of Object.entries(sb)) sRest[k] = { q: Q(b), p: P(b) };
+    for (const [key, name] of Object.entries(LIB_CLIPS)) {
+      const clip = lib.animations.find((a) => a.name === name);
+      if (clip) actions[key] = mixer.clipAction(retarget(clip, src, sb, sRest, rest));
+    }
+  } catch (e) { console.warn('Clip library failed, falling back to code poses', e); }
+  fallback = !actions.idle;
+
+  mk('moves', fallback ? { idle: 'Idle', aim: 'Aim', shoot: 'Shoot' } : MOVES, setMove);
+  $('info').textContent = fallback
+    ? `${meshes.length} meshes, ${Object.keys(bones).length} Mixamo bones. Couldn't reach the clip library, so these poses are set in code.`
+    : `${meshes.length} meshes, ${Object.keys(bones).length} Mixamo bones. Idle, walk, run, nod and head shake are Mixamo clips retargeted onto the runner; aim and recoil are layered on in code.`;
+  setMove('idle');
+  $('load').hidden = true;
+} catch (err) { $('load').textContent = 'Could not load hamrunner.glb'; console.error(err); }
+
+function setSkin(k) {
+  state.skin = k;
+  const mat = SKINS[k].make();
+  for (const m of meshes) m.material = mat;
+  press('skins', k);
+}
+function setGun(k) {
+  state.gun = k;
+  if (gunObj) scene.remove(gunObj);
+  gunObj = buildGun(GUNS[k]); scene.add(gunObj);
+  flash.color.set(GUNS[k].glow); flashBall.material.color.set(GUNS[k].glow); tracer.material.color.set(GUNS[k].glow);
+  press('guns', k);
+}
+function setMove(k) {
+  state.move = k;
+  const next = actions[BASE[k]];
+  if (next && next !== current) {
+    next.reset().setEffectiveWeight(1).fadeIn(.3).play();
+    if (current) current.fadeOut(.3);
+    current = next;
+  }
+  press('moves', k);
+}
+function press(group, k) { for (const b of $(group).children) b.setAttribute('aria-pressed', String(b.dataset.k === k)); }
+
+// UI
+function mk(box, items, fn, dot) { for (const [k, v] of Object.entries(items)) {
+  const b = document.createElement('button'); b.dataset.k = k;
+  b.innerHTML = (dot ? `<span class="dot" style="background:${dot(v)}"></span>` : '') + (v.name || v);
+  b.onclick = () => fn(k); $(box).append(b); } }
+mk('guns', GUNS, setGun, (g) => g.accent);
+mk('skins', SKINS, setSkin);
+mk('rooms', ROOMS, (k) => { setRoom(k); press('rooms', k); }, (r) => '#' + r.bg.getHexString());
+setRoom(state.room); press('rooms', state.room);
+press('guns', state.gun); press('skins', state.skin);
+$('speed').oninput = (e) => { state.speed = +e.target.value; $('speedV').textContent = state.speed.toFixed(2); };
+canvas.addEventListener('dblclick', () => { state.fireT = 0; state.recoil = 1; });
+
+// Pose helper: turn a bone so the direction to its child points along `dir` (world space).
+const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _q = new THREE.Quaternion(), _pq = new THREE.Quaternion(), _wq = new THREE.Quaternion();
+function point(bone, child, dir) {
+  bone.getWorldPosition(_a); child.getWorldPosition(_b);
+  _q.setFromUnitVectors(_b.sub(_a).normalize(), dir.clone().normalize());
+  bone.getWorldQuaternion(_wq).premultiply(_q);
+  bone.parent.getWorldQuaternion(_pq);
+  bone.quaternion.copy(_pq.invert().multiply(_wq));
+  bone.updateMatrixWorld(true);
+}
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+
+// Two-bone IK: put `hand` at `target` with the elbow bent toward `pole` (world space).
+function reach(arm, fore, hand, target, pole) {
+  const S = P(arm), a = P(fore).distanceTo(S), b = P(hand).distanceTo(P(fore));
+  const d = target.clone().sub(S);
+  const dist = Math.min(Math.max(d.length(), Math.abs(a - b) + 1e-3), a + b - 1e-3);
+  const dir = d.normalize();
+  const cosA = (a * a + dist * dist - b * b) / (2 * a * dist);
+  const side = pole.clone().addScaledVector(dir, -pole.dot(dir)).normalize();
+  const E = S.clone().addScaledVector(dir, cosA * a).addScaledVector(side, Math.sqrt(Math.max(0, 1 - cosA * cosA)) * a);
+  point(arm, fore, E.clone().sub(S));
+  point(fore, hand, S.addScaledVector(dir, dist).sub(P(fore)));
+}
+// The hand's own frame, read off the bones every frame so it works in any pose:
+//   f = wrist to middle knuckle (where open fingers point), a = pinky knuckle to index knuckle (the
+//   line a gun grip runs along inside a fist, index side up), n = out of the palm.
+function handFrame(side) {
+  const s = side === 'Right' ? -1 : 1;
+  const w = P(bones[side + 'Hand']), mid = P(bones[side + 'HandMiddle1']);
+  const f = mid.clone().sub(w).normalize();
+  const a = P(bones[side + 'HandIndex1']).sub(P(bones[side + 'HandPinky1']));
+  a.addScaledVector(f, -a.dot(f)).normalize();
+  const n = new THREE.Vector3().crossVectors(f, a).multiplyScalar(s).normalize();
+  return { w, mid, f, a, n };
+}
+// Turn a hand so its fingers point along fD and its index side faces aD (world space).
+const _m1 = new THREE.Matrix4(), _m2 = new THREE.Matrix4();
+function orientHand(side, fD, aD) {
+  const hand = bones[side + 'Hand'], { f, a } = handFrame(side);
+  const fd = fD.clone().normalize(), ad = aD.clone().addScaledVector(fd, -aD.dot(fd)).normalize();
+  _m1.makeBasis(f, a, new THREE.Vector3().crossVectors(f, a));
+  _m2.makeBasis(fd, ad, new THREE.Vector3().crossVectors(fd, ad));
+  _q.setFromRotationMatrix(_m2.multiply(_m1.transpose()));
+  hand.getWorldQuaternion(_wq).premultiply(_q);
+  hand.parent.getWorldQuaternion(_pq);
+  hand.quaternion.copy(_pq.invert().multiply(_wq));
+  hand.updateMatrixWorld(true);
+}
+// Close a hand: each finger bends around the knuckle line, from the fingers' direction into the palm.
+// `bend` is each joint's angle (degrees from straight); the gun hand's index stays nearly straight
+// along the frame, off the trigger.
+const DEG = Math.PI / 180;
+function curl(side, bend, trigger) {
+  const { f, n } = handFrame(side);
+  const at = (deg) => f.clone().multiplyScalar(Math.cos(deg * DEG)).addScaledVector(n, Math.sin(deg * DEG));
+  for (const name of ['Index', 'Middle', 'Ring', 'Pinky']) {
+    const b = [1, 2, 3, 4].map((i) => bones[`${side}Hand${name}${i}`]);
+    if (!b[3]) continue;
+    const angles = trigger && name === 'Index' ? [6, 12, 18] : bend;
+    for (let i = 0; i < 3; i++) point(b[i], b[i + 1], at(angles[i]));
+  }
+  // thumb wraps the other side of the grip, tip toward the front
+  const th = [2, 3, 4].map((i) => bones[`${side}HandThumb${i}`]);
+  if (th[2]) { point(th[0], th[1], at(40)); point(th[1], th[2], at(65)); }
+}
+// Where the grip sits in the right fist, and how the gun is turned to match, in the hand's frame.
+const _gb = new THREE.Matrix4(), GRIP_LOCAL = new THREE.Vector3(0, -.01, -.005);
+function holdGun(kick) {
+  const { w, mid, f, a, n } = handFrame('Right');
+  const fwd = f.clone().addScaledVector(a, -f.dot(a)).normalize();
+  _gb.makeBasis(new THREE.Vector3().crossVectors(a, fwd), a, fwd);
+  gunObj.quaternion.setFromRotationMatrix(_gb);
+  const inFist = w.clone().lerp(mid, POSE.gripAlong).addScaledVector(n, POSE.gripDepth).addScaledVector(fwd, -kick * .02);
+  gunObj.position.copy(inFist).sub(GRIP_LOCAL.clone().applyQuaternion(gunObj.quaternion));
+}
+
+const clock = new THREE.Clock();
+function tick() {
+  const dt = Math.min(clock.getDelta(), .05) * state.speed;
+  const t = clock.elapsedTime;
+  if (model && gunObj) {
+    const m = state.move;
+    if (!fallback) {
+      mixer.update(dt);
+      model.updateMatrixWorld(true);
+    } else {
+      // no clips: start from rest and pose the arms down with a little breathing
+      model.traverse((o) => { if (o.isBone && o.userData.rest) { o.position.copy(o.userData.rest.p); o.quaternion.copy(o.userData.rest.q); } });
+      model.updateMatrixWorld(true);
+      point(bones.Spine2, bones.Neck, V(0, 1, .04 + (Math.sin(t * 2.1) * .5 + .5) * .02));
+      point(bones.LeftArm, bones.LeftForeArm, V(.18, -1, .02));
+      point(bones.LeftForeArm, bones.LeftHand, V(.08, -1, .22));
+      if (m === 'idle') {
+        point(bones.RightArm, bones.RightForeArm, V(-.2, -1, .05));
+        point(bones.RightForeArm, bones.RightHand, V(-.05, -.55, .85));
+      }
+    }
+
+    const aiming = m === 'aim' || m === 'shoot' || m === 'rungun';
+    const kick = state.recoil;
+    if (aiming) {
+      // Two-handed stance layered over the clip: hands meet just below chin height in front of the
+      // chest, elbows bent and dropped (two-bone IK). Gun hand thumb-up with the barrel straight ahead;
+      // the support hand comes from the left, fingers wrapped over the gun hand's fingers.
+      const chest = P(bones.Spine2), neck = P(bones.Neck);
+      const hand = chest.clone().add(V(-POSE.aimSide, (neck.y - chest.y) * POSE.aimHeight + kick * .03, POSE.aimReach - kick * .03));
+      reach(bones.RightArm, bones.RightForeArm, bones.RightHand, hand, V(-POSE.elbowOut, -1, -.1));
+      orientHand('Right', V(0, POSE.aimTilt + kick * .35, 1), V(.12, 1, 0));
+      const g = handFrame('Right');
+      // support hand, placed from the gun hand's wrist in the character's own directions
+      // (+x her left, +y up, +z ahead), then turned by yaw / tilt / roll
+      const support = g.w.clone().add(V(POSE.supportX, POSE.supportY, POSE.supportZ));
+      reach(bones.LeftArm, bones.LeftForeArm, bones.LeftHand, support, V(POSE.elbowOut, -1, -.1));
+      const yaw = POSE.supportYaw * DEG, pitch = POSE.supportPitch * DEG;
+      const fD = V(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
+      const aD = V(0, 1, 0).addScaledVector(fD, -fD.y).normalize().applyAxisAngle(fD, POSE.supportRoll * DEG);
+      orientHand('Left', fD, aD);
+      curl('Left', [55, 125, 185].map((d) => d * POSE.supportCurl), false);
+      if (m !== 'rungun') point(bones.Head, bones.HeadTop_End, V(0, 1, .12));
+      if (m !== 'aim' && t >= state.nextShot) {
+        state.fireT = 0; state.recoil = 1;
+        state.nextShot = t + 60 / GUNS[state.gun].rpm / Math.max(state.speed, .1);
+      }
+    } else {
+      // carrying at the side: the hand hangs in line with the forearm, muzzle down and a little
+      // ahead of the feet, index knuckle facing forward
+      const fore = P(bones.RightHand).sub(P(bones.RightForeArm)).normalize();
+      orientHand('Right', fore.add(V(-POSE.carryOut, -POSE.carryDown, POSE.carryForward)), V(-.1, .25, 1));
+    }
+    curl('Right', [80, 170, 245].map((d) => d * POSE.curl), true);
+    holdGun(kick);
+  }
+  // flash, tracer, recoil decay
+  state.fireT += dt; state.recoil = Math.max(0, state.recoil - dt * 9);
+  if (gunObj) {
+    const mz = gunObj.localToWorld(gunObj.userData.muzzle.clone());
+    const on = state.fireT < .06;
+    flash.position.copy(mz); flash.intensity = on ? 3 : 0;
+    flashBall.position.copy(mz); flashBall.material.opacity = on ? 1 - state.fireT / .06 : 0;
+    flashBall.scale.setScalar(1 + state.fireT * 20);
+    tracer.position.copy(mz); tracer.quaternion.copy(gunObj.getWorldQuaternion(_wq));
+    tracer.scale.set(1, 1, 6 * Math.min(1, state.fireT / .03));
+    tracer.material.opacity = Math.max(0, 1 - state.fireT / .12);
+  }
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+}
+
+function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize); resize();
+tick();
+</script>
+</body>
+</html>
