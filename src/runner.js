@@ -204,14 +204,14 @@ export function createRunner(scene, opts = {}) {
 
   const r = { root, gun: null, ready: false, failed: false, show: false, hold: { ...HOLD }, holdWeight: 0, look: opts.look || 'rim', gunId: 'k7', kind: 'rifle' };
   // the gun in her hands: the K-7 (rifle) or one of the Power-Up guns (rifle or pistol, src/nftguns.js)
-  let gun, flash, MUZZLE, FIST = null, GUARD0 = null, nft = false;
+  let gun, flash, MUZZLE, FIST = null, GUARD0 = null, nft = false, gunTick = null, gunT = 0, gunFire = 0;
   r.setGun = (id) => {
     if (gun) scene.remove(gun);
     if (NFT_GUNS[id]) {
       const b = buildNftGun(id);
-      ({ group: gun, flash } = b); MUZZLE = b.muzzle; FIST = b.fist; GUARD0 = b.guard; nft = true; r.kind = b.kind; r.gunId = id;
+      ({ group: gun, flash } = b); MUZZLE = b.muzzle; FIST = b.fist; GUARD0 = b.guard; gunTick = b.tick; nft = true; r.kind = b.kind; r.gunId = id;
     } else {
-      ({ group: gun, flash } = buildGun({ slim: true })); MUZZLE = V(0, BORE, -0.66); FIST = null; GUARD0 = null; nft = false; r.kind = 'rifle'; r.gunId = 'k7';
+      ({ group: gun, flash } = buildGun({ slim: true })); MUZZLE = V(0, BORE, -0.66); FIST = null; GUARD0 = null; gunTick = null; nft = false; r.kind = 'rifle'; r.gunId = 'k7';
     }
     gun.traverse((o) => { if (o.isMesh) o.castShadow = true; });
     gun.visible = r.show && r.ready; scene.add(gun); r.gun = gun;
@@ -561,6 +561,9 @@ export function createRunner(scene, opts = {}) {
       aimPitch = THREE.MathUtils.clamp(aimPitch - pitchErr * k, -0.8, 0.8);
     }
 
+    // the gun's own animation (Power-Up guns): its loops, and a flare that eases off after each shot
+    gunT += dt; gunFire = ctx.flash ? 1 : gunFire * Math.exp(-5 * dt);
+    if (gunTick) gunTick(gunT, gunFire);
     flash.visible = ctx.flash;
     if (flash.visible) { flash.material.rotation = Math.random() * 6.28; flash.scale.setScalar((0.14 + Math.random() * 0.08) / scale); }
   };
