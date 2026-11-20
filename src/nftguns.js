@@ -12,12 +12,21 @@
 import * as THREE from 'three';
 import { flashTexture } from './gunmodel.js';
 
+// How each one fires and reloads (act): a shot every `every` seconds while the trigger is held (`burst`
+// shots `gap` apart, then the pause), `kick` how hard a shot pushes the hand. Reloads: 'rifle' is the
+// K-7's magazine change; the others carry no magazine. 'shake' rattles the paint canister like a spray
+// can, 'flick' snaps the wrist to reset the prongs, 'self' recharges on its own while she keeps her hold.
 export const NFT_GUNS = {
-  marker: { name: 'Marker', kind: 'pistol', body: ['#fff6f8', '#f7c3d3', '#cf8aa3'], metal: ['#fdf3f6', '#ead6e2', '#b89cb3'], grip: ['#fff0f5', '#f3a9c2', '#c46f8f'], accent: '#ff4f97', glow: '#ff7db4', barrel: 0.035 },
-  frost: { name: 'Frost dart', kind: 'rifle', body: ['#ffffff', '#dcf1ff', '#94bfdf'], metal: ['#f4fbff', '#c6e2f4', '#7fa7c6'], grip: ['#eef8ff', '#a9d4f2', '#6d9cc2'], accent: '#5fd0ff', glow: '#9fe6ff', barrel: 0.42 },
-  pulse: { name: 'Pulse', kind: 'pistol', body: ['#fbf8ff', '#ddd2fb', '#9e90d6'], metal: ['#f6f3ff', '#d4ccf2', '#8f86c0'], grip: ['#f4efff', '#bfb0f0', '#7d6fbd'], accent: '#b58cff', glow: '#cdb0ff', barrel: 0.06 },
-  blinker: { name: 'Blinker', kind: 'rifle', body: ['#fffaf4', '#f6dcd2', '#c6a1b4'], metal: ['#fffaf0', '#f1dcc4', '#c49a7c'], grip: ['#f3f0ff', '#c9c3ef', '#8b84bd'], accent: '#ff7a2e', glow: '#ff9a5c', barrel: 0.3, pearl: true },
-  snare: { name: 'Snare', kind: 'pistol', body: ['#f4fffb', '#bfeadf', '#6fae9f'], metal: ['#f1fffa', '#cdeee4', '#7bb3a5'], grip: ['#effff9', '#9fdccc', '#5c9a8b'], accent: '#7dffe0', glow: '#9ffff0', barrel: 0.045 },
+  marker: { name: 'Marker', kind: 'pistol', body: ['#fff6f8', '#f7c3d3', '#cf8aa3'], metal: ['#fdf3f6', '#ead6e2', '#b89cb3'], grip: ['#fff0f5', '#f3a9c2', '#c46f8f'], accent: '#ff4f97', glow: '#ff7db4', barrel: 0.035,
+    act: { every: 0.32, kick: 0.7, reload: 'shake', reloadT: 1.1 } },
+  frost: { name: 'Frost dart', kind: 'rifle', body: ['#ffffff', '#dcf1ff', '#94bfdf'], metal: ['#f4fbff', '#c6e2f4', '#7fa7c6'], grip: ['#eef8ff', '#a9d4f2', '#6d9cc2'], accent: '#5fd0ff', glow: '#9fe6ff', barrel: 0.42,
+    act: { every: 0.24, kick: 0.7, reload: 'rifle' } },
+  pulse: { name: 'Pulse', kind: 'pistol', body: ['#fbf8ff', '#ddd2fb', '#9e90d6'], metal: ['#f6f3ff', '#d4ccf2', '#8f86c0'], grip: ['#f4efff', '#bfb0f0', '#7d6fbd'], accent: '#b58cff', glow: '#cdb0ff', barrel: 0.06,
+    act: { every: 0.55, kick: 1.4, reload: 'self', reloadT: 1.3 } },
+  blinker: { name: 'Blinker', kind: 'rifle', body: ['#fffaf4', '#f6dcd2', '#c6a1b4'], metal: ['#fffaf0', '#f1dcc4', '#c49a7c'], grip: ['#f3f0ff', '#c9c3ef', '#8b84bd'], accent: '#ff7a2e', glow: '#ff9a5c', barrel: 0.3, pearl: true,
+    act: { every: 0.5, burst: 3, gap: 0.08, kick: 0.6, reload: 'rifle' } },
+  snare: { name: 'Snare', kind: 'pistol', body: ['#f4fffb', '#bfeadf', '#6fae9f'], metal: ['#f1fffa', '#cdeee4', '#7bb3a5'], grip: ['#effff9', '#9fdccc', '#5c9a8b'], accent: '#7dffe0', glow: '#9ffff0', barrel: 0.045,
+    act: { every: 0.75, kick: 1.1, reload: 'flick', reloadT: 1.0 } },
 };
 
 /** Extrude a side profile [[f, y], ...] (f = forward) to thickness t across x, with rounded edges. */
@@ -150,7 +159,8 @@ export function buildNftGun(id) {
     if (stops) gradient(geo, stops);
     const m = new THREE.Mesh(geo, typeof mat === 'string' ? M[mat] : mat); m.castShadow = true; m.position.set(x, y, z); parent.add(m); return m;
   };
-  const anim = [];  // (t, fire) => void, fire: 1 on a shot, easing back to 0
+  const anim = [];  // (t, fire, dt, rl) => void, fire: 1 on a shot, easing back to 0; rl: reload progress 0..1 (0 when not)
+  const hump = (x) => (x > 0 && x < 1 ? Math.sin(Math.PI * x) : 0); // 0 -> 1 -> 0 over the reload
   let muzzleZ = bEnd - 0.004;
   if (id === 'marker') {
     // wide paint nozzle, and a glass paint canister on top, half full: the paint sloshes, more after a shot
@@ -161,8 +171,8 @@ export function buildNftGun(id) {
     const paintGeo = pill(0.0105, cz0 - 0.004, cz1 + 0.004, 0, 0.02).scale(1, 0.62, 1).translate(0, -0.003, -cz);
     const paintMesh = piv(paintGeo, 'accent', null, 0, cy, cz);
     for (const z of [cz0 - 0.008, cz1 + 0.008]) add(new THREE.BoxGeometry(0.008, 0.012, 0.006).translate(0, Y + R + 0.002, z), 'metal', g.metal);
-    anim.push((t, fire) => {
-      paintMesh.rotation.x = 0.05 * Math.sin(t * 2.1) + 0.12 * fire * Math.sin(t * 14);
+    anim.push((t, fire, dt, rl) => {
+      paintMesh.rotation.x = 0.05 * Math.sin(t * 2.1) + 0.12 * fire * Math.sin(t * 14) + 0.4 * hump(rl) * Math.sin(t * 31);
       paintMesh.rotation.z = 0.03 * Math.sin(t * 1.4 + 1);
       paintMesh.scale.y = 1 + 0.06 * Math.sin(t * 3.2) - 0.15 * fire;
     });
@@ -205,10 +215,12 @@ export function buildNftGun(id) {
       needles.push(piv(n, 'accent', null, sx * 0.0078, dy, dz));
     }
     add(new THREE.BoxGeometry(0.008, 0.01, 0.012).translate(0, Y + R + 0.001, dz), 'metal', g.metal);
-    anim.push((t, fire, dt) => {
-      ring.rotation.z += dt * (1.2 + 10 * fire);
+    anim.push((t, fire, dt, rl) => {
+      ring.rotation.z += dt * (1.2 + 10 * fire + 14 * hump(rl));
       ring.scale.setScalar(1 + 0.05 * Math.sin(t * 3) + 0.22 * fire);
-      const a = -0.8 + 0.35 * Math.sin(t * 1.3) + 0.08 * Math.sin(t * 9.7) + 1.9 * fire;
+      // recharging, the needles climb from empty to the end of the scale
+      const idle = -0.8 + 0.35 * Math.sin(t * 1.3) + 0.08 * Math.sin(t * 9.7) + 1.9 * fire;
+      const a = rl > 0 ? THREE.MathUtils.lerp(-1.3 + 2.4 * rl + 0.06 * Math.sin(t * 23), idle, THREE.MathUtils.smoothstep(rl, 0.85, 1)) : idle;
       needles.forEach((nm) => { nm.rotation.x = a; });
     });
     muzzleZ = bEnd - 0.012;
@@ -239,15 +251,18 @@ export function buildNftGun(id) {
       const mat = M.metal.clone(); mat.emissive = new THREE.Color(g.accent); mat.emissiveIntensity = 0;
       coils.push(piv(loop(0.011, 0.0028, 0, 0), mat, g.metal, 0, Y + R + 0.009, back - 0.02 - i * 0.034));
     }
-    anim.push((t, fire) => {
-      prongs.forEach(({ p, k }) => { p.rotation.x = k * (0.07 + 0.06 * Math.sin(t * 1.8) + 0.45 * fire); });
-      coils.forEach((c, i) => { c.material.emissiveIntensity = 0.9 * Math.max(0, Math.sin(t * 3.4 - i * 0.9)) ** 3 + 1.2 * fire; });
+    anim.push((t, fire, dt, rl) => {
+      const shut = rl > 0 ? 1 - THREE.MathUtils.smoothstep(rl, 0.4, 0.5) : 0, snap = hump((rl - 0.45) / 0.3);
+      prongs.forEach(({ p, k }) => { p.rotation.x = k * ((0.07 + 0.06 * Math.sin(t * 1.8)) * (1 - shut) + 0.45 * fire + 0.6 * snap); });
+      coils.forEach((c, i) => { c.material.emissiveIntensity = 0.9 * Math.max(0, Math.sin(t * (3.4 + 12 * hump(rl)) - i * 0.9)) ** 3 + 1.2 * fire; });
     });
     muzzleZ = bEnd - 0.034;
   }
   // every gun: the muzzle and glow slots breathe, the accent lines and the sight shimmer; a shot flares them
-  anim.push((t, fire) => {
-    M.glow.emissiveIntensity = 1.9 + 0.45 * Math.sin(t * 2.2) + 4 * fire;
+  anim.push((t, fire, dt, rl) => {
+    // reloading, the glow drops and fills back up
+    const charge = rl > 0 ? 0.25 + 0.75 * THREE.MathUtils.smoothstep(rl, 0.1, 0.95) : 1;
+    M.glow.emissiveIntensity = (1.9 + 0.45 * Math.sin(t * 2.2)) * charge + 4 * fire;
     M.accent.emissiveIntensity = 0.3 + 0.12 * Math.sin(t * 1.6 + 0.5) + 0.9 * fire;
     M.sight.emissiveIntensity = 0.85 + 0.2 * Math.sin(t * 3.1) + 0.6 * fire;
   });
@@ -257,11 +272,11 @@ export function buildNftGun(id) {
   flash.position.copy(muzzle); flash.visible = false; group.add(flash);
   let prevT = 0;
   return {
-    group, flash, kind: g.kind, muzzle,
+    group, flash, kind: g.kind, act: g.act, muzzle,
     fist: rifle ? null : new THREE.Vector3(0, -0.05, 0.035),
     // a rifle's support hand goes where it goes on the K-7: its handguard is the K-7's (HOLD support spot)
     guard: null,
-    /** Run the gun's own animation: t in seconds, fire 1 on a shot easing to 0. */
-    tick(t, fire = 0) { const dt = Math.min(0.1, Math.max(0, t - prevT)); prevT = t; for (const a of anim) a(t, fire, dt); },
+    /** Run the gun's own animation: t in seconds, fire 1 on a shot easing to 0, rl the reload's progress 0..1 (0: none). */
+    tick(t, fire = 0, rl = 0) { const dt = Math.min(0.1, Math.max(0, t - prevT)); prevT = t; for (const a of anim) a(t, fire, dt, rl); },
   };
 }

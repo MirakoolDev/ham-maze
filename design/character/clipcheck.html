@@ -122,7 +122,8 @@ function driver() {
   return (S, dt, air) => {
     aim += ((S.aim || S.fire ? 1 : 0) - aim) * (1 - Math.exp(-12 * dt));
     crouch += ((S.crouch ? 1 : 0) - crouch) * (1 - Math.exp(-12 * dt));
-    const firing = !!S.fire && (fireT += dt) % 0.11 < 0.04;
+    const every = (runner.act && runner.act.every) || 0.11; // the gun's own rate (bursts aside)
+    const firing = !!S.fire && (fireT += dt) % every < 0.04;
     return { pos: V3(0, 0, 0), vel: V3(0, 0, -S.speed), yaw: 0, pitch: 0, speed: S.speed, air: !!air, clipLift: true, crouch, aim, kick: firing ? 1 : 0, flash: firing };
   };
 }
@@ -190,6 +191,37 @@ window.trans = (from, to, secs = 1.0) => {
   const r = {};
   parts.forEach((k, j) => { r[k] = { steadyFrom: Math.round(Math.max(...a0[j])), steadyTo: Math.round(Math.max(...a2[j])), switch: Math.round(Math.max(...a1[j])), at: a1[j].indexOf(Math.max(...a1[j])) }; });
   return r;
+};
+// how deep the left hand goes into her body (hips, spine, thighs), every third frame, in metres (0 =
+// clear): each hand vertex of the skinned mesh against the nearest body vertex and its normal.
+// window.pen('idle', 1.2)  or  window.pen('reload', 1.2, 'walk') to start from another state
+window.pen = (state, secs = 1.2, from = null) => {
+  let M; runner.root.traverse((o) => { if (o.isSkinnedMesh && o.geometry.attributes.position.count > 10000) M = o; });
+  const g = M.geometry, n = g.attributes.position.count, sk = M.skeleton, si = g.attributes.skinIndex, sw = g.attributes.skinWeight, nor = g.attributes.normal;
+  const top = new Array(n); for (let i = 0; i < n; i++) { let b = 0, w = -1; for (let k = 0; k < 4; k++) if (sw.getComponent(i, k) > w) { w = sw.getComponent(i, k); b = si.getComponent(i, k); } top[i] = sk.bones[b].name; }
+  const hand = [], core = []; for (let i = 0; i < n; i++) { if (/LeftHand/.test(top[i])) hand.push(i); else if (/Hips|Spine|UpLeg/.test(top[i])) core.push(i); }
+  const drive = driver(), S = STATES[state], A = from ? STATES[from] : S;
+  for (let i = 0; i < 120; i++) runner.update(1 / 60, drive(A, 1 / 60));
+  if (S.reload) runner.reload();
+  const res = [];
+  for (let f = 0; f < secs * 60; f++) {
+    runner.update(1 / 60, drive(S, 1 / 60)); if (f % 3) continue;
+    runner.root.updateMatrixWorld(true); sk.update();
+    const hp = hand.map((i) => M.getVertexPosition(i, new THREE.Vector3()).applyMatrix4(M.matrixWorld));
+    const box = new THREE.Box3().setFromPoints(hp).expandByScalar(0.04);
+    const ms = sk.bones.map((b, k) => new THREE.Matrix4().multiplyMatrices(b.matrixWorld, sk.boneInverses[k]));
+    const cs = [];
+    for (const i of core) {
+      const p = M.getVertexPosition(i, new THREE.Vector3()).applyMatrix4(M.matrixWorld); if (!box.containsPoint(p)) continue;
+      const nn = new THREE.Vector3(), t = new THREE.Vector3();
+      for (let k = 0; k < 4; k++) { const w = sw.getComponent(i, k); if (w) nn.addScaledVector(t.fromBufferAttribute(nor, i).transformDirection(ms[si.getComponent(i, k)]), w); }
+      cs.push([p, nn.normalize()]);
+    }
+    let worst = 0;
+    for (const h of hp) { let b = null, bd = 1e9; for (const c of cs) { const d = c[0].distanceToSquared(h); if (d < bd) { bd = d; b = c; } } if (b && bd < 0.0025) { const d = -h.clone().sub(b[0]).dot(b[1]); if (d > worst) worst = d; } }
+    res.push(+worst.toFixed(3));
+  }
+  return res;
 };
 window.measure = (key, secs = 2) => {
   const S = STATES[key], sp = S.speed, bone = (n) => { let b = null; runner.root.traverse((o) => { if (!b && o.isBone && o.name.endsWith(n)) b = o; }); return b; };
