@@ -54,7 +54,7 @@ contract HamPassArt {
         uint256 pct = streamed(tokenId);
         string memory json = string.concat(
             '{"name":"HAM Backer Pass #', _u(tokenId),
-            '","description":"A backer pass for HAM, the daily maze shooter (ham3d.fun). Backers take 10% of every daily pot while the stream runs. The monolith fills with orange as the pass streams.",',
+            '","description":"HAM: Home\'s a Maze. An art project and a daily maze shooter (ham3d.fun): everyone shares one maze a day, and reaching the orange monolith at its centre is getting home. This backer pass fills the monolith as it streams; while the stream runs, backers share 10% of every daily pot.",',
             '"attributes":[{"trait_type":"Streamed","value":', _u(pct), ',"max_value":100}],',
             '"image":"data:image/svg+xml;base64,', _base64(bytes(svg(tokenId))), '"}'
         );
@@ -121,7 +121,7 @@ contract HamPassArt {
             "<text x='560' y='72' font-size='11' letter-spacing='2.6' opacity='.72' text-anchor='end'>DUSK</text>",
             "<text x='38' y='532' font-size='56' font-weight='300'>", _u(pct), "%</text>",
             "<text x='40' y='560' font-size='11' letter-spacing='2.4' opacity='.8'>STREAMED &#183; 10% OF EVERY POT", _until(), "</text>",
-            "<text x='560' y='560' font-size='11' font-weight='600' letter-spacing='2.4' text-anchor='end'>MAZE OR MONEY</text></g>"
+            "<text x='560' y='560' font-size='11' font-weight='600' letter-spacing='2.4' text-anchor='end'>", pct >= 100 ? "HOME" : "FIND YOUR WAY HOME", "</text></g>"
         );
     }
 
