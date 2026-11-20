@@ -281,10 +281,10 @@ export function createRunner(scene, opts = {}) {
 
   r.setVisible = (v) => { r.show = v; root.visible = v && r.ready; gun.visible = v && r.ready; };
 
-  function play(name, timeScale = 1) {
+  function play(name, timeScale = 1, fade = 0.22) {
     const next = actions[name];
     if (!next) return;
-    if (next !== current) { next.reset().setEffectiveWeight(1).fadeIn(0.22).play(); current.fadeOut(0.22); current = next; }
+    if (next !== current) { next.reset().setEffectiveWeight(1).fadeIn(fade).play(); current.fadeOut(fade); current = next; }
     next.timeScale = timeScale;
   }
   // lay a clip's upper body over the current pose at time t, by weight w
@@ -359,7 +359,10 @@ export function createRunner(scene, opts = {}) {
   // from the stride, scaled to the rifle walk's 1.7)
   const PISTOL_RELOAD = 1.7, PACE = { walk: 1.7, run: 5.2, pistolWalk: 3.6, pistolRun: 4.6, carryWalk: 1.9, carryRun: 5.6, crouchWalk: 1.35 };
   // the clips' own jumps (measured from the feet): take-off, where to wait for the ground, landing done
-  const JUMPS = { jump: { start: 0, fall: 0.45, end: 0.6 }, pistolJump: { start: 0.77, fall: 1.3, end: 1.62 }, pistolRunJump: { start: 0.03, fall: 0.45, end: 0.75 } };
+  // Each one's air (start to fall) plays over the game's own air time (0.63 s), so it neither waits
+  // frozen for the ground nor lands early; only a longer fall holds at the fall point.
+  const AIR = 0.6;
+  const JUMPS = { jump: { start: 0, fall: 0.5, end: 0.6 }, pistolJump: { start: 0.77, fall: 1.4, end: 1.62 }, pistolRunJump: { start: 0.03, fall: 0.5, end: 0.75 } };
   // the pistol carry: each hand reaches for a spot below its shoulder (elbows soft and back), then turns
   // to hang thumb-forward; the gun hand's fingers tip forward so the barrel points ahead of her feet
   let carryRun = 0, carryKneel = 0, carryAir = 0;
@@ -369,19 +372,28 @@ export function createRunner(scene, opts = {}) {
     const a = P(bones[S + 'HandIndex1']).sub(P(bones[S + 'HandPinky1'])); a.addScaledVector(f, -a.dot(f)).normalize();
     return [f, a];
   }
-  function carry(c, H, moving) {
+  // nat: how much of the pose is an ordinary walk or run (their arms already swing, smoothly): there the
+  // free arm is left as the clip has it, and the gun arm keeps the clip's swing, only eased out from the
+  // thigh so the gun clears the leg. (Driving the swing from the feet fought the clip's: a jerky arm, and a
+  // free hand twisted fingers-down while the run bent its elbow up.)
+  function carry(c, H, moving, nat) {
     const fwd = V(-Math.sin(bodyYaw), 0, -Math.cos(bodyYaw)), side = V(Math.cos(bodyYaw), 0, -Math.sin(bodyYaw)), down = V(0, -1, 0);
     root.updateMatrixWorld(true);
     const stride = moving ? P(bones.RightFoot).sub(P(bones.LeftFoot)).dot(fwd) : 0;
     for (const [S, s] of [['Right', 1], ['Left', -1]]) {
+      const cs = s > 0 ? c : c * (1 - nat);
+      if (cs < 0.001) continue;
       const arm = bones[S + 'Arm'], fore = bones[S + 'ForeArm'], hand = bones[S + 'Hand'];
       const sh = P(arm), el = P(fore), wr = P(hand), len = sh.distanceTo(el) + el.distanceTo(wr);
       // running bends the elbows up; the gun arm swings less than the free one
       const drop = len * (0.93 - 0.38 * carryRun), ahead = (s > 0 ? H.pCarryFwd : 0.02) + 0.1 * carryRun;
       const swing = THREE.MathUtils.clamp(-s * stride * H.pSwing * (s > 0 ? 0.6 : 1), -0.16, 0.16);
       const goal = sh.clone().addScaledVector(down, drop).addScaledVector(side, s * (s > 0 ? H.pCarryOut : 0.02)).addScaledVector(fwd, ahead + swing);
+      // the clip's own hand, out from the leg by the carry's offset (the run's arm also pumps lower)
+      const own = wr.clone().addScaledVector(side, s * H.pCarryOut * 0.8).addScaledVector(down, 0.03 * carryRun);
+      goal.lerp(own, nat);
       const lq = Q(hand);
-      reach(arm, fore, hand, wr.clone().lerp(goal, c), fwd.clone().negate().addScaledVector(side, s * 0.4));
+      reach(arm, fore, hand, wr.clone().lerp(goal, cs), fwd.clone().negate().addScaledVector(side, s * 0.4));
       setWorldQuat(hand, lq);
       root.updateMatrixWorld(true);
       // turn the hand: fingers down (tipped forward), thumb side forward
@@ -393,7 +405,7 @@ export function createRunner(scene, opts = {}) {
       _m2.makeBasis(fd, ad, new THREE.Vector3().crossVectors(fd, ad));
       const turnQ = new THREE.Quaternion().setFromRotationMatrix(_m2.multiply(_m1.transpose()));
       const hq = Q(hand), to = hq.clone().premultiply(turnQ);
-      setWorldQuat(hand, hq.slerp(to, c));
+      setWorldQuat(hand, hq.slerp(to, cs));
     }
   }
   // the reload's gun hand: in front of the chest, muzzle tipped up and in, the gun rolled so the foot of
@@ -414,6 +426,17 @@ export function createRunner(scene, opts = {}) {
     _m2.makeBasis(fd, ad, new THREE.Vector3().crossVectors(fd, ad));
     const hq = Q(hand);
     setWorldQuat(hand, hq.clone().slerp(hq.clone().premultiply(new THREE.Quaternion().setFromRotationMatrix(_m2.multiply(_m1.transpose()))), pr));
+  }
+  // a wrist can't fold far off its forearm: past max degrees, turn the hand back toward the forearm's line
+  // (the support hand's grip, measured on another clip, could bend it up and in)
+  function limitWrist(S, max) {
+    root.updateMatrixWorld(true);
+    const fa = P(bones[S + 'ForeArm']), h = P(bones[S + 'Hand']), m = P(bones[S + 'HandMiddle1']);
+    const arm = h.clone().sub(fa).normalize(), dir = m.sub(h).normalize();
+    const bend = arm.angleTo(dir), lim = max * DEG;
+    if (bend <= lim) return;
+    const axis = new THREE.Vector3().crossVectors(dir, arm).normalize();
+    turn(bones[S + 'Hand'], axis, bend - lim);
   }
   let bodyYaw = null, jumpName = 'jump', wasAir = false, wasAirPrev = false, jumpBaseY = null, landT = 0, aimYaw = 0, aimPitch = 0, reloadT = -1, reloadDir = null;
   const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -459,9 +482,10 @@ export function createRunner(scene, opts = {}) {
     if (J && ctx.air) {
       // (play() restarts a clip it switches to, so the take-off time goes in after it: set before, the
       // jump started from the clip's crouch and she squatted in the air)
-      if (!wasAir) { play(jn, 1); J.time = JS ? JS.start : 0; }
+      if (!wasAir) { play(jn, 1, 0.32); J.time = JS ? JS.start : 0; }
       if (J.time > fall) J.time = fall;
-      play(jn, THREE.MathUtils.clamp((fall - J.time) / 0.08, 0.05, 1));
+      const rate = JS ? (JS.fall - JS.start) / AIR : 1;
+      play(jn, rate * THREE.MathUtils.clamp((fall - J.time) / 0.015, 0.05, 1)); // holds only once a long fall outlasts the clip
       landT = 0;
     } else if (J && wasAir) {
       // touching down early (a short hop) skips the rest of the air to the clip's own landing
@@ -545,9 +569,13 @@ export function createRunner(scene, opts = {}) {
       carryRun += ((sp > 4.2 ? 1 : 0) - carryRun) * ease;
       carryKneel += ((crouch ? 1 : 0) - carryKneel) * ease; // crouch-walking too: low, in both hands
       // jumping, she keeps the clip's two-handed ready hold (the jump tucks her knees into a hanging gun)
-      carryAir += ((ctx.air || landT > 0.15 ? 1 : 0) - carryAir) * (1 - Math.exp(-10 * dt));
-      const c = (1 - w) * (1 - pr) * (1 - carryAir);
-      if (c * (1 - carryKneel) > 0.001) carry(c * (1 - carryKneel), H, sp > 0.4);
+      carryAir += ((ctx.air || landT > 0.15 ? 1 : 0) - carryAir) * (1 - Math.exp(-7 * dt));
+      const air = THREE.MathUtils.smoothstep(carryAir, 0, 1);
+      const c = (1 - w) * (1 - pr) * (1 - air);
+      const nat = ['carryWalk', 'carryRun'].reduce((t, k) => t + (actions[k] && actions[k].isRunning() ? actions[k].getEffectiveWeight() : 0), 0);
+      if (c * (1 - carryKneel) > 0.001) carry(c * (1 - carryKneel), H, sp > 0.4, THREE.MathUtils.clamp(nat, 0, 1));
+      // running, the fingers-down carry folded the gun wrist against the pumping forearm
+      if (c * (1 - carryKneel) * carryRun > 0.5) limitWrist('Right', 35);
       const down = 40 * c * carryKneel * DEG;
       if (down) { turn(bones.RightArm, right, -down); turn(bones.LeftArm, right, -down); }
       if (pr > 0.001) reloadHand(pr, right);
@@ -571,7 +599,7 @@ export function createRunner(scene, opts = {}) {
       gun.updateMatrixWorld(true);
       // aiming, the left hand cups the right on the grip, where the standing pistol clip has it (measured
       // in gun space). The walk and jump only borrow the clip's arms, which leave that hand loose.
-      const cup = Math.max(w, carryAir) * (1 - pr);
+      const cup = Math.max(w, THREE.MathUtils.smoothstep(carryAir, 0, 1)) * (1 - pr);
       if (cup > 0.001) {
         const wl = P(bones.LeftHand), lq = Q(bones.LeftHand);
         const goal = wl.clone().lerp(gun.localToWorld(LEFT_CUP.clone()), cup);
@@ -590,6 +618,7 @@ export function createRunner(scene, opts = {}) {
         reach(bones.LeftArm, bones.LeftForeArm, bones.LeftHand, wl.clone().lerp(t, lw), V(0, -1, 0).addScaledVector(right, -0.6).addScaledVector(fwd, -0.3));
         setWorldQuat(bones.LeftHand, lq);
       }
+      limitWrist('Left', 30);
     }
     // the gun: right wrist on the grip spot, barrel toward the left wrist, rolled with the right hand
     // aiming, the stock goes in the shoulder pocket: the gun then runs from the pocket toward the left hand
