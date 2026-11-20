@@ -1,9 +1,10 @@
 // Sandbox page: connect your own wallet, sign and send the HamDailyRun deploy transaction.
 // No private key is ever read or stored here. The wallet extension signs; this page only builds the transaction.
-import { BrowserProvider, ContractFactory, parseEther, isAddress, getAddress } from 'ethers';
+import { BrowserProvider, Contract, ContractFactory, parseEther, isAddress, getAddress } from 'ethers';
 import { CHAINS } from './config.js';
 import artifact from './contract-artifact.json';
 import nftArtifact from './nft-artifact.json';
+import passArtifact from './pass-art-artifact.json';
 import { pickProvider } from './wallet.js';
 
 const $ = (id) => document.getElementById(id);
@@ -118,3 +119,71 @@ $('connectBtn').addEventListener('click', connect);
 $('deployBtn').addEventListener('click', deploy);
 $('deployNftBtn').addEventListener('click', deployNft);
 onChainChange();
+
+// ── FundingWorks pass art, on Ethereum mainnet (its own wallet connection: the game's chain is separate) ──
+let passSigner = null;
+const ETHERSCAN = 'https://etherscan.io';
+const declined = (e) => e?.code === 'ACTION_REJECTED' || e?.code === 4001;
+function refreshPass() {
+  const ok = !!passSigner && $('passConfirm').checked;
+  $('deployPassBtn').disabled = !ok;
+  $('deployPassBtn').textContent = !passSigner ? 'Connect your wallet first' : !$('passConfirm').checked ? 'Check the box above to continue' : 'Deploy HamPassArt on Ethereum';
+  $('setCampaignBtn').disabled = !passSigner;
+  $('setCampaignBtn').textContent = !passSigner ? 'Connect your wallet first' : 'Point the art at the campaign';
+}
+async function passConnect() {
+  try {
+    say($('passWalletStatus'), 'Connecting…');
+    const eth = await pickProvider();
+    let provider = new BrowserProvider(eth, 'any');
+    await provider.send('eth_requestAccounts', []);
+    await provider.send('wallet_switchEthereumChain', [{ chainId: '0x1' }]);
+    provider = new BrowserProvider(eth, 'any');
+    if (Number((await provider.getNetwork()).chainId) !== 1) throw new Error('Switch your wallet to Ethereum mainnet.');
+    passSigner = await provider.getSigner();
+    const a = await passSigner.getAddress();
+    say($('passWalletStatus'), 'Connected: ' + a.slice(0, 6) + '…' + a.slice(-4) + ' on Ethereum mainnet', 'ok');
+    $('passConnectBtn').disabled = true;
+  } catch (e) {
+    say($('passWalletStatus'), declined(e) ? 'You declined in your wallet.' : (e?.shortMessage || e?.message || String(e)), 'bad');
+  }
+  refreshPass();
+}
+async function deployPass() {
+  if (!passSigner || !$('passConfirm').checked) return;
+  $('deployPassBtn').disabled = true;
+  try {
+    say($('deployPassStatus'), 'Confirm the deployment in your wallet…');
+    const c = await new ContractFactory(passArtifact.abi, passArtifact.bytecode, passSigner).deploy();
+    say($('deployPassStatus'), 'Waiting for it to be mined…');
+    await c.waitForDeployment();
+    const a = await c.getAddress(), tx = c.deploymentTransaction();
+    say($('deployPassStatus'), 'Deployed.', 'ok');
+    $('passAddrOut').textContent = a;
+    $('passArtAddr').value = a;
+    $('passExplorerLink').innerHTML = tx ? '<a href="' + ETHERSCAN + '/tx/' + tx.hash + '" target="_blank" rel="noopener">View the deploy transaction</a>' : '';
+    $('passResult').classList.remove('hidden');
+  } catch (e) {
+    say($('deployPassStatus'), declined(e) ? 'You declined the transaction in your wallet.' : (e?.shortMessage || e?.reason || e?.message || String(e)), 'bad');
+  } finally { refreshPass(); }
+}
+async function setCampaign() {
+  try {
+    const art = $('passArtAddr').value.trim(), camp = $('passCampaign').value.trim();
+    if (!isAddress(art)) throw new Error('The pass art address is not valid.');
+    if (!isAddress(camp)) throw new Error('The campaign address is not valid.');
+    $('setCampaignBtn').disabled = true;
+    say($('setCampaignStatus'), 'Confirm in your wallet…');
+    const tx = await new Contract(getAddress(art), passArtifact.abi, passSigner).setCampaign(getAddress(camp));
+    say($('setCampaignStatus'), 'Waiting for it to be mined…');
+    await tx.wait();
+    say($('setCampaignStatus'), 'Done: the passes now show their stream.', 'ok');
+  } catch (e) {
+    say($('setCampaignStatus'), declined(e) ? 'You declined the transaction in your wallet.' : (e?.shortMessage || e?.reason || e?.message || String(e)), 'bad');
+  } finally { refreshPass(); }
+}
+$('passConnectBtn').addEventListener('click', passConnect);
+$('passConfirm').addEventListener('change', refreshPass);
+$('deployPassBtn').addEventListener('click', deployPass);
+$('setCampaignBtn').addEventListener('click', setCampaign);
+refreshPass();

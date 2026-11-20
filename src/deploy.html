@@ -110,6 +110,31 @@
     <p class="note">Add this as a booster from <code>/admin</code>: paste the address, <code>1</code> as the minimum held, and whatever bonus percent you want.</p>
     <p class="note" id="nftExplorerLink"></p>
   </div>
+
+  <hr>
+  <h1 class="section-h">Deploy HamPassArt (FundingWorks pass art, Ethereum)</h1>
+  <p class="sub">The backer pass picture, drawn on chain: each pass gets its own maze, and an orange trail reaches the monolith as the pass streams. This one goes on <b>Ethereum mainnet</b>, where FundingWorks runs, not on the game's chain. Deploy it, paste its address into the campaign form's Pass art &rarr; Contract box, then once the campaign exists come back and point the art at it.</p>
+  <button class="ghost" id="passConnectBtn">Connect wallet on Ethereum</button>
+  <p class="status" id="passWalletStatus"></p>
+  <label style="display:flex;align-items:flex-start;gap:8px;margin:14px 0;font-size:13px;color:var(--bone)">
+    <input type="checkbox" id="passConfirm" style="width:auto;margin-top:3px">
+    <span>I understand this deploys to Ethereum mainnet and the gas is real ETH. The wallet that deploys it is the only one that can point it at the campaign.</span>
+  </label>
+  <button class="primary" id="deployPassBtn" disabled>Connect your wallet first</button>
+  <p class="status" id="deployPassStatus"></p>
+  <div id="passResult" class="hidden">
+    <div class="addr-box"><b>Pass art contract:</b> <span id="passAddrOut"></span></div>
+    <p class="note">Paste this into FundingWorks: Pass art &rarr; Contract.</p>
+    <p class="note" id="passExplorerLink"></p>
+  </div>
+  <h2 style="margin-top:22px">After the campaign is created</h2>
+  <label for="passArtAddr">Pass art contract</label>
+  <input id="passArtAddr" placeholder="0x… (fills in after you deploy above)">
+  <label for="passCampaign">FundingWorks campaign contract</label>
+  <input id="passCampaign" placeholder="0x…">
+  <button class="primary" id="setCampaignBtn" disabled style="margin-top:12px">Connect your wallet first</button>
+  <p class="status" id="setCampaignStatus"></p>
+  <p class="note">Once only: after this the art reads each pass's stream from the campaign.</p>
 </div>
 <!--JS-->
 </body>
