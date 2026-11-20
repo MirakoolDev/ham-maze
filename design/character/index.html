@@ -240,7 +240,7 @@ document.querySelectorAll('[data-move]').forEach((b) => b.addEventListener('clic
 }));
 document.getElementById('reload').addEventListener('click', () => runner.reload());
 // Jump: one hop, as long as the clip's own time off the ground (a held toggle froze her at the top)
-document.getElementById('air').addEventListener('click', () => { st.air = true; setTimeout(() => { st.air = false; }, 450); });
+document.getElementById('air').addEventListener('click', () => { st.air = true; setTimeout(() => { st.air = false; }, 630); });
 for (const k of ['aim', 'fire', 'crouch']) {
   const b = document.getElementById(k); press(b, st[k]);
   b.addEventListener('click', () => { st[k] = !st[k]; press(b, st[k]); });
@@ -253,7 +253,7 @@ const bust = `?v=${Date.now()}`; // the local server lets the browser cache thes
 await runner.load('', { glb: '../../assets/runner.glb' + bust, clips: '../../assets/runner-clips.json' + bust });
 document.getElementById('load').remove();
 runner.setVisible(true);
-window.preview = { runner, camera, controls, st, HOLD };
+window.preview = { runner, camera, controls, st, HOLD, render: () => { controls.update(); composer.render(); } };
 
 // she stays on the spot (a treadmill); the clip plays at the chosen speed facing -z
 const SPEEDS = { idle: 0, walk: 1.7, run: 5.2 };
