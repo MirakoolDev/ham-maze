@@ -196,6 +196,9 @@ export const HOLD = {
 };
 
 // bones the aim and reload clips drive (everything above the hips)
+// the left wrist on a pistol in the standing aim clip, in gun space (position, then turn)
+const LEFT_CUP = new THREE.Vector3(-0.067, -0.101, 0.0686);
+const LEFT_CUP_Q = new THREE.Quaternion(-0.6314, 0.3021, -0.4172, 0.5797).normalize();
 const UPPER = /^(Spine|Neck|Head|LeftShoulder|RightShoulder|LeftArm|RightArm|LeftForeArm|RightForeArm|LeftHand|RightHand)/;
 
 export function createRunner(scene, opts = {}) {
@@ -449,7 +452,8 @@ export function createRunner(scene, opts = {}) {
     if (pistol) {
       // the borrowed rifle clips get the pistol arms by however much of the mix they are, so a blend into
       // a pistol clip (run, kneel, aim) doesn't flash the rifle hold
-      const own = ['pistolAim', 'pistolRun', 'pistolCrouch'].reduce((t, k) => t + (actions[k] ? actions[k].getEffectiveWeight() : 0), 0);
+      // (a clip that never played still reports weight 1, so count only the ones running)
+      const own = ['pistolAim', 'pistolRun', 'pistolCrouch'].reduce((t, k) => t + (actions[k] && actions[k].isRunning() ? actions[k].getEffectiveWeight() : 0), 0);
       const ow = THREE.MathUtils.clamp(1 - own, 0, 1);
       if (overlays.pistolAim && ow > 0.001) {
         overlay('pistolAim', mixer.time % overlays.pistolAim.duration, ow);
@@ -511,6 +515,15 @@ export function createRunner(scene, opts = {}) {
       gun.position.copy(inFist).sub(FIST.clone().multiplyScalar(scale).applyQuaternion(gun.quaternion))
         .addScaledVector(fwd, -(ctx.kick || 0) * 0.02);
       gun.updateMatrixWorld(true);
+      // aiming, the left hand cups the right on the grip, where the standing pistol clip has it (measured
+      // in gun space). The walk and jump only borrow the clip's arms, which leave that hand loose.
+      const cup = w * (1 - pr);
+      if (cup > 0.001) {
+        const wl = P(bones.LeftHand), lq = Q(bones.LeftHand);
+        const goal = wl.clone().lerp(gun.localToWorld(LEFT_CUP.clone()), cup);
+        reach(bones.LeftArm, bones.LeftForeArm, bones.LeftHand, goal, P(bones.LeftForeArm).sub(P(bones.LeftArm).lerp(wl, 0.5)));
+        setWorldQuat(bones.LeftHand, lq.slerp(gun.quaternion.clone().multiply(LEFT_CUP_Q), cup));
+      }
       // reloading: the left hand goes down to the bottom of the grip (the magazine) and comes back
       const m = THREE.MathUtils.smoothstep(prT, 0.2, 0.4) * (1 - THREE.MathUtils.smoothstep(prT, 0.65, 0.85));
       if (m > 0.001) {
