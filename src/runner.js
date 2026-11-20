@@ -185,7 +185,7 @@ export const HOLD = {
   nftScale: 1,
   pGripAlong: 0.62, pGripDepth: 0.015,              // along the palm from wrist to knuckles; off the palm
   pRoll: 0, pYaw: 0, pPitch: 0,                     // degrees, on top of the fist
-  pCarryOut: 0.05, pCarryFwd: 0.04,                 // metres the gun hand hangs out from the shoulder line, and forward
+  pCarryOut: 0.085, pCarryFwd: 0.04,                // metres the gun hand hangs out from the shoulder line, and forward
   pCarryTilt: 25,                                   // degrees the barrel points forward of straight down
   pSwing: 0.35,                                     // arm swing with the stride
   // fingers, degrees added to the clip's own grip (curl closes toward the palm)
