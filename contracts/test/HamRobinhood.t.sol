@@ -166,6 +166,38 @@ contract HamRobinhoodTest is Test {
         assertEq(treasury.balance, pot / 10);
     }
 
+    function test_backersShareStopsAtEndDayAndRollsOver() public {
+        vm.prank(owner);
+        run.setBackersEnd(day + 1);
+        play(alice, 100);
+        vm.warp(block.timestamp + 1 days + 16 minutes);
+        run.settle(day);
+        uint256 owedDay0 = run.backersOwed();
+        assertGt(owedDay0, 0, "before the end day backers are paid");
+        uint256 day1 = day + 1;
+        vm.prank(alice);
+        run.fundPot{value: 1 ether}(day1);
+        vm.warp((day1 + 1) * 1 days + 16 minutes);
+        uint256 nextBefore = _potOn(day1 + 1);
+        uint256 pot1 = _potOn(day1);
+        run.settle(day1);
+        assertEq(run.backersOwed(), owedDay0, "from the end day nothing more goes to backers");
+        // no runs: everything but the buyback rolls over, the backers' 10% included
+        assertEq(_potOn(day1 + 1) - nextBefore, pot1 - pot1 / 10);
+    }
+
+    function test_backersEndOnlyMovesLater() public {
+        vm.startPrank(owner);
+        vm.expectRevert(HamRobinhood.BadBackersEnd.selector);
+        run.setBackersEnd(day);
+        run.setBackersEnd(day + 180);
+        vm.expectRevert(HamRobinhood.BadBackersEnd.selector);
+        run.setBackersEnd(day + 179);
+        run.setBackersEnd(day + 200);
+        vm.stopPrank();
+        assertEq(run.backersEndDay(), day + 200);
+    }
+
     // ── two-step claim: the Wenwin double-dip fix ──────────────────────────────
     function test_claimRequiresIntentThenDelay() public {
         uint256 t1 = play(alice, 100);
