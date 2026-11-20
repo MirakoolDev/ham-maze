@@ -34,7 +34,7 @@ const SRC = { idle: 'Rifle Idle', aim: 'Rifle Aiming Idle', walk: 'Rifle Walk', 
   crouch: 'Idle Crouching', pistolAim: 'Pistol Idle', pistolRun: 'Pistol Run', pistolCrouch: 'Pistol Kneeling Idle', pistolWalk: 'Pistol Walk', pistolJump: 'Pistol Jump',
   carryWalk: 'Female Walk', carryRun: 'Female Run', crouchWalk: 'Rifle Crouch Walk', pistolRunJump: 'Pistol Running Jump' };
 const ROWS = (q.get('rows') || (MODE === 'raw' ? Object.keys(SRC).join(',') : 'walk,run,jump,runjump,aimwalk,crouchwalk')).split(',');
-const CW = 200, CH = 300;
+const CW = +(q.get('cw') || 200), CH = +(q.get('ch') || 300);
 const W = CW * COLS, H = CH * ROWS.length;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -89,18 +89,26 @@ function cell(r, c) {
   scene.background = new THREE.Color((r + c) % 2 ? '#ece6ef' : '#e4dde8');
   renderer.render(scene, camera);
 }
+// ?zoom=1 frames her chest and hands (following the chest), for checking wrists and grips
+const ZOOM = q.get('zoom') === '1';
 function aimCam(target) {
-  const d = 4.4, dir = VIEW === 'side' ? [1, 0.12, 0] : VIEW === 'front' ? [0, 0.12, -1] : [0.75, 0.2, -0.62];
+  const dir = VIEW === 'side' ? [1, 0.12, 0] : VIEW === 'front' ? [0, 0.12, -1] : VIEW === 'left' ? [-0.8, 0.15, -0.6] : [0.75, 0.2, -0.62];
   const n = Math.hypot(...dir);
-  camera.position.set(target.x + dir[0] / n * d, 0.95 + dir[1] / n * d, target.z + dir[2] / n * d);
-  camera.lookAt(target.x, 0.88, target.z);
+  let d = 4.4, y = 0.88;
+  if (ZOOM && MODE === 'game') {
+    runner.root.updateMatrixWorld(true);
+    let sp = null; runner.root.traverse((o) => { if (!sp && o.isBone && /Spine2$/.test(o.name)) sp = o; });
+    const c = sp.getWorldPosition(new THREE.Vector3()); d = 1.9; y = c.y - 0.12; target = new THREE.Vector3(c.x, 0, c.z);
+  }
+  camera.position.set(target.x + dir[0] / n * d, y + 0.07 + dir[1] / n * d, target.z + dir[2] / n * d);
+  camera.lookAt(target.x, y, target.z);
 }
 
 // game states: what the page/game would hand runner.update
 const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
 const STATES = {
   idle: { speed: 0 }, walk: { speed: 1.7 }, run: { speed: 5.2 }, aimwalk: { speed: 1.7, aim: 1 }, aimrun: { speed: 5.2, aim: 1 },
-  crouch: { speed: 0, crouch: 1 }, crouchwalk: { speed: 1.7, crouch: 1 }, aim: { speed: 0, aim: 1 },
+  crouch: { speed: 0, crouch: 1 }, crouchin: { speed: 0, crouch: 1, fresh: true }, crouchwalk: { speed: 1.7, crouch: 1 }, aim: { speed: 0, aim: 1 },
   jump: { speed: 0, hop: true }, runjump: { speed: 5.2, hop: true }, walkjump: { speed: 1.7, hop: true },
   reload: { speed: 0, reload: true }, walkreload: { speed: 1.7, reload: true },
 };
@@ -121,8 +129,10 @@ for (let r = 0; r < ROWS.length; r++) {
     a.stop(); mx.uncacheRoot(runner.root); scene.remove(s.lines);
   } else {
     const S = STATES[key]; const sp = S.speed;
-    const ctx = (air) => ({ pos: V3(0, 0, 0), vel: V3(0, 0, -sp), yaw: 0, pitch: 0, speed: sp, air, clipLift: true, crouch: S.crouch || 0, aim: S.aim || 0, kick: 0, flash: false });
+    let warm = true;
+    const ctx = (air) => ({ pos: V3(0, 0, 0), vel: V3(0, 0, -sp), yaw: 0, pitch: 0, speed: sp, air, clipLift: true, crouch: S.fresh && warm ? 0 : S.crouch || 0, aim: S.aim || 0, kick: 0, flash: false });
     for (let i = 0; i < 120; i++) runner.update(1 / 60, ctx(false));
+    warm = false; // a fresh state (crouchin): it starts here, from standing
     // one second of it (a hop: 0.63 s in the air, then the landing)
     const span = S.hop ? 1.2 : S.reload ? 1.7 : sp > 4 ? 0.7 : 1.0;
     let t = 0; if (S.reload) runner.reload();
@@ -133,6 +143,27 @@ for (let r = 0; r < ROWS.length; r++) {
     }
   }
 }
+// numbers for a state: per frame, how far each wrist bends off its forearm (degrees), and how fast each
+// hand moves (m/s), so a jerk shows as a spike. window.measure('walk', 2) in the console.
+window.__T = { THREE, clips, runner };
+window.measure = (key, secs = 2) => {
+  const S = STATES[key], sp = S.speed, bone = (n) => { let b = null; runner.root.traverse((o) => { if (!b && o.isBone && o.name.endsWith(n)) b = o; }); return b; };
+  const P = (o) => o.getWorldPosition(new THREE.Vector3());
+  const ctx = (air, cr) => ({ pos: V3(0, 0, 0), vel: V3(0, 0, -sp), yaw: 0, pitch: 0, speed: sp, air, clipLift: true, crouch: cr, aim: S.aim || 0, kick: 0, flash: false });
+  for (let i = 0; i < 120; i++) runner.update(1 / 60, ctx(false, S.fresh ? 0 : S.crouch || 0));
+  const out = { L: [], R: [], vL: [], vR: [], accL: [], accR: [] }; let prev = {}, pv = {};
+  for (let t = 0; t < secs; t += 1 / 60) {
+    runner.update(1 / 60, ctx(S.hop ? t < 0.63 : false, S.crouch || 0)); runner.root.updateMatrixWorld(true);
+    for (const s of ['Left', 'Right']) {
+      const k = s[0], fa = P(bone(s + 'ForeArm')), h = P(bone(s + 'Hand')), m = P(bone(s + 'HandMiddle1'));
+      out[k].push(Math.round(h.clone().sub(fa).angleTo(m.clone().sub(h)) * 57.3));
+      if (prev[k]) { const v = h.clone().sub(prev[k]).multiplyScalar(60); out['v' + k].push(+v.length().toFixed(2)); if (pv[k]) out['acc' + k].push(+v.clone().sub(pv[k]).multiplyScalar(60).length().toFixed(1)); pv[k] = v; }
+      prev[k] = h;
+    }
+  }
+  const mx = (a) => Math.max(...a), avg = (a) => +(a.reduce((x, y) => x + y, 0) / a.length).toFixed(1);
+  return { wristL: { max: mx(out.L), avg: avg(out.L) }, wristR: { max: mx(out.R), avg: avg(out.R) }, accL: { max: mx(out.accL), avg: avg(out.accL) }, accR: { max: mx(out.accR), avg: avg(out.accR) }, L: out.L.join(' '), R: out.R.join(' '), aL: out.accL.map(Math.round).join(' '), aR: out.accR.map(Math.round).join(' ') };
+};
 document.title = 'done';
 </script>
 </body>
