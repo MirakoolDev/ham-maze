@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>HAM pass art variants</title>
+<!-- Four directions for the FundingWorks backer pass, in the Score / Power-Up family (design/nft/ham-art.js):
+     a portfolio room, one isometric object on a slab of maze concrete, spaced caps in the corners.
+     Each shows how much of the pass has streamed. Open with ?pct=40 to change the fill. -->
+<style>
+  body { margin: 0; background: #111; color: #eee; font: 14px system-ui, sans-serif; }
+  .row { display: grid; grid-template-columns: repeat(4, 440px); gap: 10px; padding: 10px; }
+  .row h3 { margin: 8px 2px 0; font-weight: 600; font-size: 15px; }
+  .row p { margin: 4px 2px 0; color: #aaa; font-size: 13px; line-height: 1.4; }
+  svg { display: block; width: 440px; height: 440px; }
+</style>
+</head>
+<body>
+<div class="row" id="row"></div>
+<script src="../nft/ham-art.js"></script>
+<script>
+const A = window.HAMArt, ROOMS = A.ROOMS;
+const q = new URLSearchParams(location.search), PCT = Number(q.get('pct') ?? 40), ID = Number(q.get('id') ?? 42);
+const C = Math.SQRT1_2, K = 0.5774, f1 = (n) => Math.round(n * 10) / 10;
+const FONT = `font-family="Jost, Futura, 'Avenir Next', 'Century Gothic', sans-serif"`;
+const iso = (OX, PY) => (x, z, h = 0) => [OX + (x - z) * C, PY + (x + z) * C * K - h];
+const pts = (a) => a.map((p) => `${f1(p[0])},${f1(p[1])}`).join(' ');
+const poly = (a, attr) => `<polygon points="${pts(a)}" ${attr}/>`;
+// a box: the two faces we see (z face, x face) and its top
+const box = (P, x1, x2, z1, z2, h0, h1, zf, xf, top, attr = '') =>
+  poly([P(x1, z2, h0), P(x2, z2, h0), P(x2, z2, h1), P(x1, z2, h1)], `fill="${zf}" ${attr}`) +
+  poly([P(x2, z1, h0), P(x2, z2, h0), P(x2, z2, h1), P(x2, z1, h1)], `fill="${xf}" ${attr}`) +
+  poly([P(x1, z1, h1), P(x2, z1, h1), P(x2, z2, h1), P(x1, z2, h1)], `fill="${top}" ${attr}`);
+const topIso = (OX, PY, h) => `translate(${OX} ${PY - h}) scale(1 ${K}) rotate(45)`;
+const until = 'MAY 2027';
+
+function frame(uid, room, body, big, sub, right) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600"><defs>
+<linearGradient id="${uid}bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${room.top}"/><stop offset="1" stop-color="${room.bottom}"/></linearGradient>
+<filter id="${uid}b8" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="8"/></filter>
+<filter id="${uid}b18" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="18"/></filter>
+<filter id="${uid}b30" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="30"/></filter>
+<filter id="${uid}n" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch" seed="${ID % 97}"/><feColorMatrix type="matrix" values="1 0 0 0 0  1 0 0 0 0  1 0 0 0 0  0 0 0 0 0.07"/></filter>
+<linearGradient id="${uid}or" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#ff5a12"/><stop offset="1" stop-color="#ffb47a"/></linearGradient>
+</defs>
+<rect width="600" height="600" fill="url(#${uid}bg)"/>
+${body}
+<rect width="600" height="600" filter="url(#${uid}n)"/>
+<g ${FONT} fill="${room.ink}">
+<text x="40" y="52" font-size="15" font-weight="600" letter-spacing="4">HAM</text>
+<text x="40" y="72" font-size="11" letter-spacing="2.6" opacity=".72">BACKER PASS</text>
+<text x="560" y="52" font-size="12" font-weight="600" letter-spacing="2.6" text-anchor="end">NO. ${ID}</text>
+<text x="560" y="72" font-size="11" letter-spacing="2.6" opacity=".72" text-anchor="end">${room.name.toUpperCase()}</text>
+<text x="38" y="532" font-size="56" font-weight="300">${big}</text>
+<text x="40" y="560" font-size="11" letter-spacing="2.4" opacity=".8">${sub}</text>
+<text x="560" y="560" font-size="11" font-weight="600" letter-spacing="2.4" text-anchor="end">${right}</text>
+</g></svg>`;
+}
+const slab = (uid, P, half, PH) =>
+  `<ellipse cx="${P(0, 0)[0]}" cy="${P(half, half)[1] + 24}" rx="${half * 1.5}" ry="${half * 0.32}" fill="#000" opacity=".18" filter="url(#${uid}b18)"/>` +
+  box(P, -half, half, -half, half, 0, PH, '#bcd7f2', '#f2c4d4', '#f7f2ee');
+
+// ── A: the monolith as a glass vessel, filling with orange as the pass streams ─────────────────
+function vA(pct) {
+  const uid = 'a', room = ROOMS[1], OX = 300, PY = 330, P = iso(OX, PY), PH = 34, half = 104;
+  const T = (x, z, h = 0) => P(x, z, PH + h);
+  const w = 30, H = 250, fill = Math.max(6, (H - 8) * pct / 100);
+  let s = slab(uid, P, half, PH);
+  s += `<ellipse cx="${OX}" cy="${PY - PH - fill * 0.6}" rx="${70 + pct * 0.6}" ry="${110 + pct}" fill="#ff6a1f" opacity="${0.18 + pct / 300}" filter="url(#${uid}b30)"/>`;
+  s += box(T, -w, w, -w, w, 0, fill, 'url(#' + uid + 'or)', '#ff7f3a', '#ffc9a0', 'opacity=".95"');
+  s += box(T, -w, w, -w, w, 0, H, '#ffffff', '#ffffff', '#ffffff', 'opacity=".22" stroke="#fff" stroke-opacity=".7" stroke-width="1.2"');
+  s += `<line x1="${T(w, w, 0)[0]}" y1="${T(w, w, 0)[1]}" x2="${T(w, w, H)[0]}" y2="${T(w, w, H)[1]}" stroke="#fff" stroke-opacity=".9" stroke-width="1.5"/>`;
+  return frame(uid, room, s, `${pct}%`, `STREAMED &#183; 10% OF EVERY POT UNTIL ${until}`, 'MAZE OR MONEY');
+}
+
+// ── B: a little maze on the slab; a glowing route walks to the monolith as it streams ─────────
+function maze(n, seed) {
+  const r = new A.DotNetRandom(seed), c = Array.from({ length: n * n }, () => 15), seen = new Array(n * n).fill(false);
+  const st = [0], goal = (n >> 1) * n + (n >> 1); let path = null; seen[0] = true;
+  while (st.length) {
+    const cur = st.at(-1); if (cur === goal && !path) path = st.slice();
+    const x = cur % n, y = (cur / n) | 0, u = [];
+    if (y > 0 && !seen[cur - n]) u.push(cur - n); if (y < n - 1 && !seen[cur + n]) u.push(cur + n);
+    if (x < n - 1 && !seen[cur + 1]) u.push(cur + 1); if (x > 0 && !seen[cur - 1]) u.push(cur - 1);
+    if (!u.length) { st.pop(); continue; }
+    const nx = u[r.next(u.length)];
+    if (nx === cur - n) { c[cur] &= ~1; c[nx] &= ~2; } else if (nx === cur + n) { c[cur] &= ~2; c[nx] &= ~1; }
+    else if (nx === cur + 1) { c[cur] &= ~4; c[nx] &= ~8; } else { c[cur] &= ~8; c[nx] &= ~4; }
+    seen[nx] = true; st.push(nx);
+  }
+  return { c, path };
+}
+function vB(pct) {
+  const uid = 'b', room = ROOMS[3], OX = 300, PY = 300, P = iso(OX, PY), PH = 30, half = 140, n = 7, cs = 2 * half / n, wh = 16;
+  const T = (x, z, h = 0) => P(x, z, PH + h);
+  const { c, path } = maze(n, ID * 7919 + 3);
+  const cx = (k) => -half + (k % n) * cs + cs / 2, cz = (k) => -half + ((k / n) | 0) * cs + cs / 2;
+  const lit = Math.max(1, Math.round(1 + (path.length - 1) * pct / 100));
+  let s = slab(uid, P, half, PH);
+  const route = path.slice(0, lit).map((k) => T(cx(k), cz(k), 1));
+  s += `<polyline points="${pts(route)}" fill="none" stroke="#ff6a1f" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" opacity=".55" filter="url(#${uid}b8)"/>`;
+  s += `<polyline points="${pts(route)}" fill="none" stroke="#ff7a35" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>`;
+  // walls, back to front so nearer ones overlap
+  const walls = [];
+  for (let k = 0; k < n * n; k++) {
+    const x0 = -half + (k % n) * cs, z0 = -half + ((k / n) | 0) * cs, t = 3;
+    if (c[k] & 1) walls.push([x0, x0 + cs, z0 - t, z0 + t]);
+    if ((k / n | 0) === n - 1 && c[k] & 2) walls.push([x0, x0 + cs, z0 + cs - t, z0 + cs + t]);
+    if (c[k] & 8 && k !== 0) walls.push([x0 - t, x0 + t, z0, z0 + cs]);
+    if (k % n === n - 1 && c[k] & 4) walls.push([x0 + cs - t, x0 + cs + t, z0, z0 + cs]);
+  }
+  walls.sort((a, b) => (a[0] + a[2]) - (b[0] + b[2]));
+  for (const [x1, x2, z1, z2] of walls) s += box(T, x1, x2, z1, z2, 0, wh, '#b7d3f0', '#f1bfd1', '#ffffff');
+  const g = (n >> 1) * n + (n >> 1), mx = cx(g), mz = cz(g), done = pct >= 100;
+  s += `<ellipse cx="${T(mx, mz, 60)[0]}" cy="${T(mx, mz, 60)[1]}" rx="${done ? 70 : 40}" ry="${done ? 110 : 80}" fill="#ff6a1f" opacity="${done ? 0.5 : 0.28}" filter="url(#${uid}b18)"/>`;
+  s += box(T, mx - 8, mx + 8, mz - 8, mz + 8, 0, 120, 'url(#' + uid + 'or)', '#ff8a4a', '#ffd2b0', 'opacity=".9"');
+  return frame(uid, room, s, `${pct}%`, `STREAMED &#183; 10% OF EVERY POT UNTIL ${until}`, done ? 'MONOLITH REACHED' : 'ON THE WAY IN');
+}
+
+// ── C: a frosted glass pass hovering over the slab, maze etched in, orange filling across it ──
+function vC(pct) {
+  const uid = 'c', room = ROOMS[4], OX = 300, PY = 360, P = iso(OX, PY), PH = 30, half = 92;
+  const hov = 92, cw = 130, cd = 86, th = 10, T = (x, z, h = 0) => P(x, z, PH + hov + h);
+  const { c } = maze(7, ID * 104729 + 11);
+  let s = slab(uid, P, half, PH);
+  s += `<ellipse cx="${OX}" cy="${PY - PH + 4}" rx="${110}" ry="${40}" fill="#ff6a1f" opacity="${0.12 + pct / 400}" filter="url(#${uid}b18)"/>`;
+  s += box(T, -cw, cw, -cd, cd, 0, th, '#ffffff', '#ffffff', '#ffffff', 'opacity=".45"');
+  // the fill: an orange band across the card, from the left edge
+  const fx = -cw + 2 * cw * pct / 100;
+  s += box(T, -cw, fx, -cd, cd, 0.5, th - 0.5, '#ff6a1f', '#ff7f3a', '#ff9a5e', 'opacity=".7"');
+  // etched maze on the top face, drawn flat and mapped onto the iso top plane
+  const e = [], n = 7, cs = 2 * cd / n, x0 = -cd, sc = cw / cd;
+  for (let k = 0; k < n * n; k++) {
+    const gx = (k % n) * cs, gy = ((k / n) | 0) * cs;
+    if (c[k] & 1) e.push(`M${f1(x0 + gx)} ${f1(x0 + gy)}h${f1(cs)}`);
+    if (c[k] & 8 && k) e.push(`M${f1(x0 + gx)} ${f1(x0 + gy)}v${f1(cs)}`);
+    if (k % n === n - 1 && c[k] & 4) e.push(`M${f1(x0 + gx + cs)} ${f1(x0 + gy)}v${f1(cs)}`);
+    if ((k / n | 0) === n - 1 && c[k] & 2) e.push(`M${f1(x0 + gx)} ${f1(x0 + gy + cs)}h${f1(cs)}`);
+  }
+  s += `<g transform="${topIso(OX, PY, PH + hov + th)}"><g transform="scale(${f1(sc)} 1)"><path d="${e.join('')}" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" fill="none" opacity=".95"/></g></g>`;
+  s += box(T, -cw, cw, -cd, cd, 0, th, 'none', 'none', 'none', 'stroke="#fff" stroke-opacity=".9" stroke-width="1.2"');
+  return frame(uid, room, s, `${pct}%`, `STREAMED &#183; 10% OF EVERY POT UNTIL ${until}`, 'MAZE OR MONEY');
+}
+
+// ── D: one pearl in a maze cell, an orange light growing inside it as the pass streams ───────
+function vD(pct) {
+  const uid = 'd', room = ROOMS[2], OX = 300, PY = 360, P = iso(OX, PY), PH = 28, half = 96, R = 92;
+  const T = (x, z, h = 0) => P(x, z, PH + h);
+  let s = slab(uid, P, half, PH);
+  // a cell of maze walls around it
+  s += box(T, -half, -half + 10, -half, half, 0, 26, '#b7d3f0', '#f1bfd1', '#fff');
+  s += box(T, -half, half, -half, -half + 10, 0, 26, '#b7d3f0', '#f1bfd1', '#fff');
+  const [px, py] = T(0, 0, R);
+  s += `<defs><radialGradient id="${uid}p" cx=".36" cy=".3" r=".8"><stop offset="0" stop-color="#ffffff"/><stop offset=".35" stop-color="#f6e9f4"/><stop offset=".65" stop-color="#d9e6fb"/><stop offset=".85" stop-color="#f2cfe0"/><stop offset="1" stop-color="#bcd2ee"/></radialGradient>
+<radialGradient id="${uid}c" cx=".5" cy=".55" r=".5"><stop offset="0" stop-color="#ff6a1f" stop-opacity=".95"/><stop offset=".6" stop-color="#ff8a4a" stop-opacity=".45"/><stop offset="1" stop-color="#ff8a4a" stop-opacity="0"/></radialGradient></defs>`;
+  s += `<ellipse cx="${px}" cy="${T(0, 0, 0)[1]}" rx="${R * 0.9}" ry="${R * 0.28}" fill="#0b3c38" opacity=".25" filter="url(#${uid}b8)"/>`;
+  s += `<circle cx="${px}" cy="${py}" r="${R}" fill="url(#${uid}p)"/>`;
+  s += `<circle cx="${px}" cy="${py + 6}" r="${f1(14 + R * 0.85 * pct / 100)}" fill="url(#${uid}c)"/>`;
+  s += `<ellipse cx="${px - 30}" cy="${py - 40}" rx="22" ry="12" fill="#fff" opacity=".8" filter="url(#${uid}b8)"/>`;
+  s += `<circle cx="${px}" cy="${py}" r="${R}" fill="none" stroke="#fff" stroke-opacity=".6" stroke-width="1.2"/>`;
+  return frame(uid, room, s, `${pct}%`, `STREAMED &#183; 10% OF EVERY POT UNTIL ${until}`, 'MAZE OR MONEY');
+}
+
+const notes = [
+  ['A. Glass monolith', 'The monolith as an empty glass column on its slab. Orange fills it from the bottom as the pass streams. Dusk room.'],
+  ['B. The route in', 'A small maze of its own on the slab. A glowing route walks in from the corner and reaches the monolith at 100%. Iris room.'],
+  ['C. Glass pass', 'The pass itself: a frosted glass card hovering over the slab, its own maze etched in, orange filling across it. Dunes room.'],
+  ['D. Pearl', 'One iridescent pearl in a maze cell, like the portfolio. An orange light grows inside it. Pool room.'],
+];
+const row = document.getElementById('row');
+[vA, vB, vC, vD].forEach((v, i) => {
+  const d = document.createElement('div');
+  d.innerHTML = v(PCT) + `<h3>${notes[i][0]}</h3><p>${notes[i][1]}</p>`;
+  row.appendChild(d);
+});
+</script>
+</body>
+</html>
