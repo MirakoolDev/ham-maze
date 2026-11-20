@@ -257,15 +257,24 @@ window.preview = { runner, camera, controls, st, HOLD, render: () => { controls.
 
 // she stays on the spot (a treadmill); the clip plays at the chosen speed facing -z
 const SPEEDS = { idle: 0, walk: 1.7, run: 5.2 };
-let aim = 1, crouch = 0, last = performance.now(), fireT = 0;
+let aim = 1, crouch = 0, last = performance.now(), shotCd = 0, burstLeft = 0, flashT = 0;
 renderer.setAnimationLoop((now) => {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  const firing = st.fire && (fireT += dt) % 0.11 < 0.04;
+  // each gun fires its own way (act in src/nftguns.js): the K-7 streams, the pistols take single shots,
+  // the Blinker fires bursts; nothing fires while it reloads
+  const act = runner.act || { every: 0.11, kick: 1 };
+  shotCd -= dt; flashT -= dt;
+  if (!st.fire) burstLeft = 0;
+  else if (shotCd <= 0 && !runner.reloading()) {
+    if (burstLeft <= 0) burstLeft = act.burst || 1;
+    burstLeft--; shotCd = burstLeft > 0 ? act.gap : act.every; flashT = 0.04;
+  }
+  const firing = flashT > 0;
   aim += ((st.aim || st.fire ? 1 : 0) - aim) * (1 - Math.exp(-12 * dt));
   crouch += ((st.crouch ? 1 : 0) - crouch) * (1 - Math.exp(-12 * dt));
   const sp = SPEEDS[st.move];
   runner.update(dt, { pos: new THREE.Vector3(0, 0, 0), vel: new THREE.Vector3(0, 0, -sp), yaw: 0, pitch: st.pitch,
-    speed: sp, air: st.air, clipLift: true, crouch, aim, kick: firing ? 1 : 0, flash: firing });
+    speed: sp, air: st.air, clipLift: true, crouch, aim, kick: firing ? act.kick : 0, flash: firing });
   controls.update();
   composer.render();
 });

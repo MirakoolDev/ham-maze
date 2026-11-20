@@ -185,7 +185,7 @@ function reach(arm, fore, hand, target, pole, wPole = 1) {
 
 /** The hold. Positions are in the gun's own space (barrel along -z, x to its right, y up). */
 // every gun she can carry: the K-7 and the Power-Up guns
-export const GUNS = { k7: { name: 'K-7', kind: 'rifle' }, ...NFT_GUNS };
+export const GUNS = { k7: { name: 'K-7', kind: 'rifle', act: { every: 0.11, kick: 1, reload: 'rifle' } }, ...NFT_GUNS };
 
 export const HOLD = {
   gunScale: 0.95,                                   // near a real rifle on her; the slim grip fits her hand
@@ -205,6 +205,7 @@ export const HOLD = {
   pGripAlong: 0.62, pGripDepth: 0.015,              // along the palm from wrist to knuckles; off the palm
   pRoll: 0, pYaw: 0, pPitch: 0,                     // degrees, on top of the fist
   pCarryOut: 0.085, pCarryFwd: 0.04,                // metres the gun hand hangs out from the shoulder line, and forward
+  pFreeOut: 0.12,                                   // metres the free hand hangs out from the shoulder line (clear of her hip)
   pCarryTilt: 25,                                   // degrees the barrel points forward of straight down
   pSwing: 0.35,                                     // arm swing with the stride
   // fingers, degrees added to the clip's own grip (curl closes toward the palm)
@@ -216,11 +217,9 @@ export const HOLD = {
 
 // bones the aim and reload clips drive (everything above the hips)
 // the left wrist on a pistol in the standing aim clip, in gun space (position, then turn)
-// the pistol reload's spots: the gun hand's place before the chest (metres below the shoulders, to her
-// right, ahead; degrees muzzle up, how far in and how far the top rolls out), the magazine pouch at the
-// left hip, and in gun space the magazine well and the slide's front and back
-export const RP = { down: 0.2, side: 0.06, out: 0.3, up: 35, inward: 0.25, roll: 0.5, beltUp: 0.04, beltFwd: 0.1,
-  well: new THREE.Vector3(0, -0.19, 0.03), slideF: new THREE.Vector3(0, 0.06, -0.04), slideB: new THREE.Vector3(0, 0.06, 0.08) };
+// the pistols' reload: the gun hand's place before the chest (metres below the shoulders, to her right,
+// ahead; degrees muzzle up, how far in and how far the top rolls out)
+export const RP = { down: 0.2, side: 0.06, out: 0.3, up: 35, inward: 0.25, roll: 0.5 };
 const LEFT_CUP = new THREE.Vector3(-0.067, -0.101, 0.0686);
 const LEFT_CUP_Q = new THREE.Quaternion(-0.6314, 0.3021, -0.4172, 0.5797).normalize();
 const UPPER = /^(Spine|Neck|Head|LeftShoulder|RightShoulder|LeftArm|RightArm|LeftForeArm|RightForeArm|LeftHand|RightHand)/;
@@ -236,9 +235,9 @@ export function createRunner(scene, opts = {}) {
     if (gun) scene.remove(gun);
     if (NFT_GUNS[id]) {
       const b = buildNftGun(id);
-      ({ group: gun, flash } = b); MUZZLE = b.muzzle; FIST = b.fist; GUARD0 = b.guard; gunTick = b.tick; nft = true; r.kind = b.kind; r.gunId = id;
+      ({ group: gun, flash } = b); MUZZLE = b.muzzle; FIST = b.fist; GUARD0 = b.guard; gunTick = b.tick; nft = true; r.kind = b.kind; r.gunId = id; r.act = b.act || { every: 0.3, kick: 1, reload: 'shake', reloadT: 1 };
     } else {
-      ({ group: gun, flash } = buildGun({ slim: true })); MUZZLE = V(0, BORE, -0.66); FIST = null; GUARD0 = null; gunTick = null; nft = false; r.kind = 'rifle'; r.gunId = 'k7';
+      ({ group: gun, flash } = buildGun({ slim: true })); MUZZLE = V(0, BORE, -0.66); FIST = null; GUARD0 = null; gunTick = null; nft = false; r.kind = 'rifle'; r.gunId = 'k7'; r.act = GUNS.k7.act;
     }
     gun.traverse((o) => { if (o.isMesh) o.castShadow = true; });
     gun.visible = r.show && r.ready; scene.add(gun); r.gun = gun;
@@ -404,7 +403,7 @@ export function createRunner(scene, opts = {}) {
   // round to her face. Aiming or firing turns her to the camera, so shots leave where you look.
   // the speed (m/s) each clip's stride covers at its own pace, so the feet don't slide or patter (measured
   // from the stride, scaled to the rifle walk's 1.7)
-  const PISTOL_RELOAD = 1.7, PACE = { walk: 1.7, run: 5.2, pistolWalk: 3.6, pistolRun: 4.6, carryWalk: 1.9, carryRun: 5.6, crouchWalk: 1.35 };
+  const PACE = { walk: 1.7, run: 5.2, pistolWalk: 3.6, pistolRun: 4.6, carryWalk: 1.9, carryRun: 5.6, crouchWalk: 1.35 };
   // the clips' own jumps (measured from the feet): take-off, where to wait for the ground, landing done
   // Each one's air (start to fall) plays over the game's own air time (0.63 s), so it neither waits
   // frozen for the ground nor lands early; only a longer fall holds at the fall point.
@@ -433,11 +432,12 @@ export function createRunner(scene, opts = {}) {
   // free arm is left as the clip has it, and the gun arm keeps the clip's swing, only eased out from the
   // thigh so the gun clears the leg. (Driving the swing from the feet fought the clip's: a jerky arm, and a
   // free hand twisted fingers-down while the run bent its elbow up.)
-  function carry(c, H, moving, nat) {
+  function carry(c, H, moving, nat, only = null) {
     const fwd = V(-Math.sin(bodyYaw), 0, -Math.cos(bodyYaw)), side = V(Math.cos(bodyYaw), 0, -Math.sin(bodyYaw)), down = V(0, -1, 0);
     root.updateMatrixWorld(true);
     const stride = moving * P(bones.RightFoot).sub(P(bones.LeftFoot)).dot(fwd);
     for (const [S, s] of [['Right', 1], ['Left', -1]]) {
+      if (only && S !== only) continue;
       const cs = s > 0 ? c : c * (1 - nat);
       if (cs < 0.001) continue;
       const arm = bones[S + 'Arm'], fore = bones[S + 'ForeArm'], hand = bones[S + 'Hand'];
@@ -445,7 +445,7 @@ export function createRunner(scene, opts = {}) {
       // running bends the elbows up; the gun arm swings less than the free one
       const drop = len * (0.93 - 0.38 * carryRun), ahead = (s > 0 ? H.pCarryFwd : 0.02) + 0.1 * carryRun;
       const swing = THREE.MathUtils.clamp(-s * stride * H.pSwing * (s > 0 ? 0.6 : 1), -0.16, 0.16);
-      const goal = sh.clone().addScaledVector(down, drop).addScaledVector(side, s * (s > 0 ? H.pCarryOut : 0.02)).addScaledVector(fwd, ahead + swing);
+      const goal = sh.clone().addScaledVector(down, drop).addScaledVector(side, s * (s > 0 ? H.pCarryOut : H.pFreeOut)).addScaledVector(fwd, ahead + swing);
       // the clip's own hand, out from the leg by the carry's offset (the run's arm also pumps lower)
       const own = wr.clone().addScaledVector(side, s * H.pCarryOut * 0.8).addScaledVector(down, 0.03 * carryRun);
       goal.lerp(own, nat);
@@ -608,12 +608,13 @@ export function createRunner(scene, opts = {}) {
       }
     } else if (overlays.aim) overlay('aim', mixer.time % overlays.aim.duration, w);
     let rw = 0, pr = 0, prT = 0;
-    // pistol reload, posed (Mixamo has no pistol reload): the gun comes in to the chest, muzzle up; the
-    // left hand fetches a magazine from the hip, seats it, racks the slide, and both go back
+    // the pistols carry no magazine (see NFT_GUNS act): shaking or flicking, the gun comes in before her
+    // chest, muzzle up, and goes back; recharging on its own, she keeps her hold and the gun does it
+    const rstyle = pistol ? r.act.reload : 'rifle';
     if (pistol && reloadT >= 0) {
-      reloadT += dt; prT = reloadT / PISTOL_RELOAD;
-      if (prT >= 1) reloadT = -1;
-      else pr = THREE.MathUtils.smoothstep(prT, 0, 0.15) * (1 - THREE.MathUtils.smoothstep(prT, 0.8, 1));
+      reloadT += dt; prT = reloadT / (r.act.reloadT || 1);
+      if (prT >= 1) { reloadT = -1; prT = 0; }
+      else if (rstyle !== 'self') pr = THREE.MathUtils.smoothstep(prT, 0, 0.22) * (1 - THREE.MathUtils.smoothstep(prT, 0.75, 1));
     }
     if (!pistol && reloadT >= 0 && overlays.reload) {
       reloadT += dt;
@@ -644,7 +645,19 @@ export function createRunner(scene, opts = {}) {
       if (c * (1 - carryKneel) * carryRun > 0.5) limitWrist('Right', 35);
       const down = 40 * c * carryKneel * DEG;
       if (down) { turn(bones.RightArm, right, -down); turn(bones.LeftArm, right, -down); }
-      if (pr > 0.001) reloadHand(pr, right);
+      if (pr > 0.001) {
+        reloadHand(pr, right);
+        // the left hand stays down at her side while she does it (the aim clip's arm under it would put
+        // that hand up at her face); walking unaimed, it keeps the walk's own swing
+        const lf = pr * (1 - THREE.MathUtils.clamp(carryAir, 0, 1));
+        if (lf > 0.001) carry(lf, H, locoW(), THREE.MathUtils.clamp(nat, 0, 1) * (1 - w), 'Left');
+        // spray-can shake: the wrist rattles up and down, hardest mid-way
+        if (rstyle === 'shake') turn(bones.RightHand, right, 22 * DEG * pr * Math.sin(Math.PI * prT) * Math.sin(reloadT * Math.PI * 2 * 5.5));
+        // flick: one snap of the wrist, muzzle down and forward, and back up
+        if (rstyle === 'flick') { const x = (prT - 0.38) / 0.22; if (x > 0 && x < 1) turn(bones.RightHand, right, -50 * DEG * Math.sin(Math.PI * x) ** 2); }
+      }
+      // each shot kicks the muzzle up by the gun's own kick (the single-shot guns hit harder)
+      if (gunFire > 0.01 && w > 0.3) turn(bones.RightHand, right, 7 * DEG * gunFire * (r.act.kick || 1) * w);
     }
     tweakFingers('Right'); tweakFingers('Left');
 
@@ -671,18 +684,6 @@ export function createRunner(scene, opts = {}) {
         const goal = wl.clone().lerp(gun.localToWorld(LEFT_CUP.clone()), cup);
         reach(bones.LeftArm, bones.LeftForeArm, bones.LeftHand, goal, P(bones.LeftForeArm).sub(P(bones.LeftArm).lerp(wl, 0.5)), cup);
         setWorldQuat(bones.LeftHand, lq.slerp(gun.quaternion.clone().multiply(LEFT_CUP_Q), cup));
-      }
-      // reloading: the left hand goes to the hip for a magazine, up into the grip, over the slide and
-      // racks it back, then lets go
-      const S = THREE.MathUtils.smoothstep, lw = S(prT, 0.1, 0.3) * (1 - S(prT, 0.84, 0.97));
-      if (lw > 0.001) {
-        const fwd = V(-Math.sin(bodyYaw), 0, -Math.cos(bodyYaw)), up = V(0, 1, 0);
-        const belt = P(bones.LeftUpLeg).addScaledVector(up, RP.beltUp).addScaledVector(fwd, RP.beltFwd).addScaledVector(right, -0.04);
-        const t = belt.lerp(gun.localToWorld(RP.well.clone()), S(prT, 0.34, 0.52));
-        t.lerp(gun.localToWorld(RP.slideF.clone()), S(prT, 0.58, 0.68)).lerp(gun.localToWorld(RP.slideB.clone()), S(prT, 0.7, 0.78));
-        const wl = P(bones.LeftHand), lq = Q(bones.LeftHand);
-        reach(bones.LeftArm, bones.LeftForeArm, bones.LeftHand, wl.clone().lerp(t, lw), V(0, -1, 0).addScaledVector(right, -0.6).addScaledVector(fwd, -0.3), lw);
-        setWorldQuat(bones.LeftHand, lq);
       }
       limitWrist('Left', 30);
     }
@@ -732,7 +733,7 @@ export function createRunner(scene, opts = {}) {
 
     // the gun's own animation (Power-Up guns): its loops, and a flare that eases off after each shot
     gunT += dt; gunFire = ctx.flash ? 1 : gunFire * Math.exp(-5 * dt);
-    if (gunTick) gunTick(gunT, gunFire);
+    if (gunTick) gunTick(gunT, gunFire, pistol && reloadT >= 0 ? prT : 0);
     flash.visible = ctx.flash;
     if (flash.visible) { flash.material.rotation = Math.random() * 6.28; flash.scale.setScalar((0.14 + Math.random() * 0.08) / scale); }
   };
