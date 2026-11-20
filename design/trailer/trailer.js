@@ -213,25 +213,25 @@ const SHOTS = [
     setup() { S.a = spawnDrone(V3(60.6, 2.3, -0.6), Math.PI / 2); killDrone(S.a, -1); S.a.tumble.set(0.4, 0, 0.3); },
     update(t) { camera.position.set(57.9, 0.55, 1.0); camera.fov = 34; camera.lookAt(V3(60.6, 0.5, -0.6).lerp(S.a.pos, 0.6)); } },
   { name: 'charge', dur: 2.6,
-    actors: [her0(V3(30, 0, 0), -Math.PI / 2, { vel: V3(3.8, 0, 0), aim: 1 })],
+    actors: [her0(V3(30, 0, 0), -Math.PI / 2, { vel: V3(5.0, 0, 0), aim: 1 })],
     setup() { S.b = spawnDrone(V3(53, 2.0, 1.0), Math.PI / 2); S.c = spawnDrone(V3(57.5, 2.5, -1.3), Math.PI / 2); S.b.mode = S.c.mode = 'hunt'; },
     ev: [
-      ...steps(0, 2.6, 0.36, 0.7),
-      [0.2, 'bolt', () => bolt(eyeOf(S.b), V3(30.5 + 3.8 * 0.6, 1.4, 2.9), 45)],
+      ...steps(0, 2.6, STEP, 0.7),
+      [0.2, 'bolt', () => bolt(eyeOf(S.b), V3(30.5 + 5.0 * 0.6, 1.4, 2.9), 45)],
       [0.3, 'pop', () => shoot(her, eyeOf(S.b).add(V3(-0.4, 0.15, 0)))],
-      [0.45, 'bolt', () => bolt(eyeOf(S.c), V3(32 + 3.8 * 0.9, 0.05, -1.6), 45)],
+      [0.45, 'bolt', () => bolt(eyeOf(S.c), V3(32 + 5.0 * 0.9, 0.05, -1.6), 45)],
       [0.62, 'pop', () => shoot(her, eyeOf(S.b).add(V3(-0.4, -0.1, 0.1)))],
-      [0.9, 'bolt', () => bolt(eyeOf(S.b), V3(34 + 3.8 * 1.4, 2.4, -3.45), 45)],
+      [0.9, 'bolt', () => bolt(eyeOf(S.b), V3(34 + 5.0 * 1.4, 2.4, -3.45), 45)],
       [0.94, 'pop', () => shoot(her, eyeOf(S.b).add(V3(-0.4, 0, -0.1)))],
       [1.26, 'pop', () => shoot(her, eyeOf(S.b).add(V3(-0.4, 0, 0)))], [1.28, 'boom', () => killDrone(S.b)],
-      [1.3, 'bolt', () => bolt(eyeOf(S.c), V3(35 + 3.8 * 1.8, 0.05, 1.7), 45)],
+      [1.3, 'bolt', () => bolt(eyeOf(S.c), V3(35 + 5.0 * 1.8, 0.05, 1.7), 45)],
       [1.58, 'pop', () => shoot(her, eyeOf(S.c).add(V3(-0.4, 0.1, 0)))],
-      [1.75, 'bolt', () => bolt(eyeOf(S.c), V3(36 + 3.8 * 2.2, 1.0, -3.45), 45)],
+      [1.75, 'bolt', () => bolt(eyeOf(S.c), V3(36 + 5.0 * 2.2, 1.0, -3.45), 45)],
       [1.9, 'pop', () => shoot(her, eyeOf(S.c).add(V3(-0.4, -0.1, 0)))],
       [2.22, 'pop', () => shoot(her, eyeOf(S.c).add(V3(-0.4, 0, 0)))], [2.24, 'boom', () => killDrone(S.c)],
     ],
     update(t, s) {
-      her.pos.set(30 + 3.8 * s, 0, 0.1 * Math.sin(s * 2)); her.vel.set(3.8, 0, 0); her.aim = 1;
+      her.pos.set(30 + 5.0 * s, 0, 0); her.vel.set(5.0, 0, 0); her.aim = 1;
       const tgt = !S.b.dead ? S.b : S.c, eye = eyeOf(tgt);
       her.yaw = yawTo(her.pos, eye); her.pitch = pitchTo(V3(her.pos.x, 1.3, her.pos.z), eye);
       camera.position.set(68 - 0.5 * s, 1.5, -0.3); camera.fov = 17;
@@ -270,30 +270,30 @@ const SHOTS = [
       camera.position.set(42.6, 1.55, -76.25); camera.fov = 13; camera.lookAt(74, 1.25, -77.1);
     } },
   { name: 'shadeFires', dur: 1.0, exposure: 0.9,
-    actors: [her0(V3(44.5, 0, -77), -Math.PI / 2, { aim: 1, vel: V3(4, 0, 0) }), { who: shade, p: V3(74, 0, -77), yaw: Math.PI / 2, aim: 1 }],
+    actors: [her0(V3(44.5, 0, -77), -Math.PI / 2, { aim: 1, vel: V3(RUN, 0, 0) }), { who: shade, p: V3(74, 0, -77), yaw: Math.PI / 2, aim: 1 }],
     ev: [0.1, 0.18, 0.26, 0.62, 0.7, 0.78].map((at, i) => [at, 'zap', () => { shade.flash = true; shade._target = null; bolt(shade.r.muzzle(), V3(46 + i * 0.6, 0.4 + (i % 3) * 0.9, -77 + (i % 2 ? 2.75 : -2.75)), 80, true); }]),
     update(t, s) {
-      her.pos.set(44.5 + 4 * s, 0, -77); her.vel.set(4, 0, 0); her.aim = 1; her.yaw = yawTo(her.pos, shade.pos);
+      her.pos.set(44.5 + RUN * s, 0, -77); her.vel.set(RUN, 0, 0); her.aim = 1; her.yaw = yawTo(her.pos, shade.pos);
       shade.pos.set(74, 0, -77); shade.aim = 1; shade.yaw = yawTo(shade.pos, her.pos);
       camera.position.set(75.6, 1.6, -77.8); camera.fov = 13; camera.lookAt(46, 1.2, -77);
     } },
   { name: 'herCharge', dur: 1.3, exposure: 0.9,
-    actors: [her0(V3(46, 0, -77), -Math.PI / 2, { aim: 1, vel: V3(4.2, 0, 0) })],
+    actors: [her0(V3(46, 0, -77), -Math.PI / 2, { aim: 1, vel: V3(RUN, 0, 0) })],
     ev: [
-      ...steps(0, 1.3, 0.34, 0.7),
+      ...steps(0, 1.3, STEP, 0.7),
       ...[0.1, 0.42, 0.74, 1.06].map((at) => [at, 'pop', () => shoot(her, V3(74, 1.3, -77), { hit: false })]),
       ...[0.05, 0.13, 0.21, 0.6, 0.68, 0.76].map((at, i) => [at, i === 2 || i === 5 ? 'spark' : null, () => bolt(V3(her.pos.x + 26, 1.4, -77), V3(her.pos.x + 1.5 + i * 0.3, 0.3 + (i % 3) * 1.1, -77 + (i % 2 ? 2.75 : -2.75)), 90, true)]),
     ],
     update(t, s) {
-      her.pos.set(46 + 4.2 * s, 0, -77); her.vel.set(4.2, 0, 0); her.aim = 1; her.yaw = yawTo(her.pos, V3(74, 0, -77)); her.pitch = 0;
+      her.pos.set(46 + RUN * s, 0, -77); her.vel.set(RUN, 0, 0); her.aim = 1; her.yaw = yawTo(her.pos, V3(74, 0, -77)); her.pitch = 0;
       camera.position.set(her.pos.x + 3.0, 1.35 + 0.04 * Math.sin(t * 23), -77.9); camera.fov = 36;
       camera.lookAt(her.pos.x, 1.25, -77.05);
     } },
   { name: 'airShot', dur: 1.1, slow: 0.4,
-    actors: [her0(V3(51, 0, -77), -Math.PI / 2, { aim: 1, vel: V3(RUN, 0, 0) })],
+    actors: [her0(V3(52.8, 0, -77), -Math.PI / 2, { aim: 1, vel: V3(RUN, 0, 0) })],
     ev: [[0, 'jump'], [0.22, 'pop', () => shoot(her, V3(74, 1.3, -77), { hit: false })]],
     update(t, s) {
-      her.pos.set(51 + RUN * s, 0, -77); her.vel.set(RUN, 0, 0); her.aim = 1; her.air = true; her.yaw = yawTo(her.pos, V3(74, 0, -77));
+      her.pos.set(52.8 + RUN * s, 0, -77); her.vel.set(RUN, 0, 0); her.aim = 1; her.air = true; her.yaw = yawTo(her.pos, V3(74, 0, -77));
       camera.position.set(her.pos.x + 1.7, 1.1, -74.9); camera.fov = 38;
       camera.lookAt(her.pos.x + 0.2, 1.3, -77);
     } },
