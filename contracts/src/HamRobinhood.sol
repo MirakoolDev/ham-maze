@@ -42,7 +42,7 @@ contract HamRobinhood {
     uint256 public constant FIRST_BPS = 4000;
     uint256 public constant SECOND_BPS = 2000;
     uint256 public constant THIRD_BPS = 1000;
-    uint256 public constant BACKERS_BPS = 1000; // fixed: campaign backers are paid first, never carved into
+    uint256 public constant BACKERS_BPS = 1000; // campaign backers are paid first, never carved into, until backersEndDay; then it rolls over
     uint256 public constant TREASURY_BPS = 1000; // the $PFWA buyback; holder bonus and referrals come out of this. The remaining 1000 rolls over
     uint256 public constant HOLDER_BONUS_BPS = 1000;
     uint256 public constant REFERRAL_BPS = 500;
@@ -139,6 +139,9 @@ contract HamRobinhood {
     mapping(address => uint256) public referralOwed;
     uint256 public treasuryOwed;
     uint256 public backersOwed;
+    // the first day whose pot no longer pays backers (the FundingWorks stream's end); from then on their
+    // 10% stays in the pot and rolls over. 0 = not set yet, so backers are paid. Once set it can only move later.
+    uint256 public backersEndDay;
 
     // crew bonus: a referrer whose referred players all play the same day unlocks a bigger cut
     mapping(uint256 => mapping(address => uint32)) public crewSize; // day => referrer => distinct referred players who played
@@ -175,6 +178,7 @@ contract HamRobinhood {
     event RefereeSet(address referee);
     event TreasurySet(address treasury);
     event BackersSet(address backers);
+    event BackersEndSet(uint256 day);
     event BackersPaid(uint256 indexed day, uint256 amount);
     event HolderTokenSet(address token);
     event PausedSet(bool paused);
@@ -206,6 +210,7 @@ contract HamRobinhood {
     error BadConfig();
     error DayStarted();
     error ZeroAddress();
+    error BadBackersEnd();
     error FeeTooHigh();
     error TransferFailed();
     error BadBooster();
@@ -407,12 +412,14 @@ contract HamRobinhood {
 
         uint256 pot = d.pot;
         uint256 treasuryShare = pot * TREASURY_BPS / BPS;
-        uint256 backersShare = pot * BACKERS_BPS / BPS;
+        uint256 backersShare = backersEndDay != 0 && day >= backersEndDay ? 0 : pot * BACKERS_BPS / BPS;
         uint256[3] memory share = [pot * FIRST_BPS / BPS, pot * SECOND_BPS / BPS, pot * THIRD_BPS / BPS];
         uint256[3] memory prize;
         uint256 rollover = pot - treasuryShare - backersShare;
-        backersOwed += backersShare;
-        emit BackersPaid(day, backersShare);
+        if (backersShare != 0) {
+            backersOwed += backersShare;
+            emit BackersPaid(day, backersShare);
+        }
         uint256 unclaimed;
 
         for (uint256 i; i < 3; ++i) {
@@ -670,6 +677,14 @@ contract HamRobinhood {
         if (backers_ == address(0)) revert ZeroAddress();
         backers = backers_;
         emit BackersSet(backers_);
+    }
+
+    /// @notice The day the backers' 10% stops (the campaign stream's end); after it, that 10% rolls over.
+    /// Must be a future day, and once set it can only be pushed later, never brought forward.
+    function setBackersEnd(uint256 day) external onlyOwner {
+        if (day <= currentDay() || (backersEndDay != 0 && day < backersEndDay)) revert BadBackersEnd();
+        backersEndDay = day;
+        emit BackersEndSet(day);
     }
 
     function setHolderToken(address token) external onlyOwner {
