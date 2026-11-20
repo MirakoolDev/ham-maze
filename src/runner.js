@@ -501,6 +501,7 @@ export function createRunner(scene, opts = {}) {
   const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
   r.setGun(opts.gun || 'k7');
   r.reload = () => { reloadT = 0; };
+  r.face = (yaw) => { bodyYaw = yaw; }; // turn her on the spot (a cut in a cinematic, a respawn)
   r.reloading = () => reloadT >= 0;
 
   /** ctx: { pos, vel, yaw, pitch, speed, aim (0..1), kick, flash, air, crouch } (yaw/pitch: the camera's) */
