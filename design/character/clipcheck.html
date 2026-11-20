@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>HAM clip check</title>
+<!-- A contact sheet for checking the runner's animation. Each row is one clip or game state, each column a
+     moment through it. Mixamo's own skeleton (the source file, as bones) stands beside her as the truth.
+     ?rows=walk,run,...   ?mode=raw (the baked clip alone) or game (runner.update, as the game drives it)
+     ?gun=marker  ?cols=8  ?view=side|front|three -->
+<style>
+  html, body { margin: 0; background: #e9e4ec; font: 12px system-ui, sans-serif; }
+  canvas { display: block; }
+  #labels { position: absolute; left: 0; top: 0; }
+  #labels div { position: absolute; left: 6px; font-weight: 600; color: #222; background: #fff9; padding: 1px 4px; }
+</style>
+</head>
+<body>
+<div id="labels"></div>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+  "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+const { createRunner } = await import(`../../src/runner.js?v=${Date.now()}`);
+
+const q = new URLSearchParams(location.search);
+const MODE = q.get('mode') || 'raw', COLS = +(q.get('cols') || 8), GUN = q.get('gun') || 'marker', VIEW = q.get('view') || 'three';
+const SRC = { idle: 'Rifle Idle', aim: 'Rifle Aiming Idle', walk: 'Rifle Walk', run: 'Rifle Run', reload: 'Reloading', jump: 'Rifle Jump',
+  crouch: 'Idle Crouching', pistolAim: 'Pistol Idle', pistolRun: 'Pistol Run', pistolCrouch: 'Pistol Kneeling Idle', pistolWalk: 'Pistol Walk', pistolJump: 'Pistol Jump',
+  carryWalk: 'Female Walk', carryRun: 'Female Run', crouchWalk: 'Rifle Crouch Walk', pistolRunJump: 'Pistol Running Jump' };
+const ROWS = (q.get('rows') || (MODE === 'raw' ? Object.keys(SRC).join(',') : 'walk,run,jump,runjump,aimwalk,crouchwalk')).split(',');
+const CW = 200, CH = 300;
+const W = CW * COLS, H = CH * ROWS.length;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1); renderer.setSize(W, H); renderer.setScissorTest(true);
+document.body.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+scene.add(new THREE.HemisphereLight('#ffffff', '#887788', 2.2));
+const sun = new THREE.DirectionalLight('#fff', 2); sun.position.set(2, 4, 3); scene.add(sun);
+const grid = new THREE.GridHelper(6, 12, 0x998899, 0xbbb0bb); scene.add(grid);
+const camera = new THREE.PerspectiveCamera(30, CW / CH, 0.05, 50);
+
+const runner = createRunner(scene);
+runner.setGun(GUN);
+runner.look = 'pearl';
+await runner.load('', { glb: '../../assets/runner.glb?v=' + Date.now(), clips: '../../assets/runner-clips.json?v=' + Date.now() });
+runner.setVisible(true);
+const clips = Object.fromEntries(Object.entries(await (await fetch('../../assets/runner-clips.json?v=' + Date.now())).json()).map(([k, j]) => [k, THREE.AnimationClip.parse(j)]));
+
+// the Mixamo source as a bone figure, 1.75 m tall, to the right of her
+const fbx = new FBXLoader();
+const lineMat = new THREE.LineBasicMaterial({ color: 0xd2462a });
+async function source(name) {
+  const src = await fbx.loadAsync(`clips/${encodeURIComponent(name)}.fbx`);
+  const g = new THREE.Group(); g.add(src);
+  const bones = []; src.traverse((o) => { if (o.isBone) bones.push(o); });
+  g.updateMatrixWorld(true);
+  const box = new THREE.Box3(); bones.forEach((b) => box.expandByPoint(b.getWorldPosition(new THREE.Vector3())));
+  g.scale.setScalar(1.75 / (box.max.y - box.min.y));
+  const geo = new THREE.BufferGeometry(); const pos = new Float32Array(bones.length * 6);
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const lines = new THREE.LineSegments(geo, lineMat); lines.frustumCulled = false;
+  const mx = new THREE.AnimationMixer(src); mx.clipAction(src.animations[0]).play();
+  const v = new THREE.Vector3();
+  return { g, lines, dur: src.animations[0].duration, set(t, at) {
+    mx.setTime(t); g.position.set(0, 0, 0); g.updateMatrixWorld(true);
+    // keep it in place: Mixamo walks forward along z
+    const hips = bones.find((b) => /Hips$/.test(b.name)).getWorldPosition(new THREE.Vector3());
+    let i = 0;
+    for (const b of bones) {
+      if (!b.parent || !b.parent.isBone) { i += 6; continue; }
+      b.getWorldPosition(v); pos[i++] = hips.x - v.x + at.x; pos[i++] = v.y; pos[i++] = hips.z - v.z + at.z;
+      b.parent.getWorldPosition(v); pos[i++] = hips.x - v.x + at.x; pos[i++] = v.y; pos[i++] = hips.z - v.z + at.z;
+    }
+    geo.attributes.position.needsUpdate = true;
+  } };
+}
+
+const labels = document.getElementById('labels');
+function cell(r, c) {
+  const x = c * CW, y = H - (r + 1) * CH;
+  renderer.setViewport(x, y, CW, CH); renderer.setScissor(x, y, CW, CH);
+  scene.background = new THREE.Color((r + c) % 2 ? '#ece6ef' : '#e4dde8');
+  renderer.render(scene, camera);
+}
+function aimCam(target) {
+  const d = 4.4, dir = VIEW === 'side' ? [1, 0.12, 0] : VIEW === 'front' ? [0, 0.12, -1] : [0.75, 0.2, -0.62];
+  const n = Math.hypot(...dir);
+  camera.position.set(target.x + dir[0] / n * d, 0.95 + dir[1] / n * d, target.z + dir[2] / n * d);
+  camera.lookAt(target.x, 0.88, target.z);
+}
+
+// game states: what the page/game would hand runner.update
+const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+const STATES = {
+  idle: { speed: 0 }, walk: { speed: 1.7 }, run: { speed: 5.2 }, aimwalk: { speed: 1.7, aim: 1 }, aimrun: { speed: 5.2, aim: 1 },
+  crouch: { speed: 0, crouch: 1 }, crouchwalk: { speed: 1.7, crouch: 1 }, aim: { speed: 0, aim: 1 },
+  jump: { speed: 0, hop: true }, runjump: { speed: 5.2, hop: true }, walkjump: { speed: 1.7, hop: true },
+  reload: { speed: 0, reload: true }, walkreload: { speed: 1.7, reload: true },
+};
+
+for (let r = 0; r < ROWS.length; r++) {
+  const key = ROWS[r];
+  const lab = document.createElement('div'); lab.style.top = (r * CH + 4) + 'px'; lab.textContent = `${key} (${MODE}${MODE === 'game' ? ', ' + GUN : ''})`; labels.append(lab);
+  if (MODE === 'raw') {
+    const clip = clips[key]; if (!clip) continue;
+    const mx = new THREE.AnimationMixer(runner.root); const a = mx.clipAction(clip); a.play();
+    const s = await source(SRC[key]); scene.add(s.lines);
+    for (let c = 0; c < COLS; c++) {
+      const t = clip.duration * c / COLS;
+      mx.setTime(t); runner.root.position.set(0, 0, 0); runner.root.rotation.set(0, Math.PI, 0);
+      s.set(Math.min(t, s.dur - 1e-4), V3(1.1, 0, 0));
+      aimCam(V3(0.55, 0, 0)); cell(r, c);
+    }
+    a.stop(); mx.uncacheRoot(runner.root); scene.remove(s.lines);
+  } else {
+    const S = STATES[key]; const sp = S.speed;
+    const ctx = (air) => ({ pos: V3(0, 0, 0), vel: V3(0, 0, -sp), yaw: 0, pitch: 0, speed: sp, air, clipLift: true, crouch: S.crouch || 0, aim: S.aim || 0, kick: 0, flash: false });
+    for (let i = 0; i < 120; i++) runner.update(1 / 60, ctx(false));
+    // one second of it (a hop: 0.63 s in the air, then the landing)
+    const span = S.hop ? 1.2 : S.reload ? 1.7 : sp > 4 ? 0.7 : 1.0;
+    let t = 0; if (S.reload) runner.reload();
+    for (let c = 0; c < COLS; c++) {
+      const until = span * c / COLS;
+      while (t < until) { runner.update(1 / 60, ctx(S.hop ? t < 0.63 : false)); t += 1 / 60; }
+      aimCam(V3(0, 0, 0)); cell(r, c);
+    }
+  }
+}
+document.title = 'done';
+</script>
+</body>
+</html>
