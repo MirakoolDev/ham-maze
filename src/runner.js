@@ -326,15 +326,22 @@ export function createRunner(scene, opts = {}) {
     root.updateMatrixWorld(true);
     const yaw = root.rotation.y - Math.PI;
     const fwd = V(-Math.sin(yaw), 0, -Math.cos(yaw)), right = V(Math.cos(yaw), 0, -Math.sin(yaw));
-    const moving = current === actions.walk || current === actions.run;
+    const moving = ['walk', 'run', 'pistolWalk', 'pistolRun', 'crouchWalk', 'carryWalk', 'carryRun'].some((k) => actions[k] && current === actions[k]);
     const lf = P(bones.LeftFoot).y, rf = P(bones.RightFoot).y;
     // a soft curve of the feet's height difference (tanh, not a hard clamp, so it never flips like a
     // switch), eased over time so the pelvis rolls from side to side instead of snapping
     const target = moving ? Math.tanh((rf - lf) / 0.14) : 0;
     sway += (target - sway) * (1 - Math.exp(-7 * dt));
+    // the pelvis rolls but the legs keep the clip's line (turning the hips alone swung the free foot
+    // across the other one, so she crossed her feet)
     const hs = H.hipSway * DEG * sway;
-    if (hs) { turn(bones.Hips, fwd, hs); turn(bones.Spine, fwd, -hs * 0.8); }
-    if (H.narrow) {
+    if (hs) {
+      const lq = Q(bones.LeftUpLeg), rq = Q(bones.RightUpLeg);
+      turn(bones.Hips, fwd, hs); turn(bones.Spine, fwd, -hs * 0.8);
+      setWorldQuat(bones.LeftUpLeg, lq); setWorldQuat(bones.RightUpLeg, rq);
+    }
+    // legs in only standing: on the move it put the steps on one line and the feet crossed
+    if (H.narrow && !moving) {
       for (const [side, sg] of [['Left', -1], ['Right', 1]]) {
         const fq = Q(bones[side + 'Foot']);
         turn(bones[side + 'UpLeg'], fwd, sg * H.narrow * DEG);
@@ -348,9 +355,11 @@ export function createRunner(scene, opts = {}) {
   // Body facing is her own, apart from the camera (the free-orbit third person of open-world
   // shooters): she turns to the way she moves and keeps it when she stops, so the camera can swing
   // round to her face. Aiming or firing turns her to the camera, so shots leave where you look.
-  const PISTOL_RELOAD = 1.7, PISTOL_WALK_PACE = 1.7; // seconds; m/s the pistol walk clip covers at its own pace
-  // the clips' own jumps: where take-off is, where to wait for the ground, and where the landing ends
-  const JUMPS = { pistolJump: { start: 0.72, fall: 1.36, end: 1.75 } }; // its air (0.65 s) matches the game's (0.63 s)
+  // the speed (m/s) each clip's stride covers at its own pace, so the feet don't slide or patter (measured
+  // from the stride, scaled to the rifle walk's 1.7)
+  const PISTOL_RELOAD = 1.7, PACE = { walk: 1.7, run: 5.2, pistolWalk: 3.6, pistolRun: 4.6, carryWalk: 1.9, carryRun: 5.6, crouchWalk: 1.35 };
+  // the clips' own jumps (measured from the feet): take-off, where to wait for the ground, landing done
+  const JUMPS = { jump: { start: 0, fall: 0.45, end: 0.6 }, pistolJump: { start: 0.77, fall: 1.3, end: 1.62 }, pistolRunJump: { start: 0.03, fall: 0.45, end: 0.75 } };
   // the pistol carry: each hand reaches for a spot below its shoulder (elbows soft and back), then turns
   // to hang thumb-forward; the gun hand's fingers tip forward so the barrel points ahead of her feet
   let carryRun = 0, carryKneel = 0, carryAir = 0;
@@ -406,7 +415,7 @@ export function createRunner(scene, opts = {}) {
     const hq = Q(hand);
     setWorldQuat(hand, hq.clone().slerp(hq.clone().premultiply(new THREE.Quaternion().setFromRotationMatrix(_m2.multiply(_m1.transpose()))), pr));
   }
-  let bodyYaw = null, wasAir = false, wasAirPrev = false, jumpBaseY = null, landT = 0, aimYaw = 0, aimPitch = 0, reloadT = -1, reloadDir = null;
+  let bodyYaw = null, jumpName = 'jump', wasAir = false, wasAirPrev = false, jumpBaseY = null, landT = 0, aimYaw = 0, aimPitch = 0, reloadT = -1, reloadDir = null;
   const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
   r.setGun(opts.gun || 'k7');
   r.reload = () => { reloadT = 0; };
@@ -443,10 +452,14 @@ export function createRunner(scene, opts = {}) {
     // ground instead of freezing at the top. Touching down plays the rest as the landing.
     // The pistol's is a standing jump with its own crouch first: it starts at take-off and ends before
     // the slow stand-up.
-    const jn = pistol && actions.pistolJump ? 'pistolJump' : 'jump', JS = JUMPS[jn];
+    // which jump is picked at take-off and kept to the landing: on the run the pistol's is a leap
+    if (ctx.air && !wasAir) jumpName = pistol && sp > 2.5 && actions.pistolRunJump ? 'pistolRunJump' : pistol && actions.pistolJump ? 'pistolJump' : 'jump';
+    const jn = jumpName, JS = JUMPS[jn];
     const J = actions[jn], jd = J ? J.getClip().duration : 0, fall = JS ? JS.fall : jd * 0.75, jend = JS ? JS.end : jd;
     if (J && ctx.air) {
-      if (!wasAir) { J.reset(); if (JS) J.time = JS.start; }
+      // (play() restarts a clip it switches to, so the take-off time goes in after it: set before, the
+      // jump started from the clip's crouch and she squatted in the air)
+      if (!wasAir) { play(jn, 1); J.time = JS ? JS.start : 0; }
       if (J.time > fall) J.time = fall;
       play(jn, THREE.MathUtils.clamp((fall - J.time) / 0.08, 0.05, 1));
       landT = 0;
@@ -459,11 +472,14 @@ export function createRunner(scene, opts = {}) {
     else if (ctx.air) { /* jump, above */ }
     else if (crouch && sp < 0.4) play(pistol && actions.pistolCrouch ? 'pistolCrouch' : 'crouch', 1);
     else if (sp < 0.4) play(pistol && actions.pistolAim && w > 0.5 ? 'pistolAim' : 'idle', 1);
-    else if (sp < 4.2) {
-      if (pistol && actions.pistolWalk) play('pistolWalk', dirSign * THREE.MathUtils.clamp(sp / PISTOL_WALK_PACE, 0.7, 2));
-      else play('walk', dirSign * THREE.MathUtils.clamp(sp / 1.7, 0.7, 2));
+    else {
+      // the pistol's own walk and run aim; carried, she walks and runs normally
+      const pick = (...ks) => ks.find((k) => actions[k]);
+      const k = crouch ? pick('crouchWalk', 'walk')
+        : sp < 4.2 ? (pistol ? pick(w > 0.5 ? 'pistolWalk' : 'carryWalk', 'walk') : 'walk')
+        : (pistol ? pick(w > 0.5 ? 'pistolRun' : 'carryRun', 'run') : 'run');
+      play(k, dirSign * THREE.MathUtils.clamp(sp / PACE[k], 0.5, 1.8));
     }
-    else play(pistol && actions.pistolRun ? 'pistolRun' : 'run', dirSign * THREE.MathUtils.clamp(sp / (pistol ? 5.6 : 5.2), 0.85, 1.8));
     wasAir = !!ctx.air;
     // three's mixer only writes a bone when its keyed value changes, so a bone a clip holds still kept
     // last frame's tweaks and they stacked until the clip moved and snapped it back. Put the clip's
@@ -472,7 +488,6 @@ export function createRunner(scene, opts = {}) {
     for (const c of clipPose) { c.o.quaternion.copy(c.q); c.o.position.copy(c.p); }
     mixer.update(dt);
     for (const c of clipPose) { c.q.copy(c.o.quaternion); c.p.copy(c.o.position); }
-    if (crouch && sp >= 0.4) root.position.y -= 0.3; // walking crouched: the walk, lowered
     // the jump clip lifts the hips itself; in the game the player's position already rises, so take the
     // clip's lift back out unless the caller wants it (ctx.clipLift: the character page stays on the floor)
     if (J && (ctx.air || landT > 0)) {
@@ -489,7 +504,7 @@ export function createRunner(scene, opts = {}) {
       // the borrowed rifle clips get the pistol arms by however much of the mix they are, so a blend into
       // a pistol clip (run, kneel, aim) doesn't flash the rifle hold
       // (a clip that never played still reports weight 1, so count only the ones running)
-      const own = ['pistolAim', 'pistolRun', 'pistolCrouch', 'pistolWalk', 'pistolJump'].reduce((t, k) => t + (actions[k] && actions[k].isRunning() ? actions[k].getEffectiveWeight() : 0), 0);
+      const own = ['pistolAim', 'pistolRun', 'pistolCrouch', 'pistolWalk', 'pistolJump', 'pistolRunJump', 'carryWalk', 'carryRun'].reduce((t, k) => t + (actions[k] && actions[k].isRunning() ? actions[k].getEffectiveWeight() : 0), 0);
       const ow = THREE.MathUtils.clamp(1 - own, 0, 1);
       if (overlays.pistolAim && ow > 0.001) {
         overlay('pistolAim', mixer.time % overlays.pistolAim.duration, ow);
@@ -528,7 +543,7 @@ export function createRunner(scene, opts = {}) {
       // kneeling she keeps it in both hands, muzzle low, instead (hanging by her side it goes into the thigh)
       const ease = 1 - Math.exp(-6 * dt);
       carryRun += ((sp > 4.2 ? 1 : 0) - carryRun) * ease;
-      carryKneel += ((crouch && sp < 0.4 ? 1 : 0) - carryKneel) * ease;
+      carryKneel += ((crouch ? 1 : 0) - carryKneel) * ease; // crouch-walking too: low, in both hands
       // jumping, she keeps the clip's two-handed ready hold (the jump tucks her knees into a hanging gun)
       carryAir += ((ctx.air || landT > 0.15 ? 1 : 0) - carryAir) * (1 - Math.exp(-10 * dt));
       const c = (1 - w) * (1 - pr) * (1 - carryAir);

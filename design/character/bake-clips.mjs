@@ -15,6 +15,9 @@ const CLIPS = {
   // pistol set (Mixamo has no pistol reload, so that one is posed in code)
   pistolAim: 'Pistol Idle.fbx', pistolRun: 'Pistol Run.fbx', pistolCrouch: 'Pistol Kneeling Idle.fbx',
   pistolWalk: 'Pistol Walk.fbx', pistolJump: 'Pistol Jump.fbx',
+  // the pistol carried, not aimed: an ordinary walk and run (the pistol clips all aim, and their legs stalk)
+  carryWalk: 'Female Walk.fbx', carryRun: 'Female Run.fbx', pistolRunJump: 'Pistol Running Jump.fbx',
+  crouchWalk: 'Rifle Crouch Walk.fbx',
 };
 
 const parse = (buf) => new Promise((res, rej) => new GLTFLoader().parse(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength), '', res, rej));
