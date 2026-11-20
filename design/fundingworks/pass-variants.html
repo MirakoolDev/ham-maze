@@ -69,7 +69,7 @@ function vA(pct) {
   s += box(T, -w, w, -w, w, 0, fill, 'url(#' + uid + 'or)', '#ff7f3a', '#ffc9a0', 'opacity=".95"');
   s += box(T, -w, w, -w, w, 0, H, '#ffffff', '#ffffff', '#ffffff', 'opacity=".22" stroke="#fff" stroke-opacity=".7" stroke-width="1.2"');
   s += `<line x1="${T(w, w, 0)[0]}" y1="${T(w, w, 0)[1]}" x2="${T(w, w, H)[0]}" y2="${T(w, w, H)[1]}" stroke="#fff" stroke-opacity=".9" stroke-width="1.5"/>`;
-  return frame(uid, room, s, `${pct}%`, `STREAMED &#183; 10% OF EVERY POT UNTIL ${until}`, 'MAZE OR MONEY');
+  return frame(uid, room, s, `${pct}%`, `STREAMED &#183; 10% OF EVERY POT UNTIL ${until}`, 'FIND YOUR WAY HOME');
 }
 
 // ── B: a little maze on the slab; a glowing route walks to the monolith as it streams ─────────
@@ -138,7 +138,7 @@ function vC(pct) {
   }
   s += `<g transform="${topIso(OX, PY, PH + hov + th)}"><g transform="scale(${f1(sc)} 1)"><path d="${e.join('')}" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" fill="none" opacity=".95"/></g></g>`;
   s += box(T, -cw, cw, -cd, cd, 0, th, 'none', 'none', 'none', 'stroke="#fff" stroke-opacity=".9" stroke-width="1.2"');
-  return frame(uid, room, s, `${pct}%`, `STREAMED &#183; 10% OF EVERY POT UNTIL ${until}`, 'MAZE OR MONEY');
+  return frame(uid, room, s, `${pct}%`, `STREAMED &#183; 10% OF EVERY POT UNTIL ${until}`, 'FIND YOUR WAY HOME');
 }
 
 // ── D: one pearl in a maze cell, an orange light growing inside it as the pass streams ───────
@@ -157,7 +157,7 @@ function vD(pct) {
   s += `<circle cx="${px}" cy="${py + 6}" r="${f1(14 + R * 0.85 * pct / 100)}" fill="url(#${uid}c)"/>`;
   s += `<ellipse cx="${px - 30}" cy="${py - 40}" rx="22" ry="12" fill="#fff" opacity=".8" filter="url(#${uid}b8)"/>`;
   s += `<circle cx="${px}" cy="${py}" r="${R}" fill="none" stroke="#fff" stroke-opacity=".6" stroke-width="1.2"/>`;
-  return frame(uid, room, s, `${pct}%`, `STREAMED &#183; 10% OF EVERY POT UNTIL ${until}`, 'MAZE OR MONEY');
+  return frame(uid, room, s, `${pct}%`, `STREAMED &#183; 10% OF EVERY POT UNTIL ${until}`, 'FIND YOUR WAY HOME');
 }
 
 const notes = [
