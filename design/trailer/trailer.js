@@ -466,6 +466,7 @@ async function ready() {
   seek(at('charge') + 1); renderer.compile(scene, camera); post.render(1 / FPS, { showGun: false, hurt: 0, lowHp: 0, ads: 0 });
   cur = -1;
 }
+window.__trailer = { her, shade, seek, SHOTS, camera, drawFrame, out }; // for checks from the console
 const status = (s) => { document.title = s; const el = document.getElementById('status'); if (el) el.textContent = s; };
 await ready();
 document.body.appendChild(out);

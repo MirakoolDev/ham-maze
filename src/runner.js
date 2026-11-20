@@ -475,7 +475,10 @@ export function createRunner(scene, opts = {}) {
     const arm = bones.RightArm, hand = bones.RightHand;
     const goal = P(arm).lerp(P(bones.LeftArm), 0.5).addScaledVector(up, -RP.down).addScaledVector(right, RP.side).addScaledVector(fwd, RP.out);
     const wr = P(hand), lq = Q(hand);
-    reach(arm, bones.RightForeArm, hand, wr.lerp(goal, pr), V(0, -1, 0).addScaledVector(right, 0.6).addScaledVector(fwd, -0.3), pr);
+    // the hand comes up in an arc out in front of her (a straight line from the thigh to the chest
+    // cut across her hip and swung the elbow out)
+    const path = wr.lerp(goal, pr).addScaledVector(fwd, 0.16 * Math.sin(Math.PI * Math.min(1, pr * 1.15)));
+    reach(arm, bones.RightForeArm, hand, path, V(0, -1, 0).addScaledVector(right, 0.6).addScaledVector(fwd, -0.3), pr);
     setWorldQuat(hand, lq);
     root.updateMatrixWorld(true);
     const fd = fwd.clone().multiplyScalar(Math.cos(RP.up * DEG)).addScaledVector(up, Math.sin(RP.up * DEG)).addScaledVector(right, -RP.inward).normalize();
@@ -503,6 +506,7 @@ export function createRunner(scene, opts = {}) {
   r.reload = () => { reloadT = 0; };
   r.face = (yaw) => { bodyYaw = yaw; }; // turn her on the spot (a cut in a cinematic, a respawn)
   r.reloading = () => reloadT >= 0;
+  r.aimTurn = () => aimYaw; // the barrel correction's body turn (radians), for checks
 
   /** ctx: { pos, vel, yaw, pitch, speed, aim (0..1), kick, flash, air, crouch } (yaw/pitch: the camera's) */
   let tick = 0;
@@ -615,7 +619,7 @@ export function createRunner(scene, opts = {}) {
     if (pistol && reloadT >= 0) {
       reloadT += dt; prT = reloadT / (r.act.reloadT || 1);
       if (prT >= 1) { reloadT = -1; prT = 0; }
-      else if (rstyle !== 'self') pr = THREE.MathUtils.smoothstep(prT, 0, 0.22) * (1 - THREE.MathUtils.smoothstep(prT, 0.75, 1));
+      else if (rstyle !== 'self') pr = THREE.MathUtils.smootherstep(prT, 0, 0.32) * (1 - THREE.MathUtils.smootherstep(prT, 0.68, 1));
     }
     if (!pistol && reloadT >= 0 && overlays.reload) {
       reloadT += dt;
