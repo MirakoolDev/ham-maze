@@ -111,7 +111,22 @@ const STATES = {
   crouch: { speed: 0, crouch: 1 }, crouchin: { speed: 0, crouch: 1, fresh: true }, crouchwalk: { speed: 1.7, crouch: 1 }, aim: { speed: 0, aim: 1 },
   jump: { speed: 0, hop: true }, runjump: { speed: 5.2, hop: true }, walkjump: { speed: 1.7, hop: true },
   reload: { speed: 0, reload: true }, walkreload: { speed: 1.7, reload: true },
+  fire: { speed: 0, fire: true }, walkfire: { speed: 1.7, fire: true }, runfire: { speed: 5.2, fire: true },
+  crouchaim: { speed: 0, crouch: 1, aim: 1 }, crouchwalkaim: { speed: 1.7, crouch: 1, aim: 1 },
 };
+// the page's own inputs (design/character/index.html): aim and crouch ease in at 12/s, firing flashes every
+// 0.11 s, speed switches at once. A row "walk>aimwalk" holds the first state, then switches to the second
+// and shows the switch.
+function driver() {
+  let aim = 0, crouch = 0, fireT = 0;
+  return (S, dt, air) => {
+    aim += ((S.aim || S.fire ? 1 : 0) - aim) * (1 - Math.exp(-12 * dt));
+    crouch += ((S.crouch ? 1 : 0) - crouch) * (1 - Math.exp(-12 * dt));
+    const firing = !!S.fire && (fireT += dt) % 0.11 < 0.04;
+    return { pos: V3(0, 0, 0), vel: V3(0, 0, -S.speed), yaw: 0, pitch: 0, speed: S.speed, air: !!air, clipLift: true, crouch, aim, kick: firing ? 1 : 0, flash: firing };
+  };
+}
+const TSPAN = +(q.get('span') || 0.9);
 
 for (let r = 0; r < ROWS.length; r++) {
   const key = ROWS[r];
@@ -128,6 +143,17 @@ for (let r = 0; r < ROWS.length; r++) {
     }
     a.stop(); mx.uncacheRoot(runner.root); scene.remove(s.lines);
   } else {
+    if (key.includes('>')) {
+      const [A, B] = key.split('>').map((k) => STATES[k]); const drive = driver();
+      for (let i = 0; i < 150; i++) runner.update(1 / 60, drive(A, 1 / 60));
+      let t = 0;
+      for (let c = 0; c < COLS; c++) {
+        const until = TSPAN * c / (COLS - 1);
+        while (t < until - 1e-6) { runner.update(1 / 60, drive(B, 1 / 60)); t += 1 / 60; }
+        aimCam(V3(0, 0, 0)); cell(r, c);
+      }
+      continue;
+    }
     const S = STATES[key]; const sp = S.speed;
     let warm = true;
     const ctx = (air) => ({ pos: V3(0, 0, 0), vel: V3(0, 0, -sp), yaw: 0, pitch: 0, speed: sp, air, clipLift: true, crouch: S.fresh && warm ? 0 : S.crouch || 0, aim: S.aim || 0, kick: 0, flash: false });
@@ -146,6 +172,25 @@ for (let r = 0; r < ROWS.length; r++) {
 // numbers for a state: per frame, how far each wrist bends off its forearm (degrees), and how fast each
 // hand moves (m/s), so a jerk shows as a spike. window.measure('walk', 2) in the console.
 window.__T = { THREE, clips, runner };
+// a switch from one state to another: per frame, the acceleration (m/s^2) of each hand, elbow and foot, so
+// a snap shows as a spike. window.trans('walk', 'aimwalk')
+window.trans = (from, to, secs = 1.0) => {
+  const A = STATES[from], B = STATES[to], drive = driver();
+  const bone = (n) => { let b = null; runner.root.traverse((o) => { if (!b && o.isBone && o.name.endsWith(n)) b = o; }); return b; };
+  const parts = ['LeftHand', 'RightHand', 'LeftForeArm', 'RightForeArm', 'LeftFoot', 'RightFoot'], B_ = parts.map(bone);
+  const P = (o) => o.getWorldPosition(new THREE.Vector3());
+  const step = (S) => { runner.update(1 / 60, drive(S, 1 / 60)); runner.root.updateMatrixWorld(true); return B_.map(P); };
+  for (let i = 0; i < 150; i++) step(A);
+  // the steady state's own numbers, for comparison: the worst acceleration over a second of it
+  const acc = (seq) => { const out = parts.map(() => []); for (let i = 2; i < seq.length; i++) parts.forEach((_, j) => out[j].push(seq[i][j].clone().sub(seq[i - 1][j]).sub(seq[i - 1][j].clone().sub(seq[i - 2][j])).multiplyScalar(3600).length())); return out; };
+  const pre = []; for (let i = 0; i < 60; i++) pre.push(step(A));
+  const seq = [pre[58], pre[59]]; for (let i = 0; i < secs * 60; i++) seq.push(step(B));
+  const post = []; for (let i = 0; i < 60; i++) post.push(step(B));
+  const a0 = acc(pre), a1 = acc(seq), a2 = acc(post);
+  const r = {};
+  parts.forEach((k, j) => { r[k] = { steadyFrom: Math.round(Math.max(...a0[j])), steadyTo: Math.round(Math.max(...a2[j])), switch: Math.round(Math.max(...a1[j])), at: a1[j].indexOf(Math.max(...a1[j])) }; });
+  return r;
+};
 window.measure = (key, secs = 2) => {
   const S = STATES[key], sp = S.speed, bone = (n) => { let b = null; runner.root.traverse((o) => { if (!b && o.isBone && o.name.endsWith(n)) b = o; }); return b; };
   const P = (o) => o.getWorldPosition(new THREE.Vector3());
