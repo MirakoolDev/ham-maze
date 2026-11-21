@@ -100,6 +100,15 @@
     .vs-row span:nth-child(2)::before { content: "Then: "; }
     .vs-row span:nth-child(3)::before { content: "Now: "; color: var(--signal); font-weight: 600; }
   }
+  .tally-big { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; margin: 0; }
+  .tally-big div { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 22px 20px; min-width: 0; display: flex; flex-direction: column-reverse; justify-content: flex-end; gap: 10px; }
+  .tally-big dd { margin: 0; font: 900 44px/1 var(--heading); color: var(--cream); }
+  .tally-big dt { color: var(--muted); font-size: 14px; }
+  .shots { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px; margin-top: 14px; align-items: start; }
+  .shots figure { margin: 0; min-width: 0; }
+  .shots img { display: block; width: 100%; height: auto; border-radius: 14px; border: 1px solid var(--line); }
+  .shots figcaption { margin-top: 10px; color: var(--faint); font-size: 13px; }
+  @media (max-width: 860px) { .tally-big { grid-template-columns: repeat(2, minmax(0, 1fr)); } .shots { grid-template-columns: minmax(0, 1fr); } }
   .hero p.hero-note { margin-top: 18px; font-size: 15px; color: rgba(255, 250, 242, 0.85); }
   .back { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 18px; margin-top: 56px; align-items: start; }
   .perks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
@@ -631,7 +640,25 @@
         <div class="vs-row" role="row"><b role="rowheader">Where the money goes</b><span role="cell">There was no pot.</span><span role="cell">Every pot splits five ways: the top three, backers and the buyback, and tomorrow's pot.</span></div>
         <div class="vs-row" role="row"><b role="rowheader">The chain</b><span role="cell">B3, since retired.</span><span role="cell">Robinhood Chain, from December 2026.</span></div>
       </div>
-      <p class="then-note">Even as a quiet maze, the first HAM drew <b>133k plays</b> and <b>582 wallets</b> on chain through the Basement platform. Still checkable: <a href="https://dappradar.com/dapp/ham" target="_blank" rel="noopener">HAM on DappRadar</a> and <a href="https://base.blockscout.com/token/0xc81c65fcd3727fd56d410756f298d587ae226b82" target="_blank" rel="noopener">the first Polaroids contract on Base</a>.</p>
+      <div class="strip-head"><h3>The first HAM, in numbers</h3><span>A quiet solo maze, with no pot and nothing to win, on the Basement platform.</span></div>
+      <dl class="tally-big">
+        <div><dt>Plays</dt><dd>133k</dd></div>
+        <div><dt>Times added to a player's library</dt><dd>126k</dd></div>
+        <div><dt>Results minted on chain</dt><dd>1.4k</dd></div>
+        <div><dt>Wallets that played on chain</dt><dd>582</dd></div>
+        <div><dt>Hours spent in the maze</dt><dd>477</dd></div>
+      </dl>
+      <div class="shots">
+        <figure>
+          <img src="ham-v1-basement.jpg" alt="HAM's page on the Basement game platform: 80K plays, 382 hours and 75K mints on B3 mainnet" width="1129" height="572" loading="lazy">
+          <figcaption>HAM's page on Basement, partway through its run: 80K plays, 382 hours, 75K mints. It went on to 133k plays.</figcaption>
+        </figure>
+        <figure>
+          <img src="ham-v1-dappradar.jpg" alt="DappRadar chart of HAM's daily on-chain activity on B3, November 11 to December 23, 2024" width="725" height="506" loading="lazy">
+          <figcaption>DappRadar, HAM on B3, Nov 11 to Dec 23, 2024: up to 3,000 transactions a day.</figcaption>
+        </figure>
+      </div>
+      <p class="then-note">Figures from the Basement and DappRadar dashboards, recorded before B3 was retired. Still checkable: <a href="https://dappradar.com/dapp/ham" target="_blank" rel="noopener">HAM on DappRadar</a>, <a href="https://web.archive.org/web/20241205011845/https://dappradar.com/dapp/ham" target="_blank" rel="noopener">its archived listing from Dec 5, 2024</a>, and <a href="https://base.blockscout.com/token/0xc81c65fcd3727fd56d410756f298d587ae226b82" target="_blank" rel="noopener">the first Polaroids contract on Base</a>.</p>
     </div>
   </section>
 

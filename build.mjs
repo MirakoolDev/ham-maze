@@ -75,6 +75,8 @@ if (dev) {
   // the trailer's web copy (720p, recorded with node design/trailer/record.mjs --light) and its still before play
   fs.copyFileSync('assets/trailer-720.mp4', 'dist/trailer.mp4');
   fs.copyFileSync('assets/trailer-poster.jpg', 'dist/trailer-poster.jpg');
+  // the first HAM's screens on the story page (Basement and DappRadar, from before B3 was retired)
+  for (const f of ['ham-v1-basement.jpg', 'ham-v1-dappradar.jpg']) fs.copyFileSync(`assets/${f}`, `dist/${f}`);
   const page = (src, out, desc) => {
     let body = fs.readFileSync(src, 'utf8')
       .replace(/<meta name="claude:viewport-fit-sides"[^>]*>\s*/, '')
