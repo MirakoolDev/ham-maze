@@ -83,6 +83,18 @@
   .hero p { max-width: 58ch; margin: 0 auto; color: var(--muted); font-size: 18px; }
   .hero p b { color: var(--ink); font-weight: 500; }
   .trailer { margin: 64px auto 8px; max-width: 980px; }
+  .tally-big { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; margin: 48px 0 0; }
+  .tally-big div { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 22px 20px; min-width: 0; display: flex; flex-direction: column-reverse; justify-content: flex-end; gap: 10px; }
+  .tally-big dd { margin: 0; font: 900 44px/1 var(--heading); color: var(--cream); }
+  .tally-big dt { color: var(--muted); font-size: 14px; }
+  .source { margin: 14px 0 0; color: var(--faint); font-size: 13px; }
+  .proof { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 32px; }
+  .proof-card { display: flex; flex-direction: column; gap: 6px; padding: 20px 22px; border: 1px solid var(--line); border-radius: 18px; color: var(--muted); text-decoration: none; font-size: 14px; min-width: 0; transition: border-color 0.12s; }
+  .proof-card:hover { border-color: var(--cream); }
+  .proof-card b { color: var(--ink); font-size: 17px; font-weight: 600; }
+  .proof-card b::after { content: " \2197"; color: var(--cream); }
+  .proof-k { font-weight: 600; font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--holds); }
+  @media (max-width: 860px) { .tally-big { grid-template-columns: repeat(2, minmax(0, 1fr)); } .proof { grid-template-columns: minmax(0, 1fr); } }
   .hero p.hero-note { margin-top: 18px; font-size: 15px; color: rgba(255, 250, 242, 0.85); }
   .back { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 18px; margin-top: 56px; align-items: start; }
   .perks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
@@ -309,6 +321,7 @@
   <div class="wrap">
     <a class="mark" href="https://ham-maze.vercel.app" aria-label="HAM: play the game"><img src="brand/logo.png" alt="" width="30" height="31"><span>HAM</span></a>
     <nav class="links" aria-label="Sections">
+      <a href="#before">Played before</a>
       <a href="#back">Back it</a>
       <a href="#how">How it works</a>
       <a href="#scores">Scores</a>
@@ -355,6 +368,34 @@
     </div>
   </section>
 
+  <section class="block pad" id="before">
+    <div class="wrap">
+      <p class="kicker">Played before</p>
+      <h2>It already found its players.</h2>
+      <p class="intro">HAM's first version was the solo daily maze, played through the <b>Basement</b> game platform on <b>B3</b>, a gaming chain built on Base. B3 has since been retired, and its records went offline with it. While it ran:</p>
+      <dl class="tally-big">
+        <div><dt>Plays</dt><dd>133k</dd></div>
+        <div><dt>Times added to a player's library</dt><dd>126k</dd></div>
+        <div><dt>Results minted on chain</dt><dd>1.4k</dd></div>
+        <div><dt>Wallets that played on chain</dt><dd>582</dd></div>
+        <div><dt>Hours spent in the maze</dt><dd>477</dd></div>
+      </dl>
+      <p class="source">Figures from the Basement and DappRadar dashboards, recorded before B3 was retired.</p>
+      <div class="proof">
+        <a class="proof-card" href="https://dappradar.com/dapp/ham" target="_blank" rel="noopener">
+          <span class="proof-k">Still checkable</span>
+          <b>HAM on DappRadar</b>
+          <span>Listed on B3 and Base, ranked in Collectibles.</span>
+        </a>
+        <a class="proof-card" href="https://base.blockscout.com/token/0xc81c65fcd3727fd56d410756f298d587ae226b82" target="_blank" rel="noopener">
+          <span class="proof-k">Still checkable</span>
+          <b>HAM Polaroids on Base</b>
+          <span>The first test of minted results: 35 minted by 24 wallets, July 2024 to February 2025.</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
   <section class="block pad" id="back">
     <div class="wrap">
       <p class="kicker">Back HAM</p>
@@ -387,7 +428,7 @@
         <div>
           <h3>Built already</h3>
           <ul class="done">
-            <li><b>The game.</b> Playable in the browser today: the daily maze, sentries, the monolith, and a free practice mode.</li>
+            <li><b>The game.</b> Playable in the browser today: the daily maze, sentries, the monolith, and a free practice mode. Its first version drew 133k plays.</li>
             <li><b>The contracts.</b> Runs, Scores, the pot, settling and claims, with 73 tests passing on a test network.</li>
             <li><b>The Score art.</b> Drawn on chain from each day's real maze. <a href="#scores">Try it below</a>.</li>
             <li><b>The runner and the guns.</b> The character, her animations and the five Power-Ups, modelled and in the game.</li>
