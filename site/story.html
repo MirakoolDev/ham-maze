@@ -82,6 +82,9 @@
   h1 { font-weight: 500; font-size: clamp(44px, 8.6vw, 108px); line-height: 0.98; letter-spacing: -0.035em; margin: 30px auto 26px; max-width: 11.5ch; text-wrap: balance; }
   .hero p { max-width: 58ch; margin: 0 auto; color: var(--muted); font-size: 18px; }
   .hero p b { color: var(--ink); font-weight: 500; }
+  .trailer { margin: 64px auto 8px; max-width: 980px; }
+  .trailer video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; background: #000; border-radius: 14px; border: 1px solid var(--line); }
+  .trailer figcaption { margin-top: 12px; color: var(--muted); font-size: 13px; letter-spacing: 0.02em; }
   .ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 34px; }
 
   .flow { margin-top: 72px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); overflow-x: auto; }
@@ -310,6 +313,14 @@
         <a class="btn hot" href="https://ham-maze.vercel.app" target="_blank" rel="noopener">Play today's maze</a>
         <a class="btn" href="#how">How it works</a>
       </div>
+    </div>
+    <div class="wrap">
+      <figure class="trailer">
+        <video controls playsinline preload="none" poster="trailer-poster.jpg" width="1280" height="720" aria-label="HAM trailer: she runs the maze, fights the sentries and the Ember Shade, and reaches the monolith">
+          <source src="trailer.mp4" type="video/mp4">
+        </video>
+        <figcaption>The trailer · 49 seconds, sound on</figcaption>
+      </figure>
     </div>
     <div class="wrap">
       <div class="flow" id="flow" role="img" aria-label="Runs flow into the day's pot. The pot splits into 40, 20 and 10 percent for the top three Scores, 20 percent to the treasury and 10 percent into tomorrow's pot."></div>

@@ -72,6 +72,9 @@ if (dev) {
   // the game's own brand files, so the pages look like the game: logo, fonts, title-screen concrete
   fs.mkdirSync('dist/brand', { recursive: true });
   for (const [from, to] of [['logo.png', 'logo.png'], ['bread-island.otf', 'bread-island.otf'], ['cabinet-grotesk.otf', 'cabinet-grotesk.otf'], ['concrete_albedo.jpg', 'concrete.jpg']]) fs.copyFileSync(`assets/${from}`, `dist/brand/${to}`);
+  // the trailer's web copy (720p, recorded with node design/trailer/record.mjs --light) and its still before play
+  fs.copyFileSync('assets/trailer-720.mp4', 'dist/trailer.mp4');
+  fs.copyFileSync('assets/trailer-poster.jpg', 'dist/trailer-poster.jpg');
   const page = (src, out, desc) => {
     let body = fs.readFileSync(src, 'utf8')
       .replace(/<meta name="claude:viewport-fit-sides"[^>]*>\s*/, '')

@@ -486,12 +486,19 @@ if (q.get('sheet')) {
 } else if (q.get('record')) {
   status('scoring');
   const audio = await renderScore({ duration: DURATION, events: soundEvents(), cues: CUES, musicUrl: urls.music });
-  const mp4 = createMp4({ width: W, height: H, fps: FPS, sampleRate: 48000, channels: 2 });
+  // ?w=1280 records a smaller copy (scaled from the full frame), ?br= / ?abr= set the video and audio bitrates,
+  // ?poster=37.6 keeps that frame as a JPEG (window.__poster) for the page's still before play
+  const OW = +(q.get('w') || W), OH = Math.round((OW * H) / W) & ~1, VBR = +(q.get('br') || 16e6), ABR = +(q.get('abr') || 192000);
+  const posterF = q.get('poster') ? Math.round(+q.get('poster') * FPS) : -1;
+  const enc = OW === W ? out : Object.assign(document.createElement('canvas'), { width: OW, height: OH });
+  const eg = enc === out ? null : enc.getContext('2d');
+  if (eg) eg.imageSmoothingQuality = 'high';
+  const mp4 = createMp4({ width: OW, height: OH, fps: FPS, sampleRate: 48000, channels: 2 });
   const ve = new VideoEncoder({ output: (c, m) => mp4.addVideo(c, m), error: (e) => status('video error ' + e.message) });
   // variable bitrate, so a hard frame (a cut, an explosion) gets the bits it needs instead of going blocky
-  ve.configure({ codec: 'avc1.640028', width: W, height: H, bitrate: 16e6, bitrateMode: 'variable', latencyMode: 'quality', framerate: FPS, avc: { format: 'avc' } });
+  ve.configure({ codec: 'avc1.640028', width: OW, height: OH, bitrate: VBR, bitrateMode: 'variable', latencyMode: 'quality', framerate: FPS, avc: { format: 'avc' } });
   const ae = new AudioEncoder({ output: (c, m) => mp4.addAudio(c, m), error: (e) => status('audio error ' + e.message) });
-  ae.configure({ codec: 'mp4a.40.2', sampleRate: 48000, numberOfChannels: 2, bitrate: 192000 });
+  ae.configure({ codec: 'mp4a.40.2', sampleRate: 48000, numberOfChannels: 2, bitrate: ABR });
   // audio: planar float32 in 1024-sample frames
   const L = audio.getChannelData(0), R = audio.getChannelData(1);
   for (let i = 0; i < audio.length; i += 1024) {
@@ -503,7 +510,9 @@ if (q.get('sheet')) {
   let lastShot = -1, sinceKey = 0;
   for (let f = 0; f < frames; f++) {
     const T = f / FPS; seek(T); drawFrame(T);
-    const vf = new VideoFrame(out, { timestamp: Math.round((f * 1e6) / FPS), duration: Math.round(1e6 / FPS) });
+    if (eg) eg.drawImage(out, 0, 0, OW, OH);
+    if (f === posterF) window.__poster = enc.toDataURL('image/jpeg', 0.86);
+    const vf = new VideoFrame(enc, { timestamp: Math.round((f * 1e6) / FPS), duration: Math.round(1e6 / FPS) });
     // a fresh keyframe on every cut (built from the shot before, the first frames of a new shot came out blocky)
     const key = cur !== lastShot || sinceKey >= 60; lastShot = cur; sinceKey = key ? 1 : sinceKey + 1;
     ve.encode(vf, { keyFrame: key }); vf.close();
@@ -513,7 +522,7 @@ if (q.get('sheet')) {
   await ve.flush(); await ae.flush();
   const blob = mp4.finish();
   window.__mp4 = blob;
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'ham-trailer.mp4'; document.body.appendChild(a); a.click();
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = q.get('name') || 'ham-trailer.mp4'; document.body.appendChild(a); a.click();
   status(`done ${(blob.size / 1e6).toFixed(1)} MB`);
 } else {
   // live: press to play with sound
