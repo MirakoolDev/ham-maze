@@ -488,7 +488,8 @@ if (q.get('sheet')) {
   const audio = await renderScore({ duration: DURATION, events: soundEvents(), cues: CUES, musicUrl: urls.music });
   const mp4 = createMp4({ width: W, height: H, fps: FPS, sampleRate: 48000, channels: 2 });
   const ve = new VideoEncoder({ output: (c, m) => mp4.addVideo(c, m), error: (e) => status('video error ' + e.message) });
-  ve.configure({ codec: 'avc1.640028', width: W, height: H, bitrate: 16e6, framerate: FPS, avc: { format: 'avc' } });
+  // variable bitrate, so a hard frame (a cut, an explosion) gets the bits it needs instead of going blocky
+  ve.configure({ codec: 'avc1.640028', width: W, height: H, bitrate: 16e6, bitrateMode: 'variable', latencyMode: 'quality', framerate: FPS, avc: { format: 'avc' } });
   const ae = new AudioEncoder({ output: (c, m) => mp4.addAudio(c, m), error: (e) => status('audio error ' + e.message) });
   ae.configure({ codec: 'mp4a.40.2', sampleRate: 48000, numberOfChannels: 2, bitrate: 192000 });
   // audio: planar float32 in 1024-sample frames
@@ -499,10 +500,13 @@ if (q.get('sheet')) {
     ae.encode(new AudioData({ format: 'f32-planar', sampleRate: 48000, numberOfFrames: n, numberOfChannels: 2, timestamp: Math.round((i / 48000) * 1e6), data }));
   }
   const frames = Math.round(DURATION * FPS), t0 = performance.now();
+  let lastShot = -1, sinceKey = 0;
   for (let f = 0; f < frames; f++) {
     const T = f / FPS; seek(T); drawFrame(T);
     const vf = new VideoFrame(out, { timestamp: Math.round((f * 1e6) / FPS), duration: Math.round(1e6 / FPS) });
-    ve.encode(vf, { keyFrame: f % 60 === 0 }); vf.close();
+    // a fresh keyframe on every cut (built from the shot before, the first frames of a new shot came out blocky)
+    const key = cur !== lastShot || sinceKey >= 60; lastShot = cur; sinceKey = key ? 1 : sinceKey + 1;
+    ve.encode(vf, { keyFrame: key }); vf.close();
     while (ve.encodeQueueSize > 4) await new Promise((r) => setTimeout(r, 2));
     if (f % 15 === 0) { status(`frame ${f}/${frames} ${((performance.now() - t0) / 1000 / (f + 1)).toFixed(2)}s/f`); await new Promise((r) => setTimeout(r, 0)); }
   }
