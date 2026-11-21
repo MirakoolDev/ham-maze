@@ -83,6 +83,31 @@
   .hero p { max-width: 58ch; margin: 0 auto; color: var(--muted); font-size: 18px; }
   .hero p b { color: var(--ink); font-weight: 500; }
   .trailer { margin: 64px auto 8px; max-width: 980px; }
+  .hero p.hero-note { margin-top: 18px; font-size: 15px; color: rgba(255, 250, 242, 0.85); }
+  .back { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 18px; margin-top: 56px; align-items: start; }
+  .perks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .perk { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 22px; min-width: 0; }
+  .perk-n { display: block; font: 900 34px/1 var(--heading); color: var(--cream); margin-bottom: 14px; }
+  .perk h3 { margin: 0 0 8px; font-size: 17px; font-weight: 600; }
+  .perk p { margin: 0; color: var(--muted); font-size: 14px; }
+  .pass { background: var(--surface-2); border: 1px solid var(--cream); border-radius: 18px; padding: 24px; min-width: 0; }
+  .pass-k { margin: 0; font-weight: 600; font-size: 12px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--signal); }
+  .pass-price { margin: 10px 0 20px; font: 900 54px/1 var(--heading); color: var(--cream); }
+  .pass-price span { font: 600 18px var(--display); color: var(--muted); letter-spacing: 0.06em; }
+  .pass .btn { display: flex; justify-content: center; margin-top: 22px; }
+  .pass-note { margin: 14px 0 0; color: var(--faint); font-size: 13px; }
+  .stand { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px; margin-top: 64px; }
+  .stand h3 { margin: 0 0 14px; font-size: 18px; font-weight: 600; }
+  .stand ul { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+  .stand li { padding: 13px 0 13px 28px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 15px; position: relative; }
+  .stand li b { color: var(--ink); font-weight: 600; }
+  .stand li::before { position: absolute; left: 2px; top: 13px; font-weight: 700; }
+  .done li::before { content: "\2713"; color: var(--holds); }
+  .todo li::before { content: "\25CB"; color: var(--cream); }
+  .stand a, .risk a { color: var(--cream); }
+  .risk { margin: 36px 0 0; max-width: 70ch; color: var(--faint); font-size: 14px; }
+  @media (max-width: 860px) { .back, .stand { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 520px) { .perks { grid-template-columns: minmax(0, 1fr); } }
   .trailer video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; background: #000; border-radius: 14px; border: 1px solid var(--line); }
   .trailer figcaption { margin-top: 12px; color: var(--muted); font-size: 13px; letter-spacing: 0.02em; }
   .ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 34px; }
@@ -284,6 +309,7 @@
   <div class="wrap">
     <a class="mark" href="https://ham-maze.vercel.app" aria-label="HAM: play the game"><img src="brand/logo.png" alt="" width="30" height="31"><span>HAM</span></a>
     <nav class="links" aria-label="Sections">
+      <a href="#back">Back it</a>
       <a href="#how">How it works</a>
       <a href="#scores">Scores</a>
       <a href="#pot">The pot</a>
@@ -292,7 +318,7 @@
       <a href="#audit">Checklist</a>
       <a href="#words">Glossary</a>
     </nav>
-    <a class="btn hot" href="https://ham-maze.vercel.app" target="_blank" rel="noopener">Play today's maze</a>
+    <a class="btn hot" data-campaign href="#back">Back HAM</a>
   </div>
 </header>
 
@@ -306,12 +332,13 @@
 <main id="top">
   <section class="hero pad">
     <div class="wrap">
-      <span class="pill"><i></i><span id="nextMaze">A new maze every day at 00:00 UTC</span></span>
+      <span class="pill"><i></i><span>In testing now &middot; live on Robinhood Chain in December 2026</span></span>
       <h1>Home's a Maze.</h1>
-      <p><b>Find your way home.</b> HAM is an art project you can walk into: one maze a day, the same for everyone in the world. Get past the sentries and the other players to the orange <b>monolith</b> at its centre. That's home. Every run becomes an NFT that's yours to keep, and the first three home split the day's <b>pot</b>.</p>
+      <p><b>Find your way home.</b> HAM is an art project you can walk into: one maze a day, the same for everyone in the world. Get past the sentries and the other players to the orange <b>monolith</b> at its centre. That's home. When it goes live on Robinhood Chain, every run becomes an NFT that's yours to keep and the first three home split the day's <b>pot</b>.</p>
+      <p class="hero-note">The game is playable today as a free test build, with no wallet and no money. The campaign funds the real launch.</p>
       <div class="ctas">
-        <a class="btn hot" href="https://ham-maze.vercel.app" target="_blank" rel="noopener">Play today's maze</a>
-        <a class="btn" href="#how">How it works</a>
+        <a class="btn hot" data-campaign href="#back">Back the campaign</a>
+        <a class="btn" href="/practice" target="_blank" rel="noopener">Play the free test</a>
       </div>
     </div>
     <div class="wrap">
@@ -328,11 +355,64 @@
     </div>
   </section>
 
+  <section class="block pad" id="back">
+    <div class="wrap">
+      <p class="kicker">Back HAM</p>
+      <h2>Back it before it opens.</h2>
+      <p class="intro">HAM is raising on <b>FundingWorks</b> to launch on Robinhood Chain and ship one release a month for six months. A backer pass costs <b>0.05 ETH</b>. Backers share <b>10% of every day's pot</b> for the six months of the campaign.</p>
+
+      <div class="back">
+        <div class="perks">
+          <article class="perk"><span class="perk-n">10%</span><h3>Of every daily pot</h3><p>Every entry fee goes into the day's pot, and a tenth of each pot goes to backers, split across all passes, every day for six months.</p></article>
+          <article class="perk"><span class="perk-n">1</span><h3>Sealed Power-Up pack</h3><p>One of the five guns, sealed until you open it. Packs are sold once Power-Ups ship; backers get theirs free.</p></article>
+          <article class="perk"><span class="perk-n">&#9733;</span><h3>Backer skin and badge</h3><p>A runner look and a badge only backers have, shown in every run you play.</p></article>
+          <article class="perk"><span class="perk-n">&#8734;</span><h3>Your name in the credits</h3><p>Your ENS name in the game's credits, for as long as the game runs.</p></article>
+        </div>
+        <aside class="pass">
+          <p class="pass-k">The backer pass</p>
+          <p class="pass-price">0.05 <span>ETH</span></p>
+          <dl class="facts">
+            <div><dt>Passes</dt><dd>open, no cap</dd></div>
+            <div><dt>Mint window</dt><dd>7 days</dd></div>
+            <div><dt>Backers' share</dt><dd>10% of each pot</dd></div>
+            <div><dt>Paid for</dt><dd>6 months</dd></div>
+            <div><dt>Released to the build</dt><dd>20% now, the rest over 6 months</dd></div>
+          </dl>
+          <a class="btn hot" data-campaign href="#back">Back the campaign</a>
+          <p class="pass-note">Only a fifth of the raise is released up front. The rest streams to the build over six months, while the releases land.</p>
+        </aside>
+      </div>
+
+      <div class="stand">
+        <div>
+          <h3>Built already</h3>
+          <ul class="done">
+            <li><b>The game.</b> Playable in the browser today: the daily maze, sentries, the monolith, and a free practice mode.</li>
+            <li><b>The contracts.</b> Runs, Scores, the pot, settling and claims, with 73 tests passing on a test network.</li>
+            <li><b>The Score art.</b> Drawn on chain from each day's real maze. <a href="#scores">Try it below</a>.</li>
+            <li><b>The runner and the guns.</b> The character, her animations and the five Power-Ups, modelled and in the game.</li>
+            <li><b>The trailer above.</b> Rendered from the game itself, not mocked up.</li>
+          </ul>
+        </div>
+        <div>
+          <h3>What backing pays for</h3>
+          <ul class="todo">
+            <li><b>Launch on Robinhood Chain.</b> The real pot and real Scores, with backers paid from day one. December 2026.</li>
+            <li><b>Five more releases.</b> Power-Ups, rivals and crews, royale, replays and a season-final tournament. <a href="#roadmap">See the roadmap</a>.</li>
+            <li><b>An outside audit</b> of the contracts.</li>
+            <li><b>The $PFWA buyback</b> contract.</li>
+          </ul>
+        </div>
+      </div>
+      <p class="risk">Backing is a risk. The pot is only as big as the number of people who play, so the backers' share can be small, and nothing is audited yet. <a href="#audit">The checklist</a> says what holds and what doesn't.</p>
+    </div>
+  </section>
+
   <section class="block pad" id="how">
     <div class="wrap">
       <p class="kicker">How it works</p>
       <h2>Each run is a choice.</h2>
-      <p class="intro">A run costs the entry fee, and losing costs the same. There are no free retries and nothing happens on its own. You decide when to play, when to sell and when to claim.</p>
+      <p class="intro">How it works once it's live on Robinhood Chain. A run costs the entry fee, and losing costs the same. There are no free retries and nothing happens on its own. You decide when to play, when to sell and when to claim.</p>
 
       <div class="steps">
         <div class="step">
@@ -521,9 +601,9 @@
     <div class="wrap">
       <p class="kicker">Roadmap</p>
       <h2>Six months, one release a month.</h2>
-      <p class="intro">The daily run goes live first. Every month after adds one thing you can play, and each builds on the last.</p>
+      <p class="intro">This is what backing pays for. The daily run goes live first. Every month after adds one thing you can play, and each builds on the last.</p>
       <ol class="road">
-        <li class="now"><span class="when"><b>Month 1</b> Dec 2026</span><h3>The daily run, for real</h3><p>Same maze for everyone, on mainnet. Every run is a Score NFT and the top three split the pot each night.</p></li>
+        <li class="now"><span class="when"><b>Month 1</b> Dec 2026</span><h3>The daily run, for real</h3><p>Same maze for everyone, on Robinhood Chain. Every run is a Score NFT, the top three split the pot each night, and backers' 10% starts paying.</p></li>
         <li><span class="when"><b>Month 2</b> Jan 2027</span><h3>Power-Ups</h3><p>Five guns in sealed packs, each with its own move, carried into your runs.</p></li>
         <li><span class="when"><b>Month 3</b> Feb 2027</span><h3>Third person, rivals, crews</h3><p>See your runner, race other players' runs through the same maze, and earn more by playing as a crew.</p></li>
         <li><span class="when"><b>Month 4</b> Mar 2027</span><h3>Royale beta</h3><p>Many runners in one maze at once. First to the monolith takes the round.</p></li>
@@ -650,14 +730,10 @@
 
   // the lab
   const $ = (id) => document.getElementById(id);
-  // the hero pill: time until today's maze is retired and a new one drops
-  const tickNext = () => {
-    const left = 86400000 - (Date.now() % 86400000);
-    const h = Math.floor(left / 3600000), m = Math.floor(left / 60000) % 60;
-    $('nextMaze').textContent = `Today's maze ends in ${h}h ${String(m).padStart(2, '0')}m`;
-  };
-  tickNext();
-  setInterval(tickNext, 30000);
+  // the campaign's FundingWorks page: set it once the campaign is deployed, and every "Back" button opens it
+  // (until then they scroll to the Back HAM section)
+  const CAMPAIGN_URL = '';
+  if (CAMPAIGN_URL) document.querySelectorAll('[data-campaign]').forEach((a) => { a.href = CAMPAIGN_URL; a.target = '_blank'; a.rel = 'noopener'; });
   const iso = (d) => d.toISOString().slice(0, 10);
   $('labDate').value = iso(today);
   const clock = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
