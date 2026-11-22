@@ -46,6 +46,10 @@ contract HamRobinhood {
     uint256 public constant TREASURY_BPS = 1000; // the $PFWA buyback; holder bonus and referrals come out of this. The remaining 1000 rolls over
     uint256 public constant HOLDER_BONUS_BPS = 1000;
     uint256 public constant REFERRAL_BPS = 500;
+    /// Repeat runs: every run a wallet plays after its first that day keeps 8% fewer points,
+    /// never below 60%. The maze is the same all day, so a later run already knows the way.
+    uint256 public constant REPEAT_STEP_BPS = 800;
+    uint256 public constant REPEAT_FLOOR_BPS = 6000;
     uint256 public constant CREW_SIZE = 3; // referred players who played today, to unlock the crew bonus
     uint256 public constant CREW_REFERRAL_BPS = 1000; // replaces REFERRAL_BPS once CREW_SIZE is met
     uint256 public constant SETTLE_DELAY = 15 minutes;
@@ -86,7 +90,7 @@ contract HamRobinhood {
         uint64 day;
         address player;
         uint32 attempt;
-        uint32 points; // boosted points, as ranked
+        uint32 points; // points as ranked: the referee's points, boosted, then the repeat-run share
         uint32 timeMs;
         uint32 kills;
         bool completed; // reached the monolith, vs. a partial run that still scores on death
@@ -347,7 +351,7 @@ contract HamRobinhood {
         _countCrew(day, msg.sender);
 
         bool paid = _takePayment(day);
-        uint32 boosted = _boostPoints(r.points);
+        uint32 boosted = _rankedPoints(r.points, attempt);
         tokenId = _mintScore(day, msg.sender, attempt, boosted, r);
         _rank(_days[day], tokenId, boosted, r.timeMs);
         _notifyPowerUp(msg.sender, r.kills, r.completed);
@@ -391,9 +395,17 @@ contract HamRobinhood {
         return true;
     }
 
-    function _boostPoints(uint32 points) internal view returns (uint32 boosted) {
-        uint256 b = uint256(points) * (BPS + boostOf(msg.sender)) / BPS;
-        boosted = b > type(uint32).max ? type(uint32).max : uint32(b);
+    /// @notice The share of its points a run keeps, in bps, by the wallet's attempt that day
+    /// (0 = its first run): 10000, 9200, 8400, 7600, 6800, then 6000 for every run after.
+    function attemptShare(uint32 attempt) public pure returns (uint256) {
+        uint256 cut = uint256(attempt) * REPEAT_STEP_BPS;
+        return cut >= BPS - REPEAT_FLOOR_BPS ? REPEAT_FLOOR_BPS : BPS - cut;
+    }
+
+    /// The points a run ranks with: the holder/booster boost first, then the repeat-run share.
+    function _rankedPoints(uint32 points, uint32 attempt) internal view returns (uint32 ranked) {
+        uint256 b = uint256(points) * (BPS + boostOf(msg.sender)) * attemptShare(attempt) / (BPS * BPS);
+        ranked = b > type(uint32).max ? type(uint32).max : uint32(b);
     }
 
     /// @notice Add ETH to a day's pot (today or later), e.g. a sponsor top-up.
@@ -612,26 +624,29 @@ contract HamRobinhood {
             '{"name":"HAM Score #', idStr,
             '","description":"A played run of HAM. Whoever holds this NFT claims its prize if it ranks top 3 for the day, not necessarily whoever played it.",',
             '"image":"data:image/svg+xml;base64,', _base64(bytes(svg)), '",',
-            '"attributes":[{"trait_type":"Day","value":', _toString(s.day),
-            '},{"trait_type":"Points","value":', _toString(s.points),
-            '},{"trait_type":"Time (ms)","value":', _toString(s.timeMs),
-            '},{"trait_type":"Kills","value":', _toString(s.kills),
-            '},{"trait_type":"Completed","value":"', (s.completed ? "true" : "false"),
-            '"},{"trait_type":"Maze","value":"', (isSealed ? "Sealed" : "Developed"), '"}]}'
+            '"attributes":', _attributes(s, isSealed), '}'
         );
         return string.concat("data:application/json;base64,", _base64(bytes(json)));
     }
 
+    function _attributes(ScoreRecord memory s, bool isSealed) internal pure returns (string memory) {
+        return string.concat(
+            '[{"trait_type":"Day","value":', _toString(s.day),
+            '},{"trait_type":"Points","value":', _toString(s.points),
+            '},{"trait_type":"Run of the day","value":', _toString(uint256(s.attempt) + 1),
+            '},{"trait_type":"First try","value":"', (s.attempt == 0 ? "true" : "false"),
+            '"},{"trait_type":"Time (ms)","value":', _toString(s.timeMs),
+            '},{"trait_type":"Kills","value":', _toString(s.kills),
+            '},{"trait_type":"Completed","value":"', (s.completed ? "true" : "false"),
+            '"},{"trait_type":"Maze","value":"', (isSealed ? "Sealed" : "Developed"), '"}]'
+        );
+    }
+
+    /// A plain stand-in picture, only until HamScoreArt is set.
     function _plainSvg(ScoreRecord memory s, string memory idStr) internal pure returns (string memory) {
         return string.concat(
-            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">',
-            '<rect width="200" height="200" rx="28" fill="#2a2733"/>',
-            '<rect x="14" y="14" width="172" height="172" rx="20" fill="none" stroke="#9fe3ff" stroke-width="3"/>',
-            '<text x="100" y="78" font-family="monospace" font-size="24" font-weight="700" fill="#f6e4b4" text-anchor="middle">HAM SCORE</text>',
-            '<text x="100" y="112" font-family="monospace" font-size="15" fill="#9fe3ff" text-anchor="middle">', _toString(s.points), ' pts</text>',
-            '<text x="100" y="135" font-family="monospace" font-size="12" fill="#fffaf2" text-anchor="middle" opacity="0.8">Day ', _toString(s.day), s.completed ? unicode" · Monolith found" : unicode" · Signal lost", '</text>',
-            '<text x="100" y="178" font-family="monospace" font-size="11" fill="#fffaf2" text-anchor="middle" opacity="0.7">No. ', idStr, '</text>',
-            '</svg>'
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect width="200" height="200" fill="#2a2733"/>',
+            '<text x="100" y="104" font-family="monospace" font-size="13" fill="#f6e4b4" text-anchor="middle">HAM Score No. ', idStr, ': ', _toString(s.points), ' pts</text></svg>'
         );
     }
 

@@ -129,6 +129,54 @@ contract HamRobinhoodTest is Test {
         run.playRun{value: FEE}(HamRobinhood.RunResult({points: pts(100), timeMs: 100, kills: 2, completed: true}), sig, address(0));
     }
 
+    // ── repeat runs ─────────────────────────────────────────────────────────────
+    function test_attemptShareStepsDownToTheFloor() public view {
+        assertEq(run.attemptShare(0), 10000, "first run keeps everything");
+        assertEq(run.attemptShare(1), 9200);
+        assertEq(run.attemptShare(2), 8400);
+        assertEq(run.attemptShare(3), 7600);
+        assertEq(run.attemptShare(4), 6800);
+        assertEq(run.attemptShare(5), 6000, "sixth run hits the floor");
+        assertEq(run.attemptShare(50), 6000, "and stays there");
+    }
+
+    function test_repeatRunRanksWithFewerPoints() public {
+        uint256 first = play(alice, 100);
+        uint256 second = play(alice, 100); // the same result, played again
+        (,,, uint32 p1,,,) = run.scores(first);
+        (,,, uint32 p2,,,) = run.scores(second);
+        assertEq(p1, pts(100), "first run ranks with its full points");
+        assertEq(p2, uint32(uint256(pts(100)) * 9200 / 10000), "second run keeps 92%");
+    }
+
+    function test_firstTryCanOutrankALaterBetterRun() public {
+        for (uint256 i; i < 5; ++i) play(alice, 400); // five slow runs first
+        uint256 aliceSixth = play(alice, 80); // a much faster run, but her sixth today (60%)
+        uint256 bobFirst = play(bob, 100); // bob's only run
+        (,,,, uint256[3] memory topToken,,) = run.dayInfo(day);
+        assertEq(topToken[0], bobFirst, "bob's first try beats alice's faster sixth run");
+        assertEq(topToken[1], aliceSixth);
+    }
+
+    function test_aStrongRepeatRunCanStillWin() public {
+        play(alice, 300); // a weak first run
+        uint256 aliceSecond = play(alice, 100); // much better on the second try (92%)
+        play(bob, 150);
+        (,,,, uint256[3] memory topToken,,) = run.dayInfo(day);
+        assertEq(topToken[0], aliceSecond, "a strong second run still wins");
+    }
+
+    function test_repeatCountIsPerDay() public {
+        play(alice, 100);
+        play(alice, 100);
+        vm.warp(block.timestamp + 1 days);
+        day = run.currentDay();
+        uint256 t = play(alice, 100);
+        (,, uint32 attempt, uint32 p,,,) = run.scores(t);
+        assertEq(attempt, 0, "a new day starts the count again");
+        assertEq(p, pts(100));
+    }
+
     // ── ranking and settling ────────────────────────────────────────────────────
     function test_topThreeRankedByPoints() public {
         uint256 t1 = play(alice, 100); // fastest = most points
