@@ -19,6 +19,12 @@ const ABI = [
   'event Entered(uint256 indexed day, address indexed player, uint32 attempt, bool free, uint256 paid)',
   'event RunSubmitted(uint256 indexed day, address indexed player, uint32 attempt, uint32 points, uint32 boosted, uint32 timeMs, bool best)',
 ];
+// The repeat-run rule (HamRobinhood): each run after a wallet's first that day keeps fewer points.
+const REPEAT_ABI = [
+  'function currentDay() view returns (uint256)',
+  'function attempts(uint256,address) view returns (uint32)',
+  'function attemptShare(uint32) view returns (uint256)',
+];
 const NFT_ABI = [
   'function mint() returns (uint256)',
   'function balanceOf(address) view returns (uint256)',
@@ -142,6 +148,21 @@ export const chain = {
       const short = need > 0n ? `${formatEther(need)} ETH plus gas` : 'enough ETH for gas';
       throw new Error(`Your wallet only has ${formatEther(have)} ETH on ${CHAIN.name}, which isn't enough (needs ${short}).${CHAIN.testnet ? ' Get more from the Aurora faucet: aurora.dev/faucet' : ''}`);
     }
+  },
+
+  /**
+   * The connected wallet's next run today and the share of its points that run keeps, e.g.
+   * { run: 3, pct: 84 }. Null where the contract has no repeat-run rule (the Aurora test contract)
+   * or the chain can't be read, so callers simply say nothing.
+   */
+  async nextRun(account = this.account) {
+    if (!account || !this.enabled()) return null;
+    const k = new Contract(CHAIN.contract, REPEAT_ABI, new JsonRpcProvider(CHAIN.rpc, CHAIN.id, { staticNetwork: true }));
+    try {
+      const attempt = await k.attempts(await k.currentDay(), account);
+      const bps = await k.attemptShare(attempt);
+      return { run: Number(attempt) + 1, pct: Number(bps) / 100 };
+    } catch { return null; }
   },
 
   /** Pay for one run. Returns the ticket { day, attempt } the run will be recorded against. */
