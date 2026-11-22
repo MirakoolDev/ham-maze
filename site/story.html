@@ -109,7 +109,7 @@
   .shots img { display: block; width: 100%; height: auto; border-radius: 14px; border: 1px solid var(--line); }
   .shots figcaption { margin-top: 10px; color: var(--faint); font-size: 13px; }
   @media (max-width: 860px) { .tally-big { grid-template-columns: repeat(2, minmax(0, 1fr)); } .shots { grid-template-columns: minmax(0, 1fr); } }
-  .hero p.hero-note { margin-top: 18px; font-size: 15px; color: rgba(255, 250, 242, 0.85); }
+  .hero p.hero-note { margin-top: 18px; font-size: 15px; color: var(--faint); }
   .back { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 56px; margin-top: 48px; align-items: start; }
   .back-main { min-width: 0; }
   .back-h { margin: 0 0 6px; font-weight: 600; font-size: 12px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--muted); }
@@ -281,8 +281,8 @@
     .gloss dd { padding-top: 0; }
   }
 
-  /* ── The game's own look (src/ui.css): plum ink, bone text, Bread Island headings in cream,
-     Cabinet Grotesk everywhere else, a concrete panel like the title screen, cream buttons, pink signal. ── */
+  /* ── The game's look, kept clean: plum and cream in the dark, bone paper and plum ink in the light.
+     It follows the device's own light or dark setting. No textures. ── */
   :root {
     --bg: #2a2733;
     --surface: #332f3e;
@@ -290,41 +290,64 @@
     --line: rgba(255, 250, 242, 0.14);
     --ink: #fffaf2;
     --muted: rgba(255, 250, 242, 0.72);
-    --faint: rgba(255, 250, 242, 0.46);
+    --faint: rgba(255, 250, 242, 0.5);
     --cream: #f6e4b4;
+    --cream-hover: #fff1cc;
     --signal: #ff8fa6;
     --orange: #ff8fa6;
     --orange-soft: #ffb0c0;
+    --holds: #8fe0b0;
+    --partly: #ffc56b;
+    --notyet: #8f8a99;
+    --nav-bg: rgba(42, 39, 51, 0.9);
+    --logo-filter: drop-shadow(0 1px 4px rgba(20, 16, 30, 0.4));
+    --panel: #2a2733;
+    --panel-line: rgba(255, 250, 242, 0.1);
     --heading: 'Bread Island', Georgia, 'Times New Roman', serif;
     --display: 'Cabinet Grotesk', 'Segoe UI', system-ui, sans-serif;
     --mono: 'Cabinet Grotesk', 'Segoe UI', system-ui, sans-serif;
-    --concrete: linear-gradient(rgba(176, 156, 134, 0.34), rgba(176, 156, 134, 0.34)), url('brand/concrete.jpg') 0 0 / 520px repeat, #8a837b;
-    /* the maze walls: pink faces and pale blue faces, the same concrete underneath, as lit in the game */
-    --wall-pink: linear-gradient(rgba(214, 150, 180, 0.62), rgba(214, 150, 180, 0.62)), url('brand/concrete.jpg') 0 0 / 520px repeat, #b4889f;
-    --wall-blue: linear-gradient(rgba(140, 180, 224, 0.6), rgba(140, 180, 224, 0.6)), url('brand/concrete.jpg') 0 0 / 520px repeat, #8fa9c9;
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f7f2ea;
+      --surface: #fffcf6;
+      --surface-2: #efe8dd;
+      --line: rgba(42, 39, 51, 0.12);
+      --ink: #2a2733;
+      --muted: rgba(42, 39, 51, 0.74);
+      --faint: rgba(42, 39, 51, 0.54);
+      --cream: #2a2733;
+      --cream-hover: #403a4d;
+      --signal: #c93f66;
+      --orange: #c93f66;
+      --orange-soft: #b6355a;
+      --holds: #1f7f52;
+      --partly: #9a6500;
+      --notyet: #857f8f;
+      --nav-bg: rgba(247, 242, 234, 0.9);
+      --logo-filter: brightness(0) opacity(0.82);
+      color-scheme: light;
+    }
   }
   body { font-feature-settings: "tnum"; }
-  body::before, header.nav { background: rgba(42, 39, 51, 0.9); }
+  body::before, header.nav { background: var(--nav-bg); }
   .mark { display: inline-flex; align-items: center; gap: 10px; font: 900 20px/1 var(--heading); letter-spacing: 0.12em; color: var(--cream); }
-  .mark img { width: 30px; height: auto; display: block; filter: drop-shadow(0 1px 4px rgba(20, 16, 30, 0.4)); }
+  .mark img { width: 30px; height: auto; display: block; filter: var(--logo-filter); }
   h1, h2, .step h3 { font-family: var(--heading); color: var(--cream); letter-spacing: 0.01em; font-weight: 900; }
   h1 { line-height: 0.95; }
   /* a subtle bevel: light along the top edge, a soft shade along the bottom, a small drop */
-  .btn { border-radius: 10px; font-weight: 600; text-shadow: none;
-    box-shadow: inset 0 1px 0 rgba(255, 250, 242, 0.16), inset 0 -1px 0 rgba(0, 0, 0, 0.18), 0 1px 2px rgba(20, 16, 30, 0.25);
+  .btn { border-radius: 10px; font-weight: 600;
+    box-shadow: inset 0 1px 0 rgba(255, 250, 242, 0.16), inset 0 -1px 0 rgba(0, 0, 0, 0.12), 0 1px 2px rgba(20, 16, 30, 0.18);
     transition: transform 0.08s, box-shadow 0.12s, background 0.12s; }
   .btn.hot, .seg input:checked + label { background: var(--cream); border-color: var(--cream); color: var(--bg);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75), inset 0 -2px 0 rgba(120, 96, 52, 0.18), 0 1px 2px rgba(20, 16, 30, 0.3), 0 4px 14px rgba(20, 16, 30, 0.18); }
-  .btn.hot:hover { background: #fff1cc; border-color: #fff1cc; }
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), inset 0 -2px 0 rgba(0, 0, 0, 0.14), 0 1px 2px rgba(20, 16, 30, 0.24), 0 4px 14px rgba(20, 16, 30, 0.14); }
+  .btn.hot:hover { background: var(--cream-hover); border-color: var(--cream-hover); }
   .btn:active { transform: translateY(1px); box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2); }
   .kicker, .chip { color: var(--signal); }
-  /* the hero sits on the title screen's concrete */
-  .hero { background: var(--wall-pink); padding-bottom: 72px; text-shadow: 0 1px 2px rgba(40, 32, 60, 0.45), 0 2px 12px rgba(40, 32, 60, 0.3); }
-  .hero p { color: rgba(255, 250, 242, 0.92); }
-  .hero .pill { border-color: rgba(255, 250, 242, 0.38); color: var(--ink); background: rgba(42, 39, 51, 0.28); }
-  .hero .btn:not(.hot) { border-color: rgba(255, 250, 242, 0.5); background: rgba(42, 39, 51, 0.3); }
-  .hero .flow { background: var(--bg); text-shadow: none; border-radius: 14px; border: none; margin-top: 64px; }
-  .hero .flow-cap { color: rgba(255, 250, 242, 0.9); }
+  /* the flow chart is a dark screen in both themes, like the trailer beside it */
+  .hero { padding-bottom: 72px; }
+  .hero .flow { background: var(--panel); border: 1px solid var(--panel-line); border-radius: 14px; margin-top: 64px; }
 </style>
 
 <header class="nav pad">
