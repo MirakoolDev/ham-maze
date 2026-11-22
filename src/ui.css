@@ -297,6 +297,8 @@ kbd { font: 500 11px/1 var(--f-label); color: #5b5866; background: #fff; border:
 .m-chain option { color: #2a2733; }
 .m-podium { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; font: 500 13px/1.35 var(--f-label); font-variant-numeric: tabular-nums; }
 .m-podium li { display: flex; justify-content: space-between; gap: 8px; }
+.m-repeat { margin: 2px 0 0; font: 500 12px/1.45 var(--f-label); color: var(--bone); opacity: .9; }
+.m-repeat b { font-weight: 700; }
 .m-status { min-height: 1.2em; margin: 10px 0 0; font: 500 13px/1.45 var(--f-label); color: var(--bone); }
 .m-status:empty { display: none; }
 .m-status[data-kind="bad"] { color: #ffc2c2; }

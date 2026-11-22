@@ -149,6 +149,7 @@ const $q = (s) => document.querySelector(s);
 const OFFCHAIN = CFG.preview || CFG.practice; // admin previews and /practice never touch the chain
 const potBox = $q('.m-pot'), potBtn = $q('[data-act="play-pot"]'), practiceBtn = $q('[data-act="deploy"]');
 const powerupBox = $q('.m-powerup'), powerupK = $q('.m-powerup-k'), mintBtn = $q('[data-act="mint-powerup"]');
+const repeatNote = $q('.m-repeat');
 const titleStatus = $q('.m-title-status'), runStatus = $q('.m-run-status'), retrySubmit = $q('[data-act="submit-run"]');
 const setStatus = (el, msg, kind = '') => { el.textContent = msg; el.dataset.kind = kind; };
 const errText = (e) => {
@@ -185,6 +186,18 @@ async function refreshPot() {
     potBtn.textContent = `Play for the pot · ${Number(t.fee)} ETH`;
   } catch { v.textContent = 'Could not reach the chain'; }
   refreshPowerup();
+  refreshRepeat();
+}
+
+// Repeat runs: say what the next paid run counts for before anyone pays for it. Only where the
+// contract has the rule (nextRun is null otherwise) and a wallet is connected.
+const repeatLine = (n) => n.run > 1
+  ? `Run ${n.run} today: your points count at <b>${n.pct}%</b>. Every run after your first keeps 8% less, down to 60%.`
+  : 'Your first run today counts in full. Every run after it keeps 8% less, down to 60%.';
+async function refreshRepeat() {
+  const n = await chain.nextRun();
+  repeatNote.hidden = !n;
+  if (n) repeatNote.innerHTML = repeatLine(n);
 }
 
 async function refreshPowerup() {
@@ -222,7 +235,8 @@ async function recordRun() {
     if (!pendingSigned) { setStatus(runStatus, 'Checking your run with the referee…'); pendingSigned = await chain.check(ticket, lastRun); }
     setStatus(runStatus, `The referee signed ${pendingSigned.points.toLocaleString('en-US')} points. Confirm in your wallet to record them on ${chain.info.name}…`);
     const out = await chain.submit(pendingSigned);
-    const boosted = out.boosted > pendingSigned.points ? ` (boosted to ${out.boosted.toLocaleString('en-US')})` : '';
+    const boosted = out.boosted > pendingSigned.points ? ` (boosted to ${out.boosted.toLocaleString('en-US')})`
+      : out.boosted < pendingSigned.points ? ` (counts as ${out.boosted.toLocaleString('en-US')}: run ${pendingSigned.attempt + 1} today keeps less)` : '';
     setStatus(runStatus, `Recorded on ${chain.info.name}: ${pendingSigned.points.toLocaleString('en-US')} points${boosted}. ${out.best ? 'That is your best today.' : 'Your best today is still higher.'}`, 'ok');
     ticket = null; pendingSigned = null; refreshPot();
   } catch (e) {
@@ -237,7 +251,9 @@ hud.on('play-pot', async () => {
   try {
     setStatus(titleStatus, 'Connect your wallet…');
     await chain.connect();
-    setStatus(titleStatus, 'Confirm the entry in your wallet…');
+    const next = await chain.nextRun();
+    if (next) repeatNote.innerHTML = repeatLine(next), repeatNote.hidden = false;
+    setStatus(titleStatus, `${next && next.run > 1 ? `Run ${next.run} today, so your points count at ${next.pct}%. ` : ''}Confirm the entry in your wallet…`);
     ticket = await chain.enter();
     setStatus(titleStatus, `Paid. This is your run ${ticket.attempt + 1} today; retries are free until you reach the monolith.`, 'ok');
     potBtn.textContent = 'Continue your paid run';
