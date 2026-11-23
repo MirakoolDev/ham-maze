@@ -16,6 +16,7 @@ import { CFG } from './config.js';
 import { setCellSize, CELL } from './world.js';
 import { CHAINS, CHAIN_KEY, setChain } from './config.js';
 import { chain } from './chain.js';
+import { formatEther } from 'ethers';
 import { scoreRun, shortestMetres } from './score.js';
 import { createRunner, createThirdCam } from './runner.js';
 
@@ -132,7 +133,7 @@ function resume() {
 function complete() {
   setMode('complete'); state.timerOn = false; input.unlock();
   audio.win(); world.celebrate();
-  const run = { timeMs: Math.round(state.elapsed * 1000), walked: player.walked, kills: enemies.kills, rivals: 0 };
+  const run = { timeMs: Math.round(state.elapsed * 1000), walked: player.walked, kills: enemies.kills, rivals: 0, completed: true };
   const score = scoreRun(run, SHORTEST);
   const stats = { time: state.elapsed, walked: player.walked, retries: state.retries, kills: enemies.kills, acc: weapon.shots ? weapon.hits / weapon.shots : 0, score };
   lastRun = run; pendingSigned = null;
@@ -164,7 +165,7 @@ const errText = (e) => {
 };
 
 const chainSel = $q('.m-chain');
-for (const [k, c] of Object.entries(CHAINS)) chainSel.add(new Option(c.name + (c.contract ? '' : ' (soon)'), k, false, k === CHAIN_KEY));
+for (const [k, c] of Object.entries(CHAINS)) if (!c.dev || k === CHAIN_KEY) chainSel.add(new Option(c.name + (c.contract ? '' : ' (soon)'), k, false, k === CHAIN_KEY));
 chainSel.addEventListener('change', () => setChain(chainSel.value));
 potBox.hidden = OFFCHAIN;
 if (CFG.practice) {
@@ -233,6 +234,18 @@ async function recordRun() {
   retrySubmit.hidden = true;
   try {
     if (!pendingSigned) { setStatus(runStatus, 'Checking your run with the referee…'); pendingSigned = await chain.check(ticket, lastRun); }
+    if (ticket.payAfter) {
+      // HamRobinhood: this one call pays the fee (or uses a holder's free run), mints the Score and ranks it
+      const fee = await chain.feeNow();
+      const pay = fee > 0n ? `pay ${formatEther(fee)} ETH and record` : 'record (your free holder run)';
+      setStatus(runStatus, `The referee signed ${pendingSigned.points.toLocaleString('en-US')} points. Confirm in your wallet to ${pay} them on ${chain.info.name}…`);
+      const out = await chain.playRun(pendingSigned);
+      const counted = out.boosted === pendingSigned.points ? ''
+        : ` (counts as ${out.boosted.toLocaleString('en-US')}${out.boosted < pendingSigned.points ? `: run ${pendingSigned.attempt + 1} today keeps less` : ' with your boost'})`;
+      setStatus(runStatus, `Recorded on ${chain.info.name}: ${pendingSigned.points.toLocaleString('en-US')} points${counted}. Your Score is No. ${out.tokenId}.`, 'ok');
+      ticket = null; pendingSigned = null; potBtn.textContent = 'Play for the pot'; refreshPot();
+      return;
+    }
     setStatus(runStatus, `The referee signed ${pendingSigned.points.toLocaleString('en-US')} points. Confirm in your wallet to record them on ${chain.info.name}…`);
     const out = await chain.submit(pendingSigned);
     const boosted = out.boosted > pendingSigned.points ? ` (boosted to ${out.boosted.toLocaleString('en-US')})`
@@ -253,6 +266,13 @@ hud.on('play-pot', async () => {
     await chain.connect();
     const next = await chain.nextRun();
     if (next) repeatNote.innerHTML = repeatLine(next), repeatNote.hidden = false;
+    if (chain.payAfter()) {
+      // HamRobinhood: nothing to pay yet. Play first; reaching the monolith offers to pay and record the run.
+      ticket = await chain.ticketForLater();
+      setStatus(titleStatus, `${next && next.run > 1 ? `Run ${next.run} today, so your points count at ${next.pct}%. ` : ''}You pay when you record the run, after you reach the monolith.`, 'ok');
+      state.retries = 0; startRun();
+      return;
+    }
     setStatus(titleStatus, `${next && next.run > 1 ? `Run ${next.run} today, so your points count at ${next.pct}%. ` : ''}Confirm the entry in your wallet…`);
     ticket = await chain.enter();
     setStatus(titleStatus, `Paid. This is your run ${ticket.attempt + 1} today; retries are free until you reach the monolith.`, 'ok');

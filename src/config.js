@@ -3,12 +3,16 @@
 // ?preview&mazeSize=16&cellSize=9... overrides them locally (the admin page's preview link), and such runs never count.
 // ?chain=aurora-testnet picks the chain (remembered for next time).
 
-// The same contract is deployed on each chain; each has its own pot and leaderboard. Fill in `contract` after
-// deploying. `powerup` is the HamPowerUp NFT, if one is deployed and registered as a booster on that chain.
+// Each chain has its own pot and leaderboard. Fill in `contract` after deploying. `powerup` is the HamPowerUp NFT,
+// if one is deployed and registered as a booster on that chain. `flow` says which game contract runs there:
+// 'daily' is HamDailyRun (pay to enter, play, then submit the score); 'robinhood' is HamRobinhood (play first,
+// then one playRun call pays, mints the Score and ranks it). `dev` chains never show in the chain picker.
 export const CHAINS = {
   'aurora-testnet': { id: 1313161555, name: 'Aurora Testnet', rpc: 'https://testnet.aurora.dev', explorer: 'https://explorer.testnet.aurora.dev', contract: '0xa05A8D95a26c7CD12d4Ae26CBbE8906c92FA1869', powerup: '0xe28b8E86028dED8D25b6B3800027032da37922a1', testnet: true },
   aurora: { id: 1313161554, name: 'Aurora', rpc: 'https://mainnet.aurora.dev', explorer: 'https://explorer.aurora.dev', contract: '', powerup: '' },
-  robinhood: { id: 4663, name: 'Robinhood Chain', rpc: 'https://rpc.mainnet.chain.robinhood.com', explorer: 'https://explorer.chain.robinhood.com', contract: '', powerup: '' },
+  robinhood: { id: 4663, name: 'Robinhood Chain', rpc: 'https://rpc.mainnet.chain.robinhood.com', explorer: 'https://explorer.chain.robinhood.com', contract: '', powerup: '', flow: 'robinhood' },
+  // a local anvil running HamRobinhood, for testing: ?chain=local&contract=0x... (the referee reads HAM_CONTRACT_LOCAL)
+  local: { id: 31337, name: 'Local test chain', rpc: 'http://127.0.0.1:8545', explorer: '', contract: '', powerup: '', flow: 'robinhood', testnet: true, dev: true },
 };
 export const DEFAULT_CHAIN = 'aurora-testnet';
 
@@ -20,6 +24,15 @@ function pickChain() {
 }
 export const CHAIN_KEY = typeof location === 'undefined' ? DEFAULT_CHAIN : pickChain();
 export const CHAIN = CHAINS[CHAIN_KEY];
+export const FLOW = CHAIN.flow || 'daily';
+// a dev chain takes its contract from ?contract= (remembered), since it changes with every local deploy
+if (CHAIN.dev && typeof location !== 'undefined') {
+  try {
+    const c = new URLSearchParams(location.search).get('contract');
+    if (c && /^0x[0-9a-fA-F]{40}$/.test(c)) localStorage.setItem('ham.devContract', c);
+    CHAIN.contract = localStorage.getItem('ham.devContract') || '';
+  } catch {}
+}
 export function setChain(key) {
   try { localStorage.setItem('ham.chain', key); } catch {}
   const u = new URL(location.href); u.searchParams.set('chain', key); location.href = u.toString();

@@ -1,7 +1,9 @@
-// Wallet and contract calls for paid runs: enter (pay the fee), ask the referee to check the run, submit the signed
-// score. Practice runs never touch this.
+// Wallet and contract calls for paid runs. Practice runs never touch this. Two contracts, by the chain's `flow`:
+//   daily (HamDailyRun):    enter (pay the fee), play, the referee checks the run, submitRun records it.
+//   robinhood (HamRobinhood): play first, the referee checks the run, then one playRun call pays the fee (or uses
+//                           a holder's free run), mints the Score NFT and ranks it.
 import { BrowserProvider, JsonRpcProvider, Contract, formatEther, isAddress, getAddress, ZeroAddress } from 'ethers';
-import { CHAIN, CHAIN_KEY } from './config.js';
+import { CHAIN, CHAIN_KEY, FLOW } from './config.js';
 import { pickProvider } from './wallet.js';
 
 const ABI = [
@@ -18,6 +20,17 @@ const ABI = [
   'error TooEarly()', 'error AlreadySettled()', 'error NotSettled()', 'error ClaimClosed()', 'error NothingToClaim()',
   'event Entered(uint256 indexed day, address indexed player, uint32 attempt, bool free, uint256 paid)',
   'event RunSubmitted(uint256 indexed day, address indexed player, uint32 attempt, uint32 points, uint32 boosted, uint32 timeMs, bool best)',
+];
+const RH_ABI = [
+  'function entryFee() view returns (uint256)',
+  'function currentDay() view returns (uint256)',
+  'function dayInfo(uint256) view returns (uint256 pot, uint256 unclaimed, uint256 settledAt, uint256 entryCount, uint256[3] topToken, uint32[3] topPoints, uint32[3] topTime)',
+  'function scores(uint256) view returns (uint64 day, address player, uint32 attempt, uint32 points, uint32 timeMs, uint32 kills, bool completed)',
+  'function isHolder(address) view returns (bool)',
+  'function freeRunUsed(uint256,address) view returns (bool)',
+  'function playRun(tuple(uint32 points, uint32 timeMs, uint32 kills, bool completed) r, bytes signature, address referrer) payable returns (uint256)',
+  'error WrongFee()', 'error BadSignature()', 'error DayClosed()', 'error BadTime()', 'error Paused()',
+  'event RunPlayed(uint256 indexed day, address indexed player, uint32 attempt, uint256 tokenId, uint32 points, uint32 boosted, uint32 timeMs, bool paid)',
 ];
 // The repeat-run rule (HamRobinhood): each run after a wallet's first that day keeps fewer points.
 const REPEAT_ABI = [
@@ -41,12 +54,14 @@ const short = (a) => a.slice(0, 6) + '…' + a.slice(-4);
 export const chain = {
   key: CHAIN_KEY, info: CHAIN, account: null, signer: null,
   enabled: () => !!CHAIN.contract,
+  /** True on HamRobinhood chains: play first, then pay and record in one call. */
+  payAfter: () => FLOW === 'robinhood',
   hasWallet: () => typeof window !== 'undefined' && !!window.ethereum,
   powerupEnabled: () => !!CHAIN.powerup,
   short,
   explorerTx: (h) => `${CHAIN.explorer}/tx/${h}`,
 
-  reader() { return new Contract(CHAIN.contract, ABI, new JsonRpcProvider(CHAIN.rpc, CHAIN.id, { staticNetwork: true })); },
+  reader() { return new Contract(CHAIN.contract, this.payAfter() ? RH_ABI : ABI, new JsonRpcProvider(CHAIN.rpc, CHAIN.id, { staticNetwork: true })); },
 
   // Connecting again (another run, another day) reuses this instead of re-prompting the wallet
   // every time: same provider, same account, as long as nothing actually needs fixing.
@@ -94,9 +109,13 @@ export const chain = {
     const k = this.reader();
     const day = await k.currentDay();
     const [info, fee] = await Promise.all([k.dayInfo(day), k.entryFee()]);
+    // HamRobinhood ranks Score tokens, not wallets: look up who played each of the top three
+    const who = this.payAfter()
+      ? await Promise.all(info.topToken.map(async (t) => (t === 0n ? ZeroAddress : (await k.scores(t)).player)))
+      : info.top;
     return {
       day: Number(day), fee: formatEther(fee), pot: formatEther(info.pot), entries: Number(info.entryCount),
-      top: info.top.map((a, i) => ({ who: a, points: Number(info.topPoints[i]), timeMs: Number(info.topTime[i]) })).filter((t) => t.who !== ZeroAddress),
+      top: who.map((a, i) => ({ who: a, points: Number(info.topPoints[i]), timeMs: Number(info.topTime[i]) })).filter((t) => t.who !== ZeroAddress),
     };
   },
 
@@ -165,13 +184,55 @@ export const chain = {
     } catch { return null; }
   },
 
+  /** Who referred this player (?ref=0x...), or the zero address. */
+  _referrer() {
+    let ref = null;
+    try { ref = new URLSearchParams(location.search).get('ref'); } catch {}
+    return ref && isAddress(ref) ? getAddress(ref) : ZeroAddress;
+  },
+
+  /**
+   * HamRobinhood: a ticket for a run that is paid for at the end, { day, attempt, payAfter: true }. Nothing is
+   * sent; it only connects the wallet so the referee can sign for it once the run is over.
+   */
+  async ticketForLater() {
+    await this.connect();
+    const k = this.reader();
+    const day = Number(await k.currentDay());
+    const next = await this.nextRun();
+    return { day, attempt: next ? next.run - 1 : 0, payAfter: true };
+  },
+
+  /** HamRobinhood: what recording a run costs this wallet right now, in wei (0 for a holder's free run). */
+  async feeNow() {
+    const k = this.reader();
+    const day = await k.currentDay();
+    const [fee, holder, used] = await Promise.all([k.entryFee(), k.isHolder(this.account), k.freeRunUsed(day, this.account)]);
+    return holder && !used ? 0n : fee;
+  },
+
+  /** HamRobinhood: pay (or use the free run), record the signed run and mint its Score, all in one call. */
+  async playRun(signed) {
+    await this.connect();
+    const k = new Contract(CHAIN.contract, RH_ABI, this.signer);
+    const value = await this.feeNow();
+    await this._checkBalance(value);
+    const tx = await k.playRun([signed.points, signed.timeMs, signed.kills, signed.completed], signed.signature, this._referrer(), { value });
+    const rc = await tx.wait();
+    for (const log of rc.logs) {
+      try {
+        const ev = k.interface.parseLog(log);
+        if (ev?.name === 'RunPlayed') return { boosted: Number(ev.args.boosted), tokenId: Number(ev.args.tokenId), paid: ev.args.paid, tx: tx.hash };
+      } catch {}
+    }
+    throw new Error('The run went through but its receipt had no RunPlayed event');
+  },
+
   /** Pay for one run. Returns the ticket { day, attempt } the run will be recorded against. */
   async enter() {
     await this.connect(); // cheap if already connected and on the right chain; fixes it otherwise
     const k = new Contract(CHAIN.contract, ABI, this.signer);
-    let ref = null;
-    try { ref = new URLSearchParams(location.search).get('ref'); } catch {}
-    const referrer = ref && isAddress(ref) ? getAddress(ref) : ZeroAddress;
+    const referrer = this._referrer();
     const fee = await k.entryFee();
     await this._checkBalance(fee);
     const tx = await k.enter(referrer, { value: fee });
