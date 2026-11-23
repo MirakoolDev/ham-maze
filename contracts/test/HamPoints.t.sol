@@ -211,17 +211,17 @@ contract HamRobinhoodPointsTest is Test {
     function play(address p, uint32 pointsSigned) internal returns (uint256 tokenId) {
         uint32 attempt = run.attempts(day, p);
         bytes32 h = keccak256(
-            abi.encodePacked("\x19Ethereum Signed Message:\n32", run.runDigest(day, p, attempt, pointsSigned, 90_000, 2, true))
+            abi.encodePacked("\x19Ethereum Signed Message:\n32", run.runDigest(day, p, attempt, pointsSigned, 90_000, 2, true, 0))
         );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(refereeKey, h);
         vm.prank(p);
         tokenId = run.playRun{value: FEE}(
-            HamRobinhood.RunResult({points: pointsSigned, timeMs: 90_000, kills: 2, completed: true}), abi.encodePacked(r, s, v), address(0)
+            HamRobinhood.RunResult({points: pointsSigned, timeMs: 90_000, kills: 2, completed: true, attempt: attempt, boostBps: 0}), abi.encodePacked(r, s, v), address(0)
         );
     }
 
     function ranked(uint256 tokenId) internal view returns (uint256 p) {
-        (,,, uint32 pts,,,) = run.scores(tokenId);
+        (,,, uint32 pts,,,,) = run.scores(tokenId);
         p = pts;
     }
 

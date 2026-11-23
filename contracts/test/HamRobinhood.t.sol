@@ -6,9 +6,20 @@ import {HamRobinhood} from "../src/HamRobinhood.sol";
 
 contract MockNFT {
     mapping(address => uint256) public balanceOf;
+    mapping(uint256 => address) public ownerOf;
+    uint256 public next;
 
-    function mint(address to) external {
+    function mint(address to) external returns (uint256 id) {
+        id = ++next;
         balanceOf[to] += 1;
+        ownerOf[id] = to;
+    }
+
+    function transfer(address to, uint256 id) external {
+        address from = ownerOf[id];
+        balanceOf[from] -= 1;
+        balanceOf[to] += 1;
+        ownerOf[id] = to;
     }
 }
 
@@ -63,13 +74,13 @@ contract HamRobinhoodTest is Test {
     }
 
     function pts(uint32 t) internal pure returns (uint32) {
-        return uint32(1_000_000_000 / uint256(t));
+        return uint32(5_000_000 / uint256(t)); // stays under MAX_RUN_POINTS for every t the tests use (>= 50)
     }
 
     function sign(address p, uint32 attempt, uint32 t, uint32 kills, bool completed) internal view returns (bytes memory) {
         bytes32 h = keccak256(
             abi.encodePacked(
-                "\x19Ethereum Signed Message:\n32", run.runDigest(day, p, attempt, pts(t), t, kills, completed)
+                "\x19Ethereum Signed Message:\n32", run.runDigest(day, p, attempt, pts(t), t, kills, completed, 0)
             )
         );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(refereeKey, h);
@@ -89,7 +100,7 @@ contract HamRobinhoodTest is Test {
         uint32 attempt = run.attempts(day, p);
         bytes memory sig = sign(p, attempt, t); // compute before prank: sign() itself calls out to the contract
         vm.prank(p);
-        tokenId = run.playRun{value: FEE}(HamRobinhood.RunResult({points: pts(t), timeMs: t, kills: 2, completed: true}), sig, referrer);
+        tokenId = run.playRun{value: FEE}(HamRobinhood.RunResult({points: pts(t), timeMs: t, kills: 2, completed: true, attempt: attempt, boostBps: 0}), sig, referrer);
     }
 
     // ── single-tx play ──────────────────────────────────────────────────────────
@@ -98,7 +109,7 @@ contract HamRobinhoodTest is Test {
         uint256 tokenId = play(alice, 100);
         assertEq(_pot(), potBefore + FEE, "fee went into the pot");
         assertEq(run.ownerOf(tokenId), alice, "score NFT minted to the player");
-        (uint64 d, address player, uint32 attempt, uint32 points,,,) = run.scores(tokenId);
+        (uint64 d, address player, uint32 attempt, uint32 points,,,,) = run.scores(tokenId);
         assertEq(d, day);
         assertEq(player, alice);
         assertEq(attempt, 0);
@@ -117,7 +128,7 @@ contract HamRobinhoodTest is Test {
         bytes memory sig = sign(alice, attempt, 100);
         vm.prank(alice);
         vm.expectRevert(HamRobinhood.WrongFee.selector);
-        run.playRun{value: FEE - 1}(HamRobinhood.RunResult({points: pts(100), timeMs: 100, kills: 2, completed: true}), sig, address(0));
+        run.playRun{value: FEE - 1}(HamRobinhood.RunResult({points: pts(100), timeMs: 100, kills: 2, completed: true, attempt: attempt, boostBps: 0}), sig, address(0));
     }
 
     function test_badSignatureReverts() public {
@@ -125,7 +136,7 @@ contract HamRobinhoodTest is Test {
         bytes memory sig = sign(bob, attempt, 100); // signed for bob, played by alice
         vm.prank(alice);
         vm.expectRevert(HamRobinhood.BadSignature.selector);
-        run.playRun{value: FEE}(HamRobinhood.RunResult({points: pts(100), timeMs: 100, kills: 2, completed: true}), sig, address(0));
+        run.playRun{value: FEE}(HamRobinhood.RunResult({points: pts(100), timeMs: 100, kills: 2, completed: true, attempt: attempt, boostBps: 0}), sig, address(0));
     }
 
     // ── repeat runs ─────────────────────────────────────────────────────────────
@@ -142,8 +153,8 @@ contract HamRobinhoodTest is Test {
     function test_repeatRunRanksWithFewerPoints() public {
         uint256 first = play(alice, 100);
         uint256 second = play(alice, 100); // the same result, played again
-        (,,, uint32 p1,,,) = run.scores(first);
-        (,,, uint32 p2,,,) = run.scores(second);
+        (,,, uint32 p1,,,,) = run.scores(first);
+        (,,, uint32 p2,,,,) = run.scores(second);
         assertEq(p1, pts(100), "first run ranks with its full points");
         assertEq(p2, uint32(uint256(pts(100)) * 9200 / 10000), "second run keeps 92%");
     }
@@ -171,7 +182,7 @@ contract HamRobinhoodTest is Test {
         vm.warp(block.timestamp + 1 days);
         day = run.currentDay();
         uint256 t = play(alice, 100);
-        (,, uint32 attempt, uint32 p,,,) = run.scores(t);
+        (,, uint32 attempt, uint32 p,,,,) = run.scores(t);
         assertEq(attempt, 0, "a new day starts the count again");
         assertEq(p, pts(100));
     }
@@ -224,13 +235,16 @@ contract HamRobinhoodTest is Test {
         uint256 day1 = day + 1;
         vm.prank(alice);
         run.fundPot{value: 1 ether}(day1);
+        vm.warp(day1 * 1 days + 1 hours);
+        day = day1; // play() signs for `day`
+        play(bob, 100);
         vm.warp((day1 + 1) * 1 days + 16 minutes);
         uint256 nextBefore = _potOn(day1 + 1);
         uint256 pot1 = _potOn(day1);
         run.settle(day1);
         assertEq(run.backersOwed(), owedDay0, "from the end day nothing more goes to backers");
-        // no runs: everything but the buyback rolls over, the backers' 10% included
-        assertEq(_potOn(day1 + 1) - nextBefore, pot1 - pot1 / 10);
+        // one winner takes 40%, the buyback 10%; the rest rolls over, the backers' 10% included
+        assertEq(_potOn(day1 + 1) - nextBefore, pot1 - pot1 * 4 / 10 - pot1 / 10);
     }
 
     function test_backersEndOnlyMovesLater() public {
@@ -338,19 +352,19 @@ contract HamRobinhoodTest is Test {
         MockNFT nft = new MockNFT();
         vm.prank(owner);
         run.setHolderToken(address(nft));
-        nft.mint(alice);
+        uint256 passId = nft.mint(alice);
 
         uint32 attempt = run.attempts(day, alice);
         bytes memory sig1 = sign(alice, attempt, 100);
         vm.prank(alice);
-        run.playRun(HamRobinhood.RunResult({points: pts(100), timeMs: 100, kills: 2, completed: true}), sig1, address(0)); // no value sent
+        run.playFreeRun(HamRobinhood.RunResult({points: pts(100), timeMs: 100, kills: 2, completed: true, attempt: attempt, boostBps: 0}), sig1, address(0), passId);
 
-        // second run same day is not free
+        // second free run on the same pass the same day is refused
         attempt = run.attempts(day, alice);
         bytes memory sig2 = sign(alice, attempt, 90);
         vm.prank(alice);
         vm.expectRevert(HamRobinhood.WrongFee.selector);
-        run.playRun(HamRobinhood.RunResult({points: pts(90), timeMs: 90, kills: 2, completed: true}), sig2, address(0));
+        run.playFreeRun(HamRobinhood.RunResult({points: pts(90), timeMs: 90, kills: 2, completed: true, attempt: attempt, boostBps: 0}), sig2, address(0), passId);
     }
 
     // ── crew bonus ───────────────────────────────────────────────────────────────

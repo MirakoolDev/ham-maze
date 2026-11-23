@@ -25,11 +25,12 @@ const RH_ABI = [
   'function entryFee() view returns (uint256)',
   'function currentDay() view returns (uint256)',
   'function dayInfo(uint256) view returns (uint256 pot, uint256 unclaimed, uint256 settledAt, uint256 entryCount, uint256[3] topToken, uint32[3] topPoints, uint32[3] topTime)',
-  'function scores(uint256) view returns (uint64 day, address player, uint32 attempt, uint32 points, uint32 timeMs, uint32 kills, bool completed)',
-  'function isHolder(address) view returns (bool)',
-  'function freeRunUsed(uint256,address) view returns (bool)',
-  'function playRun(tuple(uint32 points, uint32 timeMs, uint32 kills, bool completed) r, bytes signature, address referrer) payable returns (uint256)',
-  'error WrongFee()', 'error BadSignature()', 'error DayClosed()', 'error BadTime()', 'error Paused()',
+  'function scores(uint256) view returns (uint64 day, address player, uint32 attempt, uint32 points, uint32 timeMs, uint32 kills, bool completed, bool holder)',
+  'function holderToken() view returns (address)',
+  'function freeRunUsed(uint256,uint256) view returns (bool)',
+  'function playRun(tuple(uint32 points, uint32 timeMs, uint32 kills, bool completed, uint32 attempt, uint16 boostBps) r, bytes signature, address referrer) payable returns (uint256)',
+  'function playFreeRun(tuple(uint32 points, uint32 timeMs, uint32 kills, bool completed, uint32 attempt, uint16 boostBps) r, bytes signature, address referrer, uint256 passId) returns (uint256)',
+  'error WrongFee()', 'error BadSignature()', 'error DayClosed()', 'error BadTime()', 'error Paused()', 'error BadAttempt()', 'error NotHolder()',
   'event RunPlayed(uint256 indexed day, address indexed player, uint32 attempt, uint256 tokenId, uint32 points, uint32 boosted, uint32 timeMs, bool paid)',
 ];
 // The repeat-run rule (HamRobinhood): each run after a wallet's first that day keeps fewer points.
@@ -203,21 +204,45 @@ export const chain = {
     return { day, attempt: next ? next.run - 1 : 0, payAfter: true };
   },
 
+  /**
+   * HamRobinhood: a holder NFT this wallet owns whose free run today is unused, or null. Free runs are per
+   * NFT, so the contract needs its id; this finds one through ERC721Enumerable, and finds none (so the run
+   * is paid) if the holder NFT doesn't support it.
+   */
+  async freePass() {
+    const k = this.reader();
+    const token = await k.holderToken();
+    if (!this.account || token === ZeroAddress) return null;
+    const nft = new Contract(token, ['function balanceOf(address) view returns (uint256)', 'function tokenOfOwnerByIndex(address,uint256) view returns (uint256)'], k.runner);
+    try {
+      const [day, n] = await Promise.all([k.currentDay(), nft.balanceOf(this.account)]);
+      for (let i = 0n; i < n && i < 20n; i++) {
+        const id = await nft.tokenOfOwnerByIndex(this.account, i);
+        if (!(await k.freeRunUsed(day, id))) return id;
+      }
+    } catch {}
+    return null;
+  },
+
   /** HamRobinhood: what recording a run costs this wallet right now, in wei (0 for a holder's free run). */
   async feeNow() {
-    const k = this.reader();
-    const day = await k.currentDay();
-    const [fee, holder, used] = await Promise.all([k.entryFee(), k.isHolder(this.account), k.freeRunUsed(day, this.account)]);
-    return holder && !used ? 0n : fee;
+    const [fee, pass] = await Promise.all([this.reader().entryFee(), this.freePass()]);
+    return pass !== null ? 0n : fee;
   },
 
   /** HamRobinhood: pay (or use the free run), record the signed run and mint its Score, all in one call. */
   async playRun(signed) {
     await this.connect();
     const k = new Contract(CHAIN.contract, RH_ABI, this.signer);
-    const value = await this.feeNow();
-    await this._checkBalance(value);
-    const tx = await k.playRun([signed.points, signed.timeMs, signed.kills, signed.completed], signed.signature, this._referrer(), { value });
+    const r = [signed.points, signed.timeMs, signed.kills, signed.completed, signed.attempt, signed.boostBps ?? 0];
+    const pass = await this.freePass();
+    let tx;
+    if (pass !== null) tx = await k.playFreeRun(r, signed.signature, this._referrer(), pass);
+    else {
+      const value = await this.reader().entryFee();
+      await this._checkBalance(value);
+      tx = await k.playRun(r, signed.signature, this._referrer(), { value });
+    }
     const rc = await tx.wait();
     for (const log of rc.logs) {
       try {

@@ -10,11 +10,15 @@ pragma solidity 0.8.26;
 /// that isn't a gateway, reverts.
 ///
 /// Who can do what:
-/// - Minters (the HAM game contracts) create points. The game only mints for a run the referee
-///   signed, so no one, the owner included, can mint points directly through it. The owner adds
-///   and removes minters until `lockMinters`, after which the minter list can never change.
+/// - Minters (the HAM game contracts) create points. The game mints only for a run its referee
+///   signed, capped per run, and a new referee key takes days to take effect. That is a trust in
+///   the game's owner and referee key, not a guarantee: whoever controls the referee key can
+///   sign runs. The owner adds and removes minters until `lockMinters`, after which the minter
+///   list can never change.
 /// - Gateways can receive points from a player who approved them (the usual ERC20
 ///   approve + transferFrom), and can send points on. They can't take points without approval.
+///   A gateway that forwards for anyone would make points tradeable, so the owner should only
+///   add redeem contracts, and can freeze the gateway list for good with `lockGateways`.
 /// - Any holder can burn their own points.
 contract HamPoints {
     string public constant name = "HAM Points";
@@ -30,11 +34,13 @@ contract HamPoints {
     mapping(address => bool) public isMinter;
     mapping(address => bool) public isGateway;
     bool public mintersLocked;
+    bool public gatewaysLocked;
 
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
     event MinterSet(address indexed minter, bool allowed);
     event MintersLocked();
+    event GatewaysLocked();
     event GatewaySet(address indexed gateway, bool allowed);
     event OwnershipTransferStarted(address indexed from, address indexed to);
     event OwnershipTransferred(address indexed from, address indexed to);
@@ -123,9 +129,16 @@ contract HamPoints {
 
     /// @notice A contract players may send points to (to redeem them), and that may send them on.
     function setGateway(address gateway, bool allowed) external onlyOwner {
+        if (gatewaysLocked) revert Locked();
         if (gateway == address(0)) revert ZeroAddress();
         isGateway[gateway] = allowed;
         emit GatewaySet(gateway, allowed);
+    }
+
+    /// @notice Freezes the gateway list forever: no redeem contract can be added or removed after this.
+    function lockGateways() external onlyOwner {
+        gatewaysLocked = true;
+        emit GatewaysLocked();
     }
 
     function transferOwnership(address to) external onlyOwner {

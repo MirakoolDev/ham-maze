@@ -5,6 +5,10 @@ interface IBalanceOf {
     function balanceOf(address account) external view returns (uint256);
 }
 
+interface IOwnerOf {
+    function ownerOf(uint256 tokenId) external view returns (address);
+}
+
 interface IHamPowerUps {
     function recordRun(address player, uint32 kills, bool completed) external;
 }
@@ -63,6 +67,8 @@ contract HamRobinhood {
     bytes32 public constant RUN_TAG = keccak256("HAM_ROBINHOOD_V1");
     uint256 public constant MAX_BOOSTERS = 4;
     uint256 public constant MAX_BOOST_BPS = 5000;
+    uint32 public constant MAX_RUN_POINTS = 100_000; // well above the best possible run (~40k); caps what any key can sign
+    uint256 public constant REFEREE_DELAY = 2 days; // a new referee key only takes effect after this
 
     string public constant name = "HAM Score";
     string public constant symbol = "HAMSCORE";
@@ -98,6 +104,7 @@ contract HamRobinhood {
         uint32 timeMs;
         uint32 kills;
         bool completed; // reached the monolith, vs. a partial run that still scores on death
+        bool holder; // held the holder NFT when it was played: decides the holder prize bonus at settle
     }
 
     struct Booster {
@@ -108,17 +115,25 @@ contract HamRobinhood {
 
     /// @notice What the referee signs off on for one run. Bundled into a struct so `playRun`
     /// doesn't carry each field as its own stack slot (Solidity's "stack too deep" otherwise).
+    /// What the referee signs. `attempt` is the referee's count of runs it has signed for this
+    /// wallet today (0 = the first), not the number submitted, so playing several runs and
+    /// submitting only the best still pays the repeat-run cut for each one played. `boostBps` is
+    /// the booster bonus the referee read for this wallet when it signed, from `boostOf`.
     struct RunResult {
         uint32 points;
         uint32 timeMs;
         uint32 kills;
         bool completed;
+        uint32 attempt;
+        uint16 boostBps;
     }
 
     // ── State ───────────────────────────────────────────────────────────────────
     address public owner;
     address public pendingOwner;
     address public referee;
+    address public pendingReferee;
+    uint256 public pendingRefereeAt; // when pendingReferee can take over
     address public treasury; // may route to a buyback vault for an existing token; this contract mints none
     address public backers; // where the backers' 10% goes (a payout splitter for the campaign); starts as the treasury
     address public holderToken;
@@ -135,7 +150,7 @@ contract HamRobinhood {
 
     mapping(uint256 => Day) internal _days;
     mapping(uint256 => mapping(address => uint32)) public attempts;
-    mapping(uint256 => mapping(address => bool)) public freeRunUsed;
+    mapping(uint256 => mapping(uint256 => bool)) public freeRunUsed; // day => holder NFT id => used: one free run per pass per day, whoever holds it
     Booster[] internal _boosters;
 
     // prizes are owed to a tokenId, paid to whoever owns it at claimFinalize time
@@ -186,6 +201,7 @@ contract HamRobinhood {
     event ConfigSet(uint256 indexed effectiveDay, GameConfig config);
     event EntryFeeSet(uint256 fee);
     event RefereeSet(address referee);
+    event RefereeProposed(address referee, uint256 readyAt);
     event TreasurySet(address treasury);
     event BackersSet(address backers);
     event BackersEndSet(uint256 day);
@@ -230,6 +246,8 @@ contract HamRobinhood {
     error TokenFrozen();
     error ArtLocked();
     error NotERC721Receiver();
+    error NoCode();
+    error NotHolder();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -321,20 +339,25 @@ contract HamRobinhood {
     }
 
     function isFrozen(uint256 tokenId) public view returns (bool) {
-        return claimIntentAt[tokenId] != 0;
+        return claimIntentAt[tokenId] != 0 && !claimed[tokenId]; // only between intent and payout
     }
 
-    function runDigest(uint256 day, address player, uint32 attempt, uint32 points, uint32 timeMs, uint32 kills, bool completed)
-        public
-        view
-        returns (bytes32)
-    {
-        return keccak256(abi.encode(RUN_TAG, block.chainid, address(this), day, player, attempt, points, timeMs, kills, completed));
+    function runDigest(
+        uint256 day,
+        address player,
+        uint32 attempt,
+        uint32 points,
+        uint32 timeMs,
+        uint32 kills,
+        bool completed,
+        uint16 boostBps
+    ) public view returns (bytes32) {
+        return keccak256(abi.encode(RUN_TAG, block.chainid, address(this), day, player, attempt, points, timeMs, kills, completed, boostBps));
     }
 
     // ── Playing: one signed call pays and records the result ──────────────────────
     /// @notice Play today's maze, then call this once with the referee's signature over the
-    /// result. Pays `entryFee` unless you hold `holderToken` and haven't used today's free run.
+    /// result, paying `entryFee`. (A holder NFT's daily free run is `playFreeRun`.)
     /// Mints a HamScore NFT for the run either way, win or lose: `r.completed` marks whether the
     /// monolith was reached, but a partial run with `r.points > 0` still scores and still ranks.
     /// `referrer` is recorded on your first call ever. The result fields are bundled into `r`
@@ -345,19 +368,45 @@ contract HamRobinhood {
         whenNotPaused
         returns (uint256 tokenId)
     {
+        if (msg.value != entryFee) revert WrongFee();
         uint256 day = currentDay();
-        if (_days[day].settledAt != 0) revert DayClosed();
-        if (r.timeMs == 0 || r.points == 0) revert BadTime();
+        _days[day].pot += uint128(msg.value);
+        tokenId = _play(day, r, signature, referrer, true);
+    }
 
-        uint32 attempt = attempts[day][msg.sender];
-        _verifySignature(day, attempt, r, signature);
+    /// @notice A holder's free run: one per holder NFT per day, whichever wallet holds it, so
+    /// passing one NFT between wallets doesn't hand out extra free runs. Send no ETH.
+    function playFreeRun(RunResult calldata r, bytes calldata signature, address referrer, uint256 passId)
+        external
+        whenNotPaused
+        returns (uint256 tokenId)
+    {
+        uint256 day = currentDay();
+        address token = holderToken;
+        if (token == address(0) || IOwnerOf(token).ownerOf(passId) != msg.sender) revert NotHolder();
+        if (freeRunUsed[day][passId]) revert WrongFee();
+        freeRunUsed[day][passId] = true;
+        tokenId = _play(day, r, signature, referrer, false);
+    }
+
+    function _play(uint256 day, RunResult calldata r, bytes calldata signature, address referrer, bool paid)
+        internal
+        returns (uint256 tokenId)
+    {
+        if (_days[day].settledAt != 0) revert DayClosed();
+        if (r.timeMs == 0 || r.points == 0 || r.points > MAX_RUN_POINTS || r.boostBps > MAX_BOOST_BPS) revert BadTime();
+
+        // the signed attempt can skip ahead (runs the referee signed but nobody submitted) but never repeat
+        uint32 attempt = r.attempt;
+        if (attempt < attempts[day][msg.sender]) revert BadAttempt();
+        _verifySignature(day, r, signature);
         attempts[day][msg.sender] = attempt + 1;
         _days[day].entries += 1;
         _join(msg.sender, referrer);
         _countCrew(day, msg.sender);
 
-        bool paid = _takePayment(day);
-        uint32 boosted = _rankedPoints(r.points, attempt);
+        uint32 boosted = _rankedPoints(r.points, r.boostBps, attempt);
+        if (boosted == 0) revert BadTime();
         tokenId = _mintScore(day, msg.sender, attempt, boosted, r);
         _rank(_days[day], tokenId, boosted, r.timeMs);
         _notifyRun(msg.sender, r.kills, r.completed, boosted);
@@ -385,22 +434,9 @@ contract HamRobinhood {
         if (p != address(0)) try IHamPoints(p).mint(player, uint256(ranked) * 1e18) {} catch {}
     }
 
-    function _verifySignature(uint256 day, uint32 attempt, RunResult calldata r, bytes calldata signature) internal view {
-        bytes32 digest = runDigest(day, msg.sender, attempt, r.points, r.timeMs, r.kills, r.completed);
+    function _verifySignature(uint256 day, RunResult calldata r, bytes calldata signature) internal view {
+        bytes32 digest = runDigest(day, msg.sender, r.attempt, r.points, r.timeMs, r.kills, r.completed, r.boostBps);
         if (_recover(_ethSigned(digest), signature) != referee) revert BadSignature();
-    }
-
-    /// @dev Returns whether this run was paid (false for a holder's free run).
-    function _takePayment(uint256 day) internal returns (bool paid) {
-        bool free = isHolder(msg.sender) && !freeRunUsed[day][msg.sender];
-        if (free) {
-            if (msg.value != 0) revert WrongFee();
-            freeRunUsed[day][msg.sender] = true;
-            return false;
-        }
-        if (msg.value != entryFee) revert WrongFee();
-        _days[day].pot += uint128(msg.value);
-        return true;
     }
 
     /// @notice The share of its points a run keeps, in bps, by the wallet's attempt that day
@@ -411,8 +447,8 @@ contract HamRobinhood {
     }
 
     /// The points a run ranks with: the holder/booster boost first, then the repeat-run share.
-    function _rankedPoints(uint32 points, uint32 attempt) internal view returns (uint32 ranked) {
-        uint256 b = uint256(points) * (BPS + boostOf(msg.sender)) * attemptShare(attempt) / (BPS * BPS);
+    function _rankedPoints(uint32 points, uint16 boostBps, uint32 attempt) internal pure returns (uint32 ranked) {
+        uint256 b = uint256(points) * (BPS + boostBps) * attemptShare(attempt) / (BPS * BPS);
         ranked = b > type(uint32).max ? type(uint32).max : uint32(b);
     }
 
@@ -431,8 +467,9 @@ contract HamRobinhood {
         d.settledAt = uint64(block.timestamp);
 
         uint256 pot = d.pot;
-        uint256 treasuryShare = pot * TREASURY_BPS / BPS;
-        uint256 backersShare = backersEndDay != 0 && day >= backersEndDay ? 0 : pot * BACKERS_BPS / BPS;
+        bool empty = d.topToken[0] == 0; // nobody played: the whole pot rolls over, nothing is taken
+        uint256 treasuryShare = empty ? 0 : pot * TREASURY_BPS / BPS;
+        uint256 backersShare = empty || (backersEndDay != 0 && day >= backersEndDay) ? 0 : pot * BACKERS_BPS / BPS;
         uint256[3] memory share = [pot * FIRST_BPS / BPS, pot * SECOND_BPS / BPS, pot * THIRD_BPS / BPS];
         uint256[3] memory prize;
         uint256 rollover = pot - treasuryShare - backersShare;
@@ -469,7 +506,7 @@ contract HamRobinhood {
         amount = baseAmount;
         remainingTreasury = treasuryShare;
         address player = scores[tokenId].player; // boosts and referral follow who played it, not who holds it
-        if (isHolder(player)) {
+        if (scores[tokenId].holder) {
             uint256 bonus = _min(amount * HOLDER_BONUS_BPS / BPS, remainingTreasury);
             remainingTreasury -= bonus;
             amount += bonus;
@@ -493,6 +530,8 @@ contract HamRobinhood {
         if (prizeOf[tokenId] == 0) revert NothingToClaim();
         if (claimed[tokenId]) revert AlreadyClaimed();
         if (claimIntentAt[tokenId] != 0) return; // already started, idempotent
+        // a prize left past CLAIM_WINDOW after settling is stale: it can only be swept, not revived
+        if (block.timestamp > _days[scores[tokenId].day].settledAt + CLAIM_WINDOW) revert ClaimClosed();
         claimIntentAt[tokenId] = block.timestamp;
         emit ClaimIntent(tokenId, msg.sender, block.timestamp + CLAIM_DELAY);
     }
@@ -518,6 +557,7 @@ contract HamRobinhood {
     /// @notice After CLAIM_WINDOW from claimIntent (or indefinitely if claimIntent was never
     /// called), anyone can sweep that prize back into today's pot.
     function sweep(uint256 day, uint256 tokenId) external {
+        if (scores[tokenId].day != day) revert NotRanked(); // the day must be the token's own
         Day storage d = _days[day];
         if (d.settledAt == 0) revert NotSettled();
         uint256 amount = prizeOf[tokenId];
@@ -546,12 +586,15 @@ contract HamRobinhood {
         uint256 amount = treasuryOwed;
         uint256 toBackers = backersOwed;
         if (amount + toBackers == 0) revert NothingToClaim();
-        treasuryOwed = 0;
-        backersOwed = 0;
-        if (amount != 0) _send(treasury, amount);
-        if (toBackers != 0) _send(backers, toBackers);
-        emit TreasuryWithdrawn(treasury, amount);
-        emit TreasuryWithdrawn(backers, toBackers);
+        // each share is paid on its own: one recipient refusing ETH keeps its share owed, never blocks the other
+        if (amount != 0 && _trySend(treasury, amount)) {
+            treasuryOwed = 0;
+            emit TreasuryWithdrawn(treasury, amount);
+        }
+        if (toBackers != 0 && _trySend(backers, toBackers)) {
+            backersOwed = 0;
+            emit TreasuryWithdrawn(backers, toBackers);
+        }
     }
 
     // ── HamScore: minimal ERC-721, one minted per played run ───────────────────
@@ -681,10 +724,23 @@ contract HamRobinhood {
         emit EntryFeeSet(fee);
     }
 
+    /// @notice Propose a new referee key. It takes over only after REFEREE_DELAY (call
+    /// `acceptReferee`), so a new key can't sign runs the moment it's set. If the current key
+    /// leaks, pause first, then rotate.
     function setReferee(address referee_) external onlyOwner {
         if (referee_ == address(0)) revert ZeroAddress();
-        referee = referee_;
-        emit RefereeSet(referee_);
+        pendingReferee = referee_;
+        pendingRefereeAt = block.timestamp + REFEREE_DELAY;
+        emit RefereeProposed(referee_, pendingRefereeAt);
+    }
+
+    function acceptReferee() external onlyOwner {
+        address next = pendingReferee;
+        if (next == address(0)) revert ZeroAddress();
+        if (block.timestamp < pendingRefereeAt) revert TooEarly();
+        referee = next;
+        pendingReferee = address(0);
+        emit RefereeSet(next);
     }
 
     /// @notice Where the treasury share goes. Can point at a buyback vault for an existing
@@ -705,12 +761,15 @@ contract HamRobinhood {
     /// @notice The day the backers' 10% stops (the campaign stream's end); after it, that 10% rolls over.
     /// Must be a future day, and once set it can only be pushed later, never brought forward.
     function setBackersEnd(uint256 day) external onlyOwner {
-        if (day <= currentDay() || (backersEndDay != 0 && day < backersEndDay)) revert BadBackersEnd();
+        uint256 end = backersEndDay;
+        // once the end has passed it's final: pushing it out again would re-apply the 10% to unsettled past days
+        if (day <= currentDay() || (end != 0 && (day < end || end <= currentDay()))) revert BadBackersEnd();
         backersEndDay = day;
         emit BackersEndSet(day);
     }
 
     function setHolderToken(address token) external onlyOwner {
+        _needsCode(token);
         holderToken = token;
         emit HolderTokenSet(token);
     }
@@ -718,12 +777,14 @@ contract HamRobinhood {
     /// @notice The power-up NFT to notify after each run (kills, whether the maze was completed).
     /// Zero turns the notification off; a reverting power-up contract never blocks a run either way.
     function setPowerUp(address powerUp_) external onlyOwner {
+        _needsCode(powerUp_);
         powerUp = powerUp_;
         emit PowerUpSet(powerUp_);
     }
 
     /// @notice HAM Points, minted after each run at one point per ranked point. Zero turns it off.
     function setHamPoints(address hamPoints_) external onlyOwner {
+        _needsCode(hamPoints_);
         hamPoints = hamPoints_;
         emit HamPointsSet(hamPoints_);
     }
@@ -746,7 +807,7 @@ contract HamRobinhood {
         if (list.length > MAX_BOOSTERS) revert BadBooster();
         delete _boosters;
         for (uint256 i; i < list.length; ++i) {
-            if (list[i].token == address(0) || list[i].bps == 0 || list[i].bps > MAX_BOOST_BPS) revert BadBooster();
+            if (list[i].token.code.length == 0 || list[i].bps == 0 || list[i].bps > MAX_BOOST_BPS) revert BadBooster();
             _boosters.push(list[i]);
         }
         emit BoostersSet(list);
@@ -773,7 +834,7 @@ contract HamRobinhood {
     function _join(address player, address referrer) internal {
         if (joined[player]) return;
         joined[player] = true;
-        if (referrer != address(0) && referrer != player && referrerOf[referrer] != player) {
+        if (joined[referrer] && referrer != player && referrerOf[referrer] != player) {
             referrerOf[player] = referrer;
             emit ReferrerSet(player, referrer);
         }
@@ -785,7 +846,14 @@ contract HamRobinhood {
     {
         tokenId = ++totalSupply;
         scores[tokenId] = ScoreRecord({
-            day: uint64(day), player: player, attempt: attempt, points: points, timeMs: r.timeMs, kills: r.kills, completed: r.completed
+            day: uint64(day),
+            player: player,
+            attempt: attempt,
+            points: points,
+            timeMs: r.timeMs,
+            kills: r.kills,
+            completed: r.completed,
+            holder: isHolder(player)
         });
         _owner[tokenId] = player;
         _balance[player] += 1;
@@ -844,8 +912,16 @@ contract HamRobinhood {
     }
 
     function _send(address to, uint256 amount) internal {
-        (bool ok,) = to.call{value: amount}("");
-        if (!ok) revert TransferFailed();
+        if (!_trySend(to, amount)) revert TransferFailed();
+    }
+
+    function _trySend(address to, uint256 amount) internal returns (bool ok) {
+        (ok,) = to.call{value: amount}("");
+    }
+
+    /// @dev Optional hook contracts must have code: a call to an empty address can't be caught by try/catch.
+    function _needsCode(address a) internal view {
+        if (a != address(0) && a.code.length == 0) revert NoCode();
     }
 
     function _toString(uint256 v) private pure returns (string memory) {

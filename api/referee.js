@@ -10,6 +10,7 @@ import { JsonRpcProvider, Contract, Wallet, getBytes, isAddress, getAddress } fr
 import { CHAINS, FIELDS } from '../src/config.js';
 import { dailySeed } from '../src/maze.js';
 import { dayMaze, shortestMetres, scoreRun, implausible } from '../src/score.js';
+import { nextAttempt, CounterUnavailable } from './run-counter.js';
 
 const ABI = [
   'function configFor(uint256) view returns (tuple(uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8))',
@@ -23,7 +24,9 @@ const ABI = [
 const RH_ABI = [
   'function configFor(uint256) view returns (tuple(uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8))',
   'function attempts(uint256,address) view returns (uint32)',
-  'function runDigest(uint256,address,uint32,uint32,uint32,uint32,bool) view returns (bytes32)',
+  'function runDigest(uint256,address,uint32,uint32,uint32,uint32,bool,uint16) view returns (bytes32)',
+  'function boostOf(address) view returns (uint256)',
+  'function MAX_RUN_POINTS() view returns (uint32)',
   'function referee() view returns (address)',
   'function currentDay() view returns (uint256)',
 ];
@@ -71,7 +74,9 @@ export async function referee(body, key = process.env.REFEREE_KEY) {
 }
 
 // HamRobinhood: nothing is paid before the run, so there is no paid attempt to check. The run is signed for
-// today's maze and the wallet's next attempt, and playRun pays and records it in the same call.
+// today's maze with the referee's own count of runs it has signed for this wallet today (see run-counter.js),
+// and with the wallet's booster bonus as read now, and playRun pays and records it in the same call.
+// Reading the boost here rather than at playRun means a token borrowed for one transaction can't boost a run.
 async function robinhood({ chain, day, p, r, completed }, k, wallet) {
   const fail = (status, error) => ({ status, body: { error } });
   const [ref, today] = await Promise.all([k.referee(), k.currentDay()]);
@@ -79,7 +84,7 @@ async function robinhood({ chain, day, p, r, completed }, k, wallet) {
   if (BigInt(day) !== today) return fail(400, 'That day\'s maze has closed, so this run can no longer be recorded');
   // Only finished runs for now: the scoring and the plausibility checks both assume the monolith was reached.
   if (!completed) return fail(422, 'Only runs that reach the monolith can be recorded');
-  const [attempt, cfgRaw] = await Promise.all([k.attempts(day, p), k.configFor(day)]);
+  const [onChain, cfgRaw, boostRaw, maxPoints] = await Promise.all([k.attempts(day, p), k.configFor(day), k.boostOf(p), k.MAX_RUN_POINTS()]);
 
   const cfg = Object.fromEntries(FIELDS.map((f, i) => [f.key, Number(cfgRaw[i])]));
   const maze = dayMaze(dailySeed(new Date(day * 86400e3)), cfg);
@@ -88,10 +93,14 @@ async function robinhood({ chain, day, p, r, completed }, k, wallet) {
   if (why) return fail(422, `Run rejected: ${why}`);
 
   const score = scoreRun(r, shortest);
-  const points = Math.min(score.total, 0xffffffff);
-  const digest = await k.runDigest(day, p, attempt, points, r.timeMs, r.kills, true);
+  const points = Math.min(score.total, Number(maxPoints));
+  const boostBps = Math.min(Number(boostRaw), 5000);
+  let attempt;
+  try { attempt = await nextAttempt({ contract: await k.getAddress(), day, player: p, onChain: Number(onChain) }); }
+  catch (e) { if (e instanceof CounterUnavailable) return fail(503, e.message); throw e; }
+  const digest = await k.runDigest(day, p, attempt, points, r.timeMs, r.kills, true, boostBps);
   const signature = await wallet.signMessage(getBytes(digest));
-  return { status: 200, body: { chain, day, attempt: Number(attempt), player: p, points, timeMs: r.timeMs, kills: r.kills, completed: true, breakdown: score, shortest: Math.round(shortest), signature } };
+  return { status: 200, body: { chain, day, attempt, boostBps, player: p, points, timeMs: r.timeMs, kills: r.kills, completed: true, breakdown: score, shortest: Math.round(shortest), signature } };
 }
 
 export default async function handler(req, res) {
