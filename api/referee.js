@@ -1,5 +1,8 @@
-// POST /api/referee: checks a finished run and signs its points for HamDailyRun.submitRun.
-// Body: { chain, player, day, attempt, run: { timeMs, walked, kills, rivals } }
+// POST /api/referee: checks a finished run and signs its points, for HamDailyRun.submitRun or, on a chain whose
+// flow is 'robinhood', for HamRobinhood.playRun.
+// Body: { chain, player, day, attempt, run: { timeMs, walked, kills, rivals, completed } }
+// For HamRobinhood the attempt is not the client's to choose: the run is signed for the wallet's next attempt
+// today (attempts(day, player)), which is what playRun checks the signature against.
 // The referee rebuilds the day's maze from the seed and the on-chain settings, computes the shortest route itself,
 // rejects runs that are physically impossible, scores the run with the shared formula and signs that score.
 // It never trusts points sent by the client. Env: REFEREE_KEY (hex private key), optional HAM_CONTRACT_<CHAIN>.
@@ -13,6 +16,14 @@ const ABI = [
   'function attempts(uint256,address) view returns (uint32)',
   'function attemptUsed(uint256,address,uint32) view returns (bool)',
   'function runDigest(uint256,address,uint32,uint32,uint32) view returns (bytes32)',
+  'function referee() view returns (address)',
+  'function currentDay() view returns (uint256)',
+];
+
+const RH_ABI = [
+  'function configFor(uint256) view returns (tuple(uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8))',
+  'function attempts(uint256,address) view returns (uint32)',
+  'function runDigest(uint256,address,uint32,uint32,uint32,uint32,bool) view returns (bytes32)',
   'function referee() view returns (address)',
   'function currentDay() view returns (uint256)',
 ];
@@ -36,9 +47,10 @@ export async function referee(body, key = process.env.REFEREE_KEY) {
   const r = { timeMs: Math.round(Number(run.timeMs)), walked: Number(run.walked), kills: Math.round(Number(run.kills) || 0), rivals: Math.round(Number(run.rivals) || 0) };
 
   const provider = new JsonRpcProvider(c.rpc, c.id, { staticNetwork: true });
-  const k = new Contract(address, ABI, provider);
   const wallet = new Wallet(key);
   const p = getAddress(player);
+  if (c.flow === 'robinhood') return robinhood({ chain, day, p, r, completed: run.completed === true }, new Contract(address, RH_ABI, provider), wallet);
+  const k = new Contract(address, ABI, provider);
   const [ref, today, bought, used, cfgRaw] = await Promise.all([k.referee(), k.currentDay(), k.attempts(day, p), k.attemptUsed(day, p, attempt), k.configFor(day)]);
   if (getAddress(ref) !== wallet.address) return fail(500, 'This server is not the contract\'s referee');
   if (BigInt(day) !== today && BigInt(day) + 1n !== today) return fail(400, 'That day is closed');
@@ -56,6 +68,30 @@ export async function referee(body, key = process.env.REFEREE_KEY) {
   const digest = await k.runDigest(day, p, attempt, points, r.timeMs);
   const signature = await wallet.signMessage(getBytes(digest));
   return { status: 200, body: { chain, day, attempt, player: p, points, timeMs: r.timeMs, breakdown: score, shortest: Math.round(shortest), signature } };
+}
+
+// HamRobinhood: nothing is paid before the run, so there is no paid attempt to check. The run is signed for
+// today's maze and the wallet's next attempt, and playRun pays and records it in the same call.
+async function robinhood({ chain, day, p, r, completed }, k, wallet) {
+  const fail = (status, error) => ({ status, body: { error } });
+  const [ref, today] = await Promise.all([k.referee(), k.currentDay()]);
+  if (getAddress(ref) !== wallet.address) return fail(500, 'This server is not the contract\'s referee');
+  if (BigInt(day) !== today) return fail(400, 'That day\'s maze has closed, so this run can no longer be recorded');
+  // Only finished runs for now: the scoring and the plausibility checks both assume the monolith was reached.
+  if (!completed) return fail(422, 'Only runs that reach the monolith can be recorded');
+  const [attempt, cfgRaw] = await Promise.all([k.attempts(day, p), k.configFor(day)]);
+
+  const cfg = Object.fromEntries(FIELDS.map((f, i) => [f.key, Number(cfgRaw[i])]));
+  const maze = dayMaze(dailySeed(new Date(day * 86400e3)), cfg);
+  const shortest = shortestMetres(maze, cfg.cellSize);
+  const why = implausible(r, shortest, cfg);
+  if (why) return fail(422, `Run rejected: ${why}`);
+
+  const score = scoreRun(r, shortest);
+  const points = Math.min(score.total, 0xffffffff);
+  const digest = await k.runDigest(day, p, attempt, points, r.timeMs, r.kills, true);
+  const signature = await wallet.signMessage(getBytes(digest));
+  return { status: 200, body: { chain, day, attempt: Number(attempt), player: p, points, timeMs: r.timeMs, kills: r.kills, completed: true, breakdown: score, shortest: Math.round(shortest), signature } };
 }
 
 export default async function handler(req, res) {
