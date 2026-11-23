@@ -8,6 +8,10 @@ optimizer = true
 optimizer_runs = 200
 bytecode_hash = "none"
 remappings = ["forge-std/=lib/forge-std/src/"]
+# HamRobinhood is built through the IR pipeline: it is ~3.7 KB smaller that way, which keeps it under the
+# 24,576-byte contract limit with room to spare. Everything else (the art contracts above all) builds the default way.
+additional_compiler_profiles = [{ name = "ir", via_ir = true }]
+compilation_restrictions = [{ paths = "src/HamRobinhood.sol", via_ir = true }]
 # the art tests compare the contracts' SVGs with design/nft/ham-art.js output, and the deploy script uploads art
 fs_permissions = [{ access = "read", path = "./test/fixtures" }, { access = "read", path = "./art" }]
 

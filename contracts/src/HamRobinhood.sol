@@ -9,6 +9,10 @@ interface IHamPowerUps {
     function recordRun(address player, uint32 kills, bool completed) external;
 }
 
+interface IHamPoints {
+    function mint(address to, uint256 amount) external;
+}
+
 interface IHamScoreArt {
     function render(uint256 tokenId, uint256 day, uint32 points, uint32 timeMs, uint32 kills, bool completed, bool isSealed)
         external
@@ -119,6 +123,7 @@ contract HamRobinhood {
     address public backers; // where the backers' 10% goes (a payout splitter for the campaign); starts as the treasury
     address public holderToken;
     address public powerUp; // optional: HamPowerUps, notified after each run
+    address public hamPoints; // optional: HamPoints, which mints one HAM Point per ranked point
     address public scoreArt; // optional: HamScoreArt, which draws each Score from its run
     bool public scoreArtLocked; // once set, the renderer can never be swapped
     uint256 public entryFee;
@@ -165,6 +170,7 @@ contract HamRobinhood {
     event RunPlayed(uint256 indexed day, address indexed player, uint32 attempt, uint256 tokenId, uint32 points, uint32 boosted, uint32 timeMs, bool paid);
     event CrewBonusUnlocked(uint256 indexed day, address indexed referrer, uint32 crewSize);
     event PowerUpSet(address powerUp);
+    event HamPointsSet(address hamPoints);
     event ScoreArtSet(address scoreArt);
     event ScoreArtLocked();
     event BoostersSet(Booster[] boosters);
@@ -354,7 +360,7 @@ contract HamRobinhood {
         uint32 boosted = _rankedPoints(r.points, attempt);
         tokenId = _mintScore(day, msg.sender, attempt, boosted, r);
         _rank(_days[day], tokenId, boosted, r.timeMs);
-        _notifyPowerUp(msg.sender, r.kills, r.completed);
+        _notifyRun(msg.sender, r.kills, r.completed, boosted);
 
         emit RunPlayed(day, msg.sender, attempt, tokenId, r.points, boosted, r.timeMs, paid);
     }
@@ -370,11 +376,13 @@ contract HamRobinhood {
         if (size == CREW_SIZE) emit CrewBonusUnlocked(day, ref, size);
     }
 
-    /// @dev Best-effort: a reverting or missing power-up contract never blocks a run.
-    function _notifyPowerUp(address player, uint32 kills, bool completed) internal {
+    /// @dev Tells the power-up NFT about the run and mints its HAM Points. Best-effort: a missing
+    /// or reverting contract never blocks a run.
+    function _notifyRun(address player, uint32 kills, bool completed, uint32 ranked) internal {
         address p = powerUp;
-        if (p == address(0)) return;
-        try IHamPowerUps(p).recordRun(player, kills, completed) {} catch {}
+        if (p != address(0)) try IHamPowerUps(p).recordRun(player, kills, completed) {} catch {}
+        p = hamPoints;
+        if (p != address(0)) try IHamPoints(p).mint(player, uint256(ranked) * 1e18) {} catch {}
     }
 
     function _verifySignature(uint256 day, uint32 attempt, RunResult calldata r, bytes calldata signature) internal view {
@@ -712,6 +720,12 @@ contract HamRobinhood {
     function setPowerUp(address powerUp_) external onlyOwner {
         powerUp = powerUp_;
         emit PowerUpSet(powerUp_);
+    }
+
+    /// @notice HAM Points, minted after each run at one point per ranked point. Zero turns it off.
+    function setHamPoints(address hamPoints_) external onlyOwner {
+        hamPoints = hamPoints_;
+        emit HamPointsSet(hamPoints_);
     }
 
     /// @notice The contract that draws Scores. Zero falls back to a plain card. Swappable until

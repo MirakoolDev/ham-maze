@@ -3,7 +3,6 @@ pragma solidity 0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 import {HamRobinhood} from "../src/HamRobinhood.sol";
-import {HamScoreArt} from "../src/HamScoreArt.sol";
 
 contract MockNFT {
     mapping(address => uint256) public balanceOf;
@@ -391,9 +390,9 @@ contract HamRobinhoodTest is Test {
     }
 
     function test_scoreArtIsSealedUntilTheDayEnds() public {
-        HamScoreArt art = new HamScoreArt();
+        address art = _deployArt();
         vm.prank(owner);
-        run.setScoreArt(address(art));
+        run.setScoreArt(art);
         uint256 tokenId = play(alice, 100);
 
         string memory live = run.tokenURI(tokenId);
@@ -404,13 +403,19 @@ contract HamRobinhoodTest is Test {
     }
 
     function test_lockedScoreArtCannotBeSwapped() public {
-        HamScoreArt art = new HamScoreArt();
+        address art = _deployArt();
         vm.startPrank(owner);
-        run.setScoreArt(address(art));
+        run.setScoreArt(art);
         run.lockScoreArt();
         vm.expectRevert(HamRobinhood.ArtLocked.selector);
         run.setScoreArt(address(0));
         vm.stopPrank();
+    }
+
+    /// HamScoreArt is deployed from its own artifact rather than imported: importing it here would build a
+    /// second copy through the IR pipeline this file uses for HamRobinhood, and that copy is over the size limit.
+    function _deployArt() internal returns (address) {
+        return deployCode("HamScoreArt.sol:HamScoreArt");
     }
 
     function _pot() internal view returns (uint256 pot) {
