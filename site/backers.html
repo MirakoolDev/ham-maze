@@ -1,0 +1,212 @@
+<title>HAM Backers</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  @font-face { font-family: 'Bread Island'; src: url('brand/bread-island.otf') format('opentype'); font-display: swap; }
+  @font-face { font-family: 'Cabinet Grotesk'; src: url('brand/cabinet-grotesk.otf') format('opentype'); font-display: swap; }
+  /* Layout: the story page's header, then one table of every backer pass and its holder, then a note. */
+  :root {
+    --bg: #2a2733; --surface: #332f3e; --surface-2: #3b3647;
+    --line: rgba(255, 250, 242, 0.14); --ink: #fffaf2;
+    --muted: rgba(255, 250, 242, 0.72); --faint: rgba(255, 250, 242, 0.5);
+    --cream: #f6e4b4; --cream-hover: #fff1cc; --signal: #ff8fa6;
+    --nav-bg: rgba(42, 39, 51, 0.9);
+    --logo-filter: drop-shadow(0 1px 4px rgba(20, 16, 30, 0.4));
+    --heading: 'Bread Island', Georgia, 'Times New Roman', serif;
+    --display: 'Cabinet Grotesk', 'Segoe UI', system-ui, sans-serif;
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+    --bg: #f7f2ea; --surface: #fffcf6; --surface-2: #efe8dd;
+    --line: rgba(42, 39, 51, 0.12); --ink: #2a2733;
+    --muted: rgba(42, 39, 51, 0.74); --faint: rgba(42, 39, 51, 0.54);
+    --cream: #2a2733; --cream-hover: #403a4d; --signal: #c93f66;
+    --nav-bg: rgba(247, 242, 234, 0.9); --logo-filter: brightness(0) opacity(0.82);
+    color-scheme: light; } }
+  :root[data-theme="light"] {
+    --bg: #f7f2ea; --surface: #fffcf6; --surface-2: #efe8dd;
+    --line: rgba(42, 39, 51, 0.12); --ink: #2a2733;
+    --muted: rgba(42, 39, 51, 0.74); --faint: rgba(42, 39, 51, 0.54);
+    --cream: #2a2733; --cream-hover: #403a4d; --signal: #c93f66;
+    --nav-bg: rgba(247, 242, 234, 0.9); --logo-filter: brightness(0) opacity(0.82);
+    color-scheme: light; }
+
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); margin: 0; font: 500 16px/1.6 var(--display); font-feature-settings: "tnum"; -webkit-font-smoothing: antialiased; }
+  body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--nav-bg); }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; border-radius: 4px; }
+  .pad { padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
+  .wrap { max-width: 760px; margin: 0 auto; }
+
+  header.nav { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 9; background: var(--nav-bg);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
+  .nav .wrap { display: flex; align-items: center; justify-content: space-between; gap: 20px; height: 60px; max-width: 1160px; }
+  .mark { display: inline-flex; align-items: center; gap: 10px; font: 900 20px/1 var(--heading); letter-spacing: 0.12em; color: var(--cream); text-decoration: none; }
+  .mark img { width: 30px; height: auto; display: block; filter: var(--logo-filter); }
+  .nav-links { display: flex; align-items: center; gap: 22px; }
+  .nav-links a:not(.btn) { color: var(--muted); text-decoration: none; font-size: 14px; white-space: nowrap; }
+  .nav-links a:not(.btn):hover { color: var(--ink); }
+  .btn { display: inline-flex; align-items: center; white-space: nowrap; text-decoration: none; font: 600 14px/1 var(--display);
+    padding: 10px 16px; border-radius: 10px; background: var(--cream); color: var(--bg); border: 1px solid var(--cream);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), inset 0 -2px 0 rgba(0, 0, 0, 0.14), 0 1px 2px rgba(20, 16, 30, 0.24); }
+  .btn:hover { background: var(--cream-hover); border-color: var(--cream-hover); }
+  @media (max-width: 420px) { .nav-links a:not(.btn) { display: none; } }
+
+  main { padding-block: 88px 0; }
+  .kicker { font-weight: 600; font-size: 12px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--signal); margin: 0 0 18px; }
+  h1 { font: 900 clamp(40px, 7vw, 72px)/0.98 var(--heading); color: var(--cream); letter-spacing: 0.01em; margin: 0 0 22px; text-wrap: balance; }
+  .intro { color: var(--muted); font-size: 18px; max-width: 58ch; margin: 0; }
+  .intro a { color: var(--ink); }
+
+  .roll { margin-top: 48px; border: 1px solid var(--line); border-radius: 18px; overflow: hidden; background: var(--surface); }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { text-align: left; font-weight: 600; font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--signal);
+    background: var(--surface-2); padding: 16px 22px; }
+  tbody td { padding: 18px 22px; border-top: 1px solid var(--line); vertical-align: baseline; }
+  td.n { width: 96px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  td.who { font-weight: 700; overflow-wrap: anywhere; }
+  td.who a { text-decoration: none; }
+  td.who a:hover { text-decoration: underline; text-decoration-color: var(--line); }
+  td.who .addr { font-weight: 500; color: var(--muted); }
+  tr.empty td { color: var(--muted); font-weight: 500; }
+  @media (max-width: 520px) { thead th, tbody td { padding-inline: 16px; } td.n { width: 64px; } }
+
+  .meta { display: flex; justify-content: space-between; gap: 8px 24px; flex-wrap: wrap; margin: 14px 0 0; color: var(--faint); font-size: 13px; }
+  .note { margin: 40px 0 0; color: var(--muted); max-width: 58ch; }
+  .note a { color: var(--ink); }
+
+  footer { margin-top: 120px; border-top: 1px solid var(--line); padding-block: 40px 64px; }
+  footer .wrap { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; color: var(--muted); font-size: 14px; max-width: 1160px; }
+  footer a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--line); }
+</style>
+
+<header class="nav pad">
+  <div class="wrap">
+    <a class="mark" href="https://ham-maze.vercel.app" aria-label="HAM: play the game"><img src="brand/logo.png" alt="" width="30" height="31"><span>HAM</span></a>
+    <nav class="nav-links" aria-label="Pages">
+      <a href="/story">The story</a>
+      <a class="btn" href="https://www.funding.works/0x0C185ad21a28c62969711b8F57f1Ed3ceEB504d2" target="_blank" rel="noopener">Back HAM</a>
+    </nav>
+  </div>
+</header>
+
+<main class="pad">
+  <div class="wrap">
+    <p class="kicker">The credits</p>
+    <h1>The backers.</h1>
+    <p class="intro">Everyone who holds a HAM Backer Pass from the <a href="https://www.funding.works/0x0C185ad21a28c62969711b8F57f1Ed3ceEB504d2" target="_blank" rel="noopener">FundingWorks campaign&nbsp;&#8599;</a>. They're here for as long as the game runs.</p>
+
+    <div class="roll">
+      <table>
+        <thead><tr><th scope="col">Pass</th><th scope="col">Name</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <p class="meta"><span id="count"></span><span id="source"></span></p>
+
+    <p class="note">Names come from each holder's ENS name. To change how yours appears, message <a href="https://x.com/playHAM3D" target="_blank" rel="noopener">@playHAM3D</a>.</p>
+  </div>
+</main>
+
+<footer class="pad">
+  <div class="wrap">
+    <span>HAM &middot; Home's a Maze</span>
+    <span>Made by <a href="https://miracleotugo.art" target="_blank" rel="noopener">Miracle Otugo</a></span>
+  </div>
+</footer>
+
+<script>
+(function () {
+  // The pass is an ERC-721 on Ethereum mainnet with no totalSupply, so the page asks ownerOf for
+  // pass #1 upward and stops after a run of empty numbers (a pass that was exited is skipped).
+  const PASS = '0x0C185ad21a28c62969711b8F57f1Ed3ceEB504d2';
+  const RPCS = ['https://ethereum-rpc.publicnode.com', 'https://eth.llamarpc.com', 'https://cloudflare-eth.com'];
+  // Today's list, shown first and kept if the live read fails. Checked on-chain on 2026-11-24.
+  const SNAPSHOT = [
+    [1, '0x3d03a68CBd8D9525C953D3D56d6D0636aB577068', 'ongo.eth'],
+    [2, '0xAf76659E2f54434144DE4Bc1A36cf57d52813562', ''],
+    [3, '0xFc3C962FAD2C1cC77f1a0d46e7B8a2De79A21774', 'rhynotic.eth'],
+    [4, '0x4e62213d4F02203F30EB85D6De5cd7f117b5f399', ''],
+    [5, '0x11F46FFf2624737Aa0D38507E761B6Ef770Eb94D', 'nicedayjules.eth'],
+    [6, '0x00EB7961D9BB6Decb832a6d25c14CF4172683657', ''],
+    [7, '0x08b296a897b1c8A033066A34Dfde80c66A825D7B', 'refibank.eth'],
+  ];
+  // Names a holder asked for, used over their ENS name (keyed by lowercase address).
+  const NAMES = {
+    '0x00eb7961d9bb6decb832a6d25c14cf4172683657': 'robt.eth', // the name FundingWorks shows for this backer
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const short = (a) => a.slice(0, 6) + '…' + a.slice(-4);
+
+  function render(list, live) {
+    const body = $('rows');
+    body.replaceChildren();
+    if (!list.length) {
+      const tr = document.createElement('tr'); tr.className = 'empty';
+      const td = document.createElement('td'); td.colSpan = 2; td.textContent = 'No passes yet. Be the first.';
+      tr.append(td); body.append(tr);
+    }
+    for (const [id, addr, ens] of list) {
+      const tr = document.createElement('tr');
+      const n = document.createElement('td'); n.className = 'n'; n.textContent = '#' + id;
+      const who = document.createElement('td'); who.className = 'who';
+      const a = document.createElement('a');
+      a.href = 'https://etherscan.io/address/' + addr; a.target = '_blank'; a.rel = 'noopener';
+      const name = NAMES[addr.toLowerCase()] || ens;
+      if (name) a.textContent = name; else { a.textContent = short(addr); a.className = 'addr'; }
+      a.title = addr;
+      who.append(a); tr.append(n, who); body.append(tr);
+    }
+    $('count').textContent = list.length === 1 ? '1 pass' : `${list.length} passes`;
+    $('source').textContent = live ? 'Read from Ethereum just now' : 'Last checked Nov 24, 2026';
+  }
+
+  async function rpc(method, params) {
+    for (const url of RPCS) {
+      try {
+        const r = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
+        const j = await r.json();
+        if (j.error && /revert/i.test(j.error.message || '')) return null; // no such pass
+        if (j.error) continue;
+        return j.result;
+      } catch (e) { /* try the next node */ }
+    }
+    throw new Error('no node answered');
+  }
+  const ownerOf = async (id) => {
+    const out = await rpc('eth_call', [{ to: PASS, data: '0x6352211e' + id.toString(16).padStart(64, '0') }, 'latest']);
+    return out && out.length >= 66 && !/^0x0+$/.test(out) ? '0x' + out.slice(-40) : null;
+  };
+
+  // ENS reverse names, through ethers (checks the name points back at the address).
+  async function ensNames(addrs) {
+    await new Promise((ok, no) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js';
+      s.onload = ok; s.onerror = no; document.head.append(s);
+    });
+    const p = new ethers.JsonRpcProvider(RPCS[0], 1, { staticNetwork: true });
+    return Promise.all(addrs.map((a) => p.lookupAddress(a).catch(() => null)));
+  }
+
+  render(SNAPSHOT, false);
+  (async () => {
+    try {
+      const found = [];
+      let misses = 0;
+      for (let start = 1; misses < 10 && start < 5000; start += 10) {
+        const ids = Array.from({ length: 10 }, (_, i) => start + i);
+        const owners = await Promise.all(ids.map(ownerOf));
+        owners.forEach((o, i) => { if (o) { found.push([ids[i], o]); misses = 0; } else misses++; });
+      }
+      // keep the snapshot's names while ENS loads, so the list doesn't flicker to addresses
+      const known = Object.fromEntries(SNAPSHOT.map(([, a, n]) => [a.toLowerCase(), n]));
+      const list = found.map(([id, a]) => [id, a, known[a.toLowerCase()] || '']);
+      render(list, true);
+      const names = await ensNames(list.map(([, a]) => a)).catch(() => null);
+      if (names) render(list.map(([id, a, n], i) => [id, a, names[i] || n]), true);
+    } catch (e) { /* the snapshot stays */ }
+  })();
+})();
+</script>

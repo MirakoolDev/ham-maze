@@ -127,7 +127,7 @@
   .pass-price span { font: 600 18px var(--display); color: var(--muted); letter-spacing: 0.06em; }
   .pass .btn { display: flex; justify-content: center; margin-top: 22px; }
   .pass-note { margin: 14px 0 0; color: var(--faint); font-size: 13px; }
-  .risk a { color: var(--cream); }
+  .risk a, .gets p a { color: var(--cream); }
   .risk { margin: 8px 0 0; max-width: 70ch; color: var(--faint); font-size: 14px; }
   @media (max-width: 860px) { .back { grid-template-columns: minmax(0, 1fr); gap: 8px; } .pass { position: static; margin-bottom: 36px; } .gets li { grid-template-columns: 58px minmax(0, 1fr); gap: 12px; } .gets-n { font-size: 24px; } }
   .trailer video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; background: #000; border-radius: 14px; border: 1px solid var(--line); }
@@ -661,7 +661,7 @@
             <li><span class="gets-n">10%</span><div><b>Of every daily pot</b><p>A tenth of each day's pot is split across all passes, every day from launch through June 4, 2027.</p></div></li>
             <li><span class="gets-n">1</span><div><b>A sealed Power-Up pack</b><p>One of the five guns, sealed until you open it. Everyone else buys theirs.</p></div></li>
             <li><span class="gets-n">&#9733;</span><div><b>A backer skin and badge</b><p>A runner look only backers have, shown in every run you play.</p></div></li>
-            <li><span class="gets-n">&#8734;</span><div><b>Your name in the credits</b><p>Your ENS name, for as long as the game runs.</p></div></li>
+            <li><span class="gets-n">&#8734;</span><div><b>Your name in the credits</b><p>Your ENS name on <a href="/backers">the backers page</a>, for as long as the game runs.</p></div></li>
           </ul>
           <h3 class="back-h">What the raise pays for</h3>
           <ul class="pays">
@@ -734,6 +734,7 @@
 <footer class="pad">
   <div class="wrap">
     <span>HAM &middot; Home's a Maze</span>
+    <span><a href="/backers">The backers</a></span>
     <span>Made by <a href="https://miracleotugo.art" target="_blank" rel="noopener">Miracle Otugo</a></span>
   </div>
 </footer>

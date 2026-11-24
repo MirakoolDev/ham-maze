@@ -101,6 +101,7 @@ ${body}
 `);
   };
   page('site/story.html', 'dist/story.html', 'HAM is a daily maze shooter. Every run becomes a Score NFT, the top three split the pot, and nothing launches a new coin.');
+  page('site/backers.html', 'dist/backers.html', 'Everyone who holds a HAM Backer Pass, by pass number and ENS name.');
   page('site/nfts.html', 'dist/nfts.html', 'The HAM NFTs: Scores drawn from the day\'s real maze, and Power-Up guns sold in sealed packs.');
   // Share cards: every public page gets the same 1200x630 image (assets/og.png, rendered from
   // design/og/og.html) plus its own title and description, so links unfurl on X, Discord and Telegram.
@@ -112,6 +113,7 @@ ${body}
     ['dist/practice.html', '/practice', 'Practice today\'s HAM maze: same maze, same sentries, no wallet and no pot. Learn the route, then play for it.'],
     ['dist/leaderboard.html', '/leaderboard', 'Today\'s HAM pot, the top three runs of today\'s maze, and every day before it.'],
     ['dist/story.html', '/story', 'HAM is a daily maze shooter. Every run becomes a Score NFT, the top three split the pot, and nothing launches a new coin.'],
+    ['dist/backers.html', '/backers', 'Everyone who holds a HAM Backer Pass, by pass number and ENS name.'],
     ['dist/nfts.html', '/nfts', 'The HAM NFTs: Scores drawn from the day\'s real maze, and Power-Up guns sold in sealed packs.'],
   ]) {
     let html = fs.readFileSync(file, 'utf8');
@@ -135,5 +137,5 @@ ${body}
     ].join('\n');
     fs.writeFileSync(file, html.replace(/<\/title>/, `</title>\n${tags}`));
   }
-  for (const f of ['dist/index.html', 'dist/practice.html', 'dist/artifact.html', 'dist/admin.html', 'dist/deploy.html', 'dist/leaderboard.html', 'dist/story.html', 'dist/nfts.html']) console.log(`${f}  ${(fs.statSync(f).size / 1024).toFixed(0)} KB`);
+  for (const f of ['dist/index.html', 'dist/practice.html', 'dist/artifact.html', 'dist/admin.html', 'dist/deploy.html', 'dist/leaderboard.html', 'dist/story.html', 'dist/backers.html', 'dist/nfts.html']) console.log(`${f}  ${(fs.statSync(f).size / 1024).toFixed(0)} KB`);
 }
