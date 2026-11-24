@@ -19,7 +19,7 @@ contract HamPowerUpsTest is Test {
         vm.roll(100);
         pu = new HamPowerUps(owner);
         vm.startPrank(owner);
-        pu.setGame(game);
+        pu.setGame(game, true);
         pu.addKind("Marker", "COMMON", 4000);
         pu.addKind("Frost dart", "RARE", 2000);
         pu.addKind("Pulse", "RARE", 2000);
@@ -213,6 +213,22 @@ contract HamPowerUpsTest is Test {
     function test_onlyGameRecordsRuns() public {
         vm.expectRevert(HamPowerUps.NotGame.selector);
         pu.recordRun(alice, 1, true);
+    }
+
+    function test_severalGamesCanRecordAndOneCanBeRemoved() public {
+        address match_ = makeAddr("multiplayer");
+        vm.prank(owner);
+        pu.setGame(match_, true);
+        vm.prank(game);
+        pu.recordRun(alice, 1, true); // no gun equipped: a no-op, but allowed
+        vm.prank(match_);
+        pu.recordRun(alice, 1, true);
+        vm.prank(owner);
+        pu.setGame(match_, false);
+        vm.prank(match_);
+        vm.expectRevert(HamPowerUps.NotGame.selector);
+        pu.recordRun(alice, 1, true);
+        assertTrue(pu.isGame(game));
     }
 
     // ── owner ───────────────────────────────────────────────────────────────────

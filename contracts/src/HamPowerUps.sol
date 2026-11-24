@@ -40,7 +40,7 @@ contract HamPowerUps {
     }
 
     address public owner;
-    address public game; // the only address allowed to call recordRun
+    mapping(address => bool) public isGame; // the game contracts allowed to call recordRun (daily run, later multiplayer)
     bool public locked; // lineup and art frozen for good; sales open
 
     // the price: basePrice for the day's first pack, times `growth` (1e18 = x1) for every pack after
@@ -77,7 +77,7 @@ contract HamPowerUps {
     event PackOpened(uint256 indexed tokenId, address indexed holder, uint256 indexed kind);
     event Equipped(address indexed holder, uint256 indexed tokenId);
     event RunRecorded(uint256 indexed tokenId, uint32 runs, uint32 kills);
-    event GameSet(address game);
+    event GameSet(address indexed game, bool allowed);
     event OwnerSet(address owner);
     event Withdrawn(address indexed to, uint256 amount);
 
@@ -220,9 +220,9 @@ contract HamPowerUps {
         return t == 0 || _owner[t] != player ? 0 : kindOf[t];
     }
 
-    /// @notice Called by `game` after every run. A no-op for a player carrying nothing.
+    /// @notice Called by an allowed game after every run. A no-op for a player carrying nothing.
     function recordRun(address player, uint32 kills, bool) external {
-        if (msg.sender != game) revert NotGame();
+        if (!isGame[msg.sender]) revert NotGame();
         uint256 tokenId = equipped[player];
         if (tokenId == 0 || _owner[tokenId] != player) return;
         Stats storage s = stats[tokenId];
@@ -283,10 +283,12 @@ contract HamPowerUps {
         return _kinds;
     }
 
-    function setGame(address game_) external onlyOwner {
+    /// @notice Allow or remove a game contract that reports runs. Several can be allowed at once,
+    /// so a later mode (multiplayer, tournaments) can count runs on the same guns.
+    function setGame(address game_, bool allowed) external onlyOwner {
         if (game_ == address(0)) revert ZeroAddress();
-        game = game_;
-        emit GameSet(game_);
+        isGame[game_] = allowed;
+        emit GameSet(game_, allowed);
     }
 
     function transferOwner(address to) external onlyOwner {

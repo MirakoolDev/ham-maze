@@ -25,7 +25,7 @@ contract DeployArt is Script {
         vm.startBroadcast();
         art = new HamScoreArt();
         pu = new HamPowerUps(owner);
-        pu.setGame(game);
+        pu.setGame(game, true);
         pu.setArt(0, bytes(vm.readFile("./art/pack.head.svg")), bytes(vm.readFile("./art/pack.tail.svg")));
         for (uint256 i; i < 5; ++i) {
             uint256 kind = pu.addKind(names[i], rarity[i], caps[i]);
