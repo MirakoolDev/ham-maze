@@ -136,6 +136,11 @@
     '0x00eb7961d9bb6decb832a6d25c14cf4172683657': 'robt.eth', // the name FundingWorks shows for this backer
   };
 
+  // Shown first, whatever their pass number.
+  const PINNED = new Set([
+    '0xfc3c962fad2c1cc77f1a0d46e7b8a2de79a21774', // rhynotic.eth, creator of FundingWorks
+  ]);
+
   const $ = (id) => document.getElementById(id);
   const short = (a) => a.slice(0, 6) + '…' + a.slice(-4);
 
@@ -147,6 +152,8 @@
       const td = document.createElement('td'); td.colSpan = 2; td.textContent = 'No passes yet. Be the first.';
       tr.append(td); body.append(tr);
     }
+    const pin = (a) => (PINNED.has(a.toLowerCase()) ? 0 : 1);
+    list = [...list].sort((x, y) => pin(x[1]) - pin(y[1]) || x[0] - y[0]);
     for (const [id, addr, ens] of list) {
       const tr = document.createElement('tr');
       const n = document.createElement('td'); n.className = 'n'; n.textContent = '#' + id;
