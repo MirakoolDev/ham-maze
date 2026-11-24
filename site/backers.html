@@ -152,8 +152,9 @@
       const td = document.createElement('td'); td.colSpan = 2; td.textContent = 'No passes yet. Be the first.';
       tr.append(td); body.append(tr);
     }
-    const pin = (a) => (PINNED.has(a.toLowerCase()) ? 0 : 1);
-    list = [...list].sort((x, y) => pin(x[1]) - pin(y[1]) || x[0] - y[0]);
+    // rhynotic.eth first, then named backers in mint order, then bare addresses in mint order
+    const rank = ([, a, ens]) => (PINNED.has(a.toLowerCase()) ? 0 : (NAMES[a.toLowerCase()] || ens) ? 1 : 2);
+    list = [...list].sort((x, y) => rank(x) - rank(y) || x[0] - y[0]);
     for (const [id, addr, ens] of list) {
       const tr = document.createElement('tr');
       const n = document.createElement('td'); n.className = 'n'; n.textContent = '#' + id;
