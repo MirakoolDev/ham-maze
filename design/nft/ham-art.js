@@ -309,8 +309,8 @@
       accent: '#ff4f97', glow: '#ff7db4', barrel: 34,
     },
     frost: {
-      name: 'Frost dart', rarity: 'RARE', room: 'Pool', charges: 3, chargeText: '3 CHARGES / RUN',
-      move: 'FREEZES A RIVAL OR SENTRY FOR 3 S',
+      name: 'Freeze', rarity: 'RARE', room: 'Pool', charges: 3, chargeText: '3 CHARGES / RUN', device: true,
+      move: 'FREEZES THE NEAREST RIVAL OR SENTRY 3 S',
       body: ['#ffffff', '#dcf1ff', '#94bfdf'], metal: ['#f4fbff', '#c6e2f4', '#7fa7c6'], grip: ['#eef8ff', '#a9d4f2', '#6d9cc2'],
       accent: '#5fd0ff', glow: '#9fe6ff', barrel: 118,
     },
@@ -328,7 +328,7 @@
     },
     snare: {
       name: 'Snare', rarity: 'EPIC', room: 'Red Room', charges: 2, chargeText: '2 TRAPS / RUN',
-      move: 'LAYS A TRAP THAT HOLDS A RIVAL 4 S',
+      move: 'TRAPS A RIVAL OR SENTRY FOR 6 S',
       body: ['#f4fffb', '#bfeadf', '#6fae9f'], metal: ['#f1fffa', '#cdeee4', '#7bb3a5'], grip: ['#effff9', '#9fdccc', '#5c9a8b'],
       accent: '#7dffe0', glow: '#9ffff0', barrel: 40,
     },
@@ -508,8 +508,36 @@
       gs.push(`<rect x="35" y="-58" width="10" height="32" rx="1.5" fill="url(#${uid}sight)"/>`);
       gs.push(`<rect x="39" y="-56" width="2" height="28" fill="#fff6ec" opacity="0.8"/>`);
     }
-    const lift = key === 'k7' ? 196 : 200;
-    s.push(`<g transform="translate(${f1(286 - L * 0.32)} ${lift}) rotate(-7)">${gs.join('')}</g>`);
+    // Freeze is not a gun: a hand-held frost beacon. Aimed at nothing, it freezes whatever is nearest.
+    if (g.device) {
+      gs.length = 0;
+      const cx = 46;
+      gs.push(`<ellipse cx="${cx}" cy="-20" rx="96" ry="104" fill="url(#${uid}glow)" opacity="0.42" filter="url(#${uid}b14)"/>`);
+      // glass chamber on top, a crystal glowing inside it
+      gs.push(`<rect x="${cx - 32}" y="-122" width="64" height="60" rx="26" fill="#ffffff" fill-opacity="0.42" stroke="#ffffff" stroke-width="1.4"/>`);
+      gs.push(`<g filter="url(#${uid}b4)"><polygon points="${cx - 14},-92 ${cx},-116 ${cx + 14},-92 ${cx},-70" fill="${g.glow}"/></g>`);
+      gs.push(`<polygon points="${cx - 14},-92 ${cx},-116 ${cx + 14},-92 ${cx},-70" fill="#f2fbff" stroke="#ffffff" stroke-width="1"/>`);
+      gs.push(`<polygon points="${cx},-116 ${cx + 14},-92 ${cx},-70" fill="${g.accent}" opacity="0.45"/>`);
+      gs.push(`<rect x="${cx - 26}" y="-114" width="10" height="40" rx="5" fill="#ffffff" opacity="0.6"/>`);
+      // the body: a rounded column you hold in one hand
+      gs.push(`<rect x="${cx - 40}" y="-70" width="80" height="138" rx="34" fill="url(#${uid}gb)"/>`);
+      gs.push(`<rect x="${cx - 30}" y="-62" width="9" height="96" rx="4.5" fill="#ffffff" opacity="0.55"/>`);
+      // collar under the chamber, and the glowing band round the middle
+      gs.push(`<rect x="${cx - 36}" y="-74" width="72" height="12" rx="6" fill="url(#${uid}gm)"/>`);
+      gs.push(`<g filter="url(#${uid}b4)"><rect x="${cx - 42}" y="-14" width="84" height="12" rx="6" fill="${g.glow}"/></g>`);
+      gs.push(`<rect x="${cx - 42}" y="-14" width="84" height="12" rx="6" fill="${g.accent}"/>`);
+      gs.push(`<rect x="${cx - 38}" y="-11" width="76" height="3" rx="1.5" fill="#ffffff" opacity="0.7"/>`);
+      // grip ridges, and the thumb button
+      for (let i = 0; i < 3; i++) gs.push(`<rect x="${cx - 34}" y="${14 + i * 14}" width="68" height="6" rx="3" fill="url(#${uid}gm)" opacity="0.9"/>`);
+      gs.push(`<circle cx="${cx + 40}" cy="-40" r="8" fill="url(#${uid}gm)" stroke="#ffffff" stroke-width="1.2"/>`);
+      gs.push(`<circle cx="${cx + 40}" cy="-40" r="3.5" fill="${g.accent}"/>`);
+      // the sliver of the monolith every HAM Power-Up carries
+      gs.push(`<rect x="${cx + 14}" y="-62" width="12" height="36" rx="2" fill="#ff8a3d" opacity="0.55" filter="url(#${uid}b4)"/>`);
+      gs.push(`<rect x="${cx + 15}" y="-58" width="10" height="32" rx="1.5" fill="url(#${uid}sight)"/>`);
+      gs.push(`<rect x="${cx + 19}" y="-56" width="2" height="28" fill="#fff6ec" opacity="0.8"/>`);
+    }
+    const lift = key === 'k7' ? 196 : g.device ? 214 : 200;
+    s.push(`<g transform="translate(${f1(g.device ? 254 : 286 - L * 0.32)} ${lift}) rotate(${g.device ? -4 : -7})">${gs.join('')}</g>`);
 
     s.push(`<rect width="600" height="600" filter="url(#${uid}n)"/>`);
 

@@ -5,7 +5,7 @@
 // gun's own piece: Marker's paint canister, Frost's ice crystals, Pulse's emitter ring and dial,
 // Blinker's ember capsule, Snare's coils and prongs. Colours are the drawings' three-stop gradients.
 // Units: metres. Barrel along -z, up +y, like the K-7 (src/gunmodel.js).
-//  - the rifles (Frost dart, Blinker) keep the K-7's measurements where hands and shoulder go: its grip,
+//  - the rifles (Blinker; Freeze still uses the old Frost dart rifle body until its device model is built) keep the K-7's measurements where hands and shoulder go: its grip,
 //    the stock butt about 38 cm behind it, the support hand on a handguard the K-7's size and place;
 //  - the pistols (Marker, Pulse, Snare) are handgun size: a 2.6 cm grip her fingers wrap, a body about
 //    4.2 cm wide, no stock nub (it would sit on her wrist).
@@ -19,7 +19,7 @@ import { flashTexture } from './gunmodel.js';
 export const NFT_GUNS = {
   marker: { name: 'Marker', kind: 'pistol', body: ['#fff6f8', '#f7c3d3', '#cf8aa3'], metal: ['#fdf3f6', '#ead6e2', '#b89cb3'], grip: ['#fff0f5', '#f3a9c2', '#c46f8f'], accent: '#ff4f97', glow: '#ff7db4', barrel: 0.035,
     act: { every: 0.32, kick: 0.7, reload: 'shake', reloadT: 1.1 } },
-  frost: { name: 'Frost dart', kind: 'rifle', body: ['#ffffff', '#dcf1ff', '#94bfdf'], metal: ['#f4fbff', '#c6e2f4', '#7fa7c6'], grip: ['#eef8ff', '#a9d4f2', '#6d9cc2'], accent: '#5fd0ff', glow: '#9fe6ff', barrel: 0.42,
+  frost: { name: 'Freeze', kind: 'rifle', body: ['#ffffff', '#dcf1ff', '#94bfdf'], metal: ['#f4fbff', '#c6e2f4', '#7fa7c6'], grip: ['#eef8ff', '#a9d4f2', '#6d9cc2'], accent: '#5fd0ff', glow: '#9fe6ff', barrel: 0.42,
     act: { every: 0.24, kick: 0.7, reload: 'rifle' } },
   pulse: { name: 'Pulse', kind: 'pistol', body: ['#fbf8ff', '#ddd2fb', '#9e90d6'], metal: ['#f6f3ff', '#d4ccf2', '#8f86c0'], grip: ['#f4efff', '#bfb0f0', '#7d6fbd'], accent: '#b58cff', glow: '#cdb0ff', barrel: 0.06,
     act: { every: 0.55, kick: 1.4, reload: 'self', reloadT: 1.3 } },

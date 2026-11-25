@@ -53,7 +53,7 @@
 
       <section class="m-screen m-title" aria-label="HAM Maze">
         <div class="m-side">
-          <div class="m-brand"><i class="m-logo" aria-hidden="true"></i><div><div class="m-word">HAM</div><div class="m-no">Daily maze No. <b data-f="seed">0</b></div></div></div>
+          <div class="m-brand"><i class="m-logo" aria-hidden="true"></i><div><div class="m-word">HAM</div><div class="m-no">Daily maze No. <b data-f="seed">0</b></div><div class="m-streak" hidden></div></div></div>
           <h2 class="m-how">How to play HAM</h2>
           <ul class="m-steps">
             <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span>Find the monolith to solve today&rsquo;s maze.</span></li>
@@ -107,7 +107,11 @@
         </dl>
         <p class="m-breakdown" data-f="breakdown"></p>
         <p class="m-status m-run-status" role="status"></p>
-        <div class="m-actions col"><button class="btn" data-act="submit-run" hidden>Try recording again</button><button class="btn primary" data-act="again">Run it again</button></div>
+        <div class="m-share" hidden>
+          <img class="m-share-img" alt="Your run's share card" hidden>
+          <div class="m-share-links" hidden><a class="btn small" data-share-x target="_blank" rel="noopener">Post on X</a><a class="btn small" data-share-save download="ham-run.png">Save image</a></div>
+        </div>
+        <div class="m-actions col"><button class="btn" data-act="submit-run" hidden>Try recording again</button><button class="btn" data-act="share">Share your run</button><button class="btn primary" data-act="again">Run it again</button></div>
       </section>
 
       <section class="m-screen m-card m-dead" data-s="dead" aria-label="Down">

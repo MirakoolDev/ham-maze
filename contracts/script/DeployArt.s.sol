@@ -18,7 +18,7 @@ contract DeployArt is Script {
         address owner = vm.envAddress("HAM_OWNER");
         address game = vm.envAddress("HAM_GAME");
         string[5] memory keys = ["marker", "frost", "pulse", "blinker", "snare"];
-        string[5] memory names = ["Marker", "Frost dart", "Pulse", "Blinker", "Snare"];
+        string[5] memory names = ["Marker", "Freeze", "Pulse", "Blinker", "Snare"];
         string[5] memory rarity = ["COMMON", "RARE", "RARE", "EPIC", "EPIC"];
         uint32[5] memory caps = [uint32(4000), 2000, 2000, 1000, 1000];
 

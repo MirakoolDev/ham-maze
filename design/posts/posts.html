@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>HAM posts</title>
+<!-- Source for the daily X post images (1600x900). Pick a card with ?card=audit or ?card=backers.
+     Type and field follow the Backer Pass art (Jost caps, dusk gradient). Render: node design/posts/render.mjs -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600&display=block">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1600px; height: 900px; overflow: hidden; background: #ece4da; }
+  body { font-family: Jost, 'Century Gothic', Futura, sans-serif; color: #24212c; }
+  .card { position: relative; width: 1600px; height: 900px; overflow: hidden; display: none; }
+  .card.on { display: block; }
+  .caps { text-transform: uppercase; letter-spacing: .24em; }
+  .mark { position: absolute; left: 72px; top: 64px; }
+  .mark b { display: block; font-weight: 600; font-size: 22px; letter-spacing: .32em; }
+  .mark span { display: block; margin-top: 10px; font-size: 15px; letter-spacing: .26em; opacity: .7; }
+  .corner { position: absolute; right: 72px; top: 64px; text-align: right; }
+  .corner b { display: block; font-weight: 600; font-size: 17px; letter-spacing: .24em; }
+  .corner span { display: block; margin-top: 11px; font-size: 15px; letter-spacing: .26em; opacity: .7; }
+
+  /* ── audit: the game's own view of home, with the facts on a frosted strip ── */
+  #audit { background: linear-gradient(180deg, #a9c0e2 0%, #c6d4ea 55%, #dfe2ec 100%); }
+  /* only the clean right part of the title-screen capture (the menu sits on its left) */
+  #audit .shot { position: absolute; top: 0; bottom: 0; left: 560px; right: 0; background: url('../fundingworks/shot.png') -660px -40px / 1700px 956px no-repeat;
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, transparent 60px, #000 380px); mask-image: linear-gradient(90deg, transparent 0, transparent 60px, #000 380px); }
+  #audit h1 { position: absolute; left: 68px; top: 232px; font-weight: 300; font-size: 96px; line-height: 1.02; letter-spacing: -.01em; }
+  #audit .lede { position: absolute; left: 72px; top: 462px; width: 560px; font-size: 23px; line-height: 1.5; font-weight: 400; color: rgba(36,33,44,.82); }
+  #audit .status { position: absolute; left: 72px; top: 186px; display: flex; align-items: center; gap: 14px; font-size: 15px; font-weight: 500; letter-spacing: .26em; text-transform: uppercase; color: #b8355d; }
+  #audit .status i { width: 10px; height: 10px; border-radius: 50%; background: #e5547f; box-shadow: 0 0 0 6px rgba(229,84,127,.18); }
+  .strip { position: absolute; left: 48px; right: 48px; bottom: 48px; height: 172px; border-radius: 22px;
+    background: rgba(250,246,240,.72); backdrop-filter: blur(18px) saturate(1.1); border: 1px solid rgba(255,255,255,.7);
+    box-shadow: 0 20px 60px rgba(60,50,80,.16); display: grid; grid-template-columns: repeat(4, 1fr) 1.25fr; }
+  .strip > div { padding: 34px 0 0 32px; border-left: 1px solid rgba(36,33,44,.12); }
+  .strip > div:first-child { border-left: 0; }
+  .strip .n { font-weight: 300; font-size: 64px; line-height: 1; font-variant-numeric: tabular-nums; }
+  .strip .l { margin-top: 16px; font-size: 13px; letter-spacing: .22em; text-transform: uppercase; opacity: .72; }
+  .strip .who { padding-right: 32px; }
+  .strip .who .l { margin-top: 0; }
+  .strip .who p { margin-top: 12px; font-size: 19px; line-height: 1.45; font-weight: 400; }
+  .strip .who em { font-style: normal; font-weight: 600; }
+
+  /* ── backers: the pass itself, and the credits ── */
+  #backers { background: linear-gradient(180deg, #dfe3ef 0%, #ece4da 55%, #efd9c8 100%); }
+  #backers .pass { position: absolute; right: 96px; top: 96px; width: 640px; height: 640px; border-radius: 6px;
+    background: url('../fundingworks/backer-pass-100.png') center / cover;
+    box-shadow: 0 2px 0 rgba(255,255,255,.6) inset, 0 40px 80px rgba(70,50,80,.22), 0 8px 20px rgba(70,50,80,.12); }
+  #backers .cap { position: absolute; right: 96px; top: 760px; width: 640px; display: flex; justify-content: space-between;
+    font-size: 13px; letter-spacing: .24em; text-transform: uppercase; opacity: .66; }
+  #backers h1 { position: absolute; left: 68px; top: 186px; font-weight: 300; font-size: 84px; line-height: 1.04; letter-spacing: -.01em; }
+  #backers ol { position: absolute; left: 72px; top: 412px; width: 600px; list-style: none; border-top: 1px solid rgba(36,33,44,.18); }
+  #backers li { display: grid; grid-template-columns: 74px 1fr; align-items: baseline; padding: 11px 0 10px; border-bottom: 1px solid rgba(36,33,44,.12); font-size: 23px; }
+  #backers li span { font-size: 14px; letter-spacing: .2em; opacity: .6; font-variant-numeric: tabular-nums; }
+  #backers li.addr { color: rgba(36,33,44,.62); font-size: 20px; letter-spacing: .02em; }
+  #backers .foot { position: absolute; left: 72px; bottom: 60px; font-size: 15px; letter-spacing: .24em; text-transform: uppercase; }
+  #backers .foot b { font-weight: 600; }
+  /* ── maze: a film still from the trailer (letterboxed 2.39:1 inside the poster, rows 92-628) ── */
+  #maze { background: linear-gradient(180deg, #e3e6ef 0%, #ece4da 100%); }
+  #maze .plate { position: absolute; left: 72px; right: 72px; top: 150px; height: 556px; border-radius: 4px;
+    background: url('../../assets/trailer-poster.jpg') center -108px / 1456px 819px no-repeat;
+    box-shadow: 0 30px 70px rgba(60,50,80,.2), 0 6px 16px rgba(60,50,80,.1); }
+  #maze h1 { position: absolute; left: 68px; top: 742px; font-weight: 300; font-size: 72px; line-height: 1; letter-spacing: -.01em; }
+  #maze .facts { position: absolute; right: 72px; top: 752px; text-align: right; font-size: 15px; line-height: 2.1; letter-spacing: .24em; text-transform: uppercase; }
+  #maze .facts b { font-weight: 600; }
+</style>
+</head>
+<body>
+
+<section class="card" id="audit">
+  <div class="shot"></div>
+  <div class="mark"><b>HAM</b><span>SECURITY AUDIT · NO. 2</span></div>
+  <div class="corner"><b>ROBINHOOD CHAIN</b><span>BEFORE MAINNET</span></div>
+  <p class="status"><i></i>In review now</p>
+  <h1>The second<br>audit is open.</h1>
+  <p class="lede">The first audit's findings are fixed. Now the fixed code goes back to IMD before a single pot goes live.</p>
+  <div class="strip">
+    <div><div class="n">14</div><div class="l">Findings fixed</div></div>
+    <div><div class="n">8</div><div class="l">Contracts</div></div>
+    <div><div class="n">133</div><div class="l">Tests passing</div></div>
+    <div><div class="n">4</div><div class="l">Reviewers</div></div>
+    <div class="who"><div class="l">Checking</div><p><em>Economics, flow, math, permissions.</em> A judge reproduces and ranks every finding.</p></div>
+  </div>
+</section>
+
+<section class="card" id="backers">
+  <div class="mark"><b>HAM</b><span>THE BACKERS</span></div>
+  <h1>Seven backers.<br>Ten days left.</h1>
+  <ol>
+    <li><span>NO. 3</span>rhynotic.eth</li>
+    <li><span>NO. 1</span>ongo.eth</li>
+    <li><span>NO. 5</span>nicedayjules.eth</li>
+    <li><span>NO. 6</span>robt.eth</li>
+    <li><span>NO. 7</span>refibank.eth</li>
+    <li class="addr"><span>NO. 2</span>0xAf76…3562</li>
+    <li class="addr"><span>NO. 4</span>0x4e62…f399</li>
+  </ol>
+  <div class="pass"></div>
+  <div class="cap"><span>Backer Pass · No. 1 · Dusk</span><span>10% of every pot · 6 months</span></div>
+  <p class="foot"><b>0.05 ETH</b> &nbsp;·&nbsp; Mint closes Dec 5 &nbsp;·&nbsp; ham3d.fun/backers</p>
+</section>
+
+<section class="card" id="maze">
+  <div class="mark"><b>HAM</b><span>HOME'S A MAZE</span></div>
+  <div class="corner"><b>DAILY MAZE</b><span>NEW AT 00:00 UTC</span></div>
+  <div class="plate"></div>
+  <h1>One maze a day.</h1>
+  <p class="facts">The same maze for everyone<br><b>Home is the monolith</b> &nbsp;·&nbsp; ham3d.fun</p>
+</section>
+
+<script>
+  const card = new URLSearchParams(location.search).get('card') || 'audit';
+  document.getElementById(card).classList.add('on');
+</script>
+</body>
+</html>

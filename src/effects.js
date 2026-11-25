@@ -1,4 +1,4 @@
-// Pooled sparks, bullet-hole decals, tracers and a muzzle light (constant light count: no shader recompiles).
+// Pooled sparks, bullet-hole decals (fading, unless kept), tracers and a muzzle light (constant light count: no shader recompiles).
 import * as THREE from 'three';
 
 export function createEffects(scene) {
@@ -36,15 +36,32 @@ export function createEffects(scene) {
   })();
   const decalMat = new THREE.MeshStandardMaterial({ map: holeTex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, roughness: 1 });
   const decalGeo = new THREE.PlaneGeometry(0.22, 0.22);
+  // K-7 marks fade: a mark holds for MARK_HOLD seconds, then fades over MARK_FADE and is gone. Only the
+  // Marker Power-Up paints for good (hole(p, n, { keep: true })), so the maze doesn't fill with K-7 holes
+  // that read as route markings.
+  const MARK_HOLD = 3, MARK_FADE = 1.5;
   const decals = [];
-  function hole(p, n) {
-    let m;
-    if (decals.length >= 80) m = decals.shift(); else { m = new THREE.Mesh(decalGeo, decalMat); scene.add(m); }
+  function hole(p, n, { keep = false } = {}) {
+    let d;
+    if (decals.length >= 80) d = decals.shift(); else { d = { m: new THREE.Mesh(decalGeo, decalMat.clone()) }; scene.add(d.m); }
+    const m = d.m;
+    if (!m.parent) scene.add(m);
+    m.material.opacity = 1;
     m.position.copy(p).addScaledVector(n, 0.01);
     m.lookAt(p.clone().add(n));
     m.rotation.z += Math.random() * 6.28;
     m.scale.setScalar(0.7 + Math.random() * 0.5);
-    decals.push(m);
+    d.age = 0; d.keep = keep;
+    decals.push(d);
+  }
+  function updateDecals(dt) {
+    for (let i = decals.length - 1; i >= 0; i--) {
+      const d = decals[i];
+      if (d.keep) continue;
+      d.age += dt;
+      d.m.material.opacity = 1 - THREE.MathUtils.clamp((d.age - MARK_HOLD) / MARK_FADE, 0, 1);
+      if (d.age >= MARK_HOLD + MARK_FADE) { scene.remove(d.m); d.m.material.dispose(); decals.splice(i, 1); }
+    }
   }
 
   // ---- tracers ----
@@ -64,7 +81,7 @@ export function createEffects(scene) {
 
   function clear() {
     parts.length = 0;
-    for (const d of decals) scene.remove(d);
+    for (const d of decals) { scene.remove(d.m); d.m.material.dispose(); }
     decals.length = 0;
   }
 
@@ -93,6 +110,7 @@ export function createEffects(scene) {
 
   function update(dt, cam) {
     if (cam) updateDust(dt, cam);
+    updateDecals(dt);
     let n = 0;
     for (let i = parts.length - 1; i >= 0; i--) {
       const q = parts[i];

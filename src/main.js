@@ -4,7 +4,8 @@ import { generateMaze, dailySeed } from './maze.js';
 import { buildWorld } from './world.js';
 import { Player, RADIUS } from './player.js';
 import { createInput } from './input.js';
-import { createHud } from './hud.js';
+import { createHud, fmtTime } from './hud.js';
+import { recordFinish, streak, shareText, drawCard } from './share.js';
 import { createWeapon, MAG } from './weapon.js';
 import { createEnemies } from './enemies.js';
 import { createEffects } from './effects.js';
@@ -109,15 +110,42 @@ function setMode(m) {
   input.enabled = m === 'play';
   touchUi.classList.toggle('idle', m !== 'play');
 }
+// The first run of the day in this browser opens on an establishing shot: the camera starts high over the
+// start, looking across the maze at the monolith ("Home"), then comes down into her eyes. Any key, click
+// or touch skips it. Retries and later runs go straight in.
+const INTRO_SECS = 3.6;
+const introCap = document.createElement('div');
+introCap.className = 'intro-cap'; introCap.innerHTML = '<b>Home</b><span>is the monolith. Find your way to it.</span>';
+document.getElementById('app').append(introCap);
+const introP0 = new THREE.Vector3(), introL0 = new THREE.Vector3(), introP = new THREE.Vector3(), introL = new THREE.Vector3();
+canvas.addEventListener('pointerdown', () => { if (state.mode === 'intro') state.introSkip = true; });
+function introDue() {
+  try { return localStorage.getItem('ham.intro') !== String(seed); } catch { return false; }
+}
+function endIntro() {
+  try { localStorage.setItem('ham.intro', String(seed)); } catch {}
+  introCap.classList.remove('on');
+  setMode('play'); hud.show(true);
+  hud.message('Find the monolith', 4);
+}
 function startRun() {
   audio.init();
   player.reset(world.spawn, 0);
   weapon.reset(); enemies.reset(); effects.clear(); hud.reset(); input.resetTouch();
   hud.setKills(0, DRONES);
   state.elapsed = 0; state.timerOn = false; state.hp = MAX_HP; state.sinceHurt = 99;
-  setMode('play');
-  hud.setScreen(null); hud.show(true);
-  hud.message('Find the monolith', 4);
+  hud.setScreen(null);
+  if (state.retries === 0 && introDue()) {
+    // from above and behind the start, along the line to the monolith
+    const g = world.goal, sp = world.spawn, dx = sp.x - g.x, dz = sp.z - g.z, d = Math.hypot(dx, dz) || 1;
+    introP0.set(sp.x + (dx / d) * 6, 24, sp.z + (dz / d) * 6);
+    introL0.set(g.x, 7, g.z);
+    state.introT = 0; state.introSkip = false; setMode('intro'); hud.show(false);
+    introCap.classList.add('on');
+  } else {
+    setMode('play'); hud.show(true);
+    hud.message('Find the monolith', 4);
+  }
   input.lock(); canvas.focus();
 }
 function pause() {
@@ -137,6 +165,9 @@ function complete() {
   const score = scoreRun(run, SHORTEST);
   const stats = { time: state.elapsed, walked: player.walked, retries: state.retries, kills: enemies.kills, acc: weapon.shots ? weapon.hits / weapon.shots : 0, score };
   lastRun = run; pendingSigned = null;
+  const st = recordFinish(seed);
+  lastShare = { seed, time: fmtTime(state.elapsed), kills: enemies.kills, points: score.total.toLocaleString('en-US'), walked: `${Math.round(player.walked)} m`, streakCount: st.count };
+  resetShare(); showStreak();
   setTimeout(() => {
     hud.debrief(stats); hud.show(false); hud.setScreen('complete');
     if (ticket) recordRun();
@@ -338,6 +369,60 @@ enemies.onPlayerHit = (dmg, from) => {
   if (state.hp <= 0) { state.hp = 0; die(); }
 };
 
+// ---- streak on the title, and the share card on the debrief ----
+let lastShare = null, shareUrl = null;
+const streakEl = document.querySelector('.m-streak'), shareBox = document.querySelector('.m-share'),
+  shareImg = document.querySelector('.m-share-img'), shareLinks = document.querySelector('.m-share-links'),
+  shareX = document.querySelector('[data-share-x]'), shareSave = document.querySelector('[data-share-save]'),
+  shareBtn = document.querySelector('[data-act="share"]');
+function showStreak() {
+  const s = streak(seed);
+  streakEl.hidden = s.count < 2 && !(s.count === 1 && !s.today);
+  if (streakEl.hidden) return;
+  streakEl.textContent = s.today ? `Day ${s.count} in a row` : `${s.count}-day streak: play today to keep it`;
+  streakEl.classList.toggle('due', !s.today);
+}
+showStreak();
+function resetShare() {
+  if (shareUrl) URL.revokeObjectURL(shareUrl);
+  shareUrl = null; shareBox.hidden = true; shareImg.hidden = true; shareLinks.hidden = true;
+  shareBtn.disabled = false; shareBtn.textContent = 'Share your run';
+}
+/** A frame of the maze from the title screen's orbit: the view everyone already sees, so no route is given away. */
+function orbitFrame() {
+  const pos = camera.position.clone(), quat = camera.quaternion.clone(), mode = state.mode;
+  const a = 0.6, g = world.goal, R = HALF * 0.72;
+  camera.position.set(g.x + Math.cos(a) * R, 10.5, g.z + Math.sin(a) * R);
+  camera.lookAt(g.x, 9, g.z);
+  state.mode = 'title';
+  let url = null;
+  try { draw(); url = renderer.domElement.toDataURL('image/jpeg', 0.9); } catch { url = null; }
+  state.mode = mode; camera.position.copy(pos); camera.quaternion.copy(quat);
+  draw();
+  return url;
+}
+hud.on('share', async () => {
+  if (!lastShare) return;
+  shareBtn.disabled = true; shareBtn.textContent = 'Making your card…';
+  const text = shareText(lastShare);
+  let blob = null;
+  try { blob = await drawCard({ ...lastShare, plate: orbitFrame() }); } catch { blob = null; }
+  const file = blob && new File([blob], `ham-${lastShare.seed}.png`, { type: 'image/png' });
+  // phones: the system share sheet, with the image
+  if (file && navigator.canShare && navigator.canShare({ files: [file], text })) {
+    try { await navigator.share({ files: [file], text }); shareBtn.disabled = false; shareBtn.textContent = 'Share again'; return; } catch { /* closed: fall through to the card */ }
+  }
+  if (blob) {
+    if (shareUrl) URL.revokeObjectURL(shareUrl);
+    shareUrl = URL.createObjectURL(blob);
+    shareImg.src = shareUrl; shareImg.hidden = false; shareSave.href = shareUrl; shareSave.download = `ham-${lastShare.seed}.png`;
+  }
+  shareX.href = `https://x.com/intent/post?text=${encodeURIComponent(text)}`;
+  shareLinks.hidden = false; shareBox.hidden = false;
+  try { await navigator.clipboard.writeText(text); shareBtn.textContent = 'Text copied. Save the image and post it'; } catch { shareBtn.textContent = 'Save the image and post it'; }
+  shareBtn.disabled = false;
+});
+
 const clock = new THREE.Clock();
 const goalVec = new THREE.Vector3(), eye = new THREE.Vector3();
 
@@ -408,6 +493,21 @@ function tick(dt, inp) {
       state.sinceHurt += dt;
       if (state.sinceHurt > REGEN_DELAY && state.hp < MAX_HP) state.hp = Math.min(MAX_HP, state.hp + REGEN_RATE * dt);
       if (world.reachedGoal(player.pos, RADIUS)) complete();
+    }
+  } else if (state.mode === 'intro') {
+    state.introT += dt;
+    const k = Math.min(1, state.introT / INTRO_SECS);
+    // hold on the monolith for the first third, then ease down into her eyes, facing where she faces
+    const e = THREE.MathUtils.smootherstep(k, 0.3, 1);
+    eye.set(player.pos.x, player.pos.y + player.eye, player.pos.z);
+    introP.lerpVectors(introP0, eye, e);
+    introL.set(eye.x - Math.sin(player.yaw), eye.y, eye.z - Math.cos(player.yaw)).lerp(introL0, 1 - e);
+    camera.position.copy(introP); camera.lookAt(introL);
+    if (state.introT > 2.4) introCap.classList.remove('on');
+    if (third()) runner.update(dt, { pos: player.pos, vel: player.vel, yaw: player.yaw, pitch: 0, speed: 0, air: false, crouch: 0, aim: 0, kick: 0, flash: false });
+    if (k >= 1 || inp.pressed.size || state.introSkip) {
+      endIntro();
+      if (inp.pressed.has('Escape') || inp.pressed.has('KeyP')) pause();
     }
   } else if (state.mode === 'title') {
     // slow orbit just above the walls, the monolith against the sky, framed right of the title panel
