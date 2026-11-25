@@ -267,19 +267,19 @@ contract HamRobinhoodTest is Test {
 
         vm.prank(alice);
         vm.expectRevert(HamRobinhood.ClaimNotIntended.selector);
-        run.claimFinalize(t1);
+        run.claimFinalize(t1, alice);
 
         vm.prank(alice);
         run.claimIntent(t1);
 
         vm.prank(alice);
         vm.expectRevert(HamRobinhood.TooEarly.selector);
-        run.claimFinalize(t1);
+        run.claimFinalize(t1, alice);
 
         vm.warp(block.timestamp + run.CLAIM_DELAY());
         uint256 balBefore = alice.balance;
         vm.prank(alice);
-        run.claimFinalize(t1);
+        run.claimFinalize(t1, alice);
         assertGt(alice.balance, balBefore);
     }
 
@@ -317,7 +317,7 @@ contract HamRobinhoodTest is Test {
         vm.warp(block.timestamp + run.CLAIM_DELAY());
         uint256 balBefore = bob.balance;
         vm.prank(bob);
-        run.claimFinalize(t1);
+        run.claimFinalize(t1, bob);
         assertGt(bob.balance, balBefore);
     }
 

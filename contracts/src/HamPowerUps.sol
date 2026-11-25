@@ -13,7 +13,8 @@ pragma solidity 0.8.26;
 /// What a pack holds is drawn like a card from a shuffled deck: the lineup's caps add up to exactly
 /// 10,000, so each kind's chance is its share of what is still in the deck, and every pack can always
 /// be opened. The draw uses the hash of the block the pack was bought in, which nobody knows while
-/// buying, so a buyer cannot pick a good pack and a bot cannot re-roll by choosing when to open.
+/// buying, so a buyer cannot pick a good pack. Packs are dealt strictly in sale order, so nobody can
+/// steer a draw by choosing which packs to open first or when.
 /// A sealed pack cannot be transferred: once its block hash exists, anyone could read what is inside,
 /// and selling only the bad ones would cheat the buyer.
 ///
@@ -53,11 +54,13 @@ contract HamPowerUps {
     address internal _packHead;
     address internal _packTail;
     uint256 public totalSupply; // packs sold
-    uint256 public opened;
+    uint256 public opened; // packs dealt so far, always 1..opened: packs are dealt in sale order
+    uint256 public constant MAX_DEAL = 64; // packs one call deals at most
     mapping(uint256 => uint256) public kindOf; // tokenId => kind id, 0 = still sealed
     mapping(uint256 => uint256) public boughtAt; // tokenId => block number it was bought in
     mapping(uint256 => bytes32) public blockSeal; // block number => its hash, kept before it ages out
-    uint256 internal _lastBuyBlock;
+    uint256 internal _lastBuyBlock; // the last block packs were sealed in (bought, or re-sealed)
+    mapping(uint256 => uint256) public movedTo; // a block whose hash was lost => the block its packs were re-sealed to
     mapping(uint256 => Stats) public stats;
     mapping(address => uint256) public equipped; // wallet => tokenId it carries into runs, 0 = none
 
@@ -74,6 +77,7 @@ contract HamPowerUps {
     event ArtSet(uint256 indexed kind, address head, address tail); // kind 0 = the pack
     event Locked();
     event PricingSet(uint96 basePrice, uint64 growth);
+    event Resealed(uint256 indexed fromBlock, uint256 toBlock);
     event PackOpened(uint256 indexed tokenId, address indexed holder, uint256 indexed kind);
     event Equipped(address indexed holder, uint256 indexed tokenId);
     event RunRecorded(uint256 indexed tokenId, uint32 runs, uint32 kills);
@@ -165,25 +169,67 @@ contract HamPowerUps {
 
     /// @notice Strip a pack you hold and see which gun is inside. Works from the block after you
     /// bought it. Your first gun is equipped automatically.
+    /// Packs are dealt strictly in the order they were sold, so opening first or last changes nothing:
+    /// what a pack holds depends only on its own block hash and the packs sold before it. Opening a
+    /// pack deals every earlier pack still sealed (up to MAX_DEAL a call). Returns 0 if it isn't dealt
+    /// yet (earlier packs still to deal, or a lost hash re-sealed to this block): call again.
     function open(uint256 tokenId) external returns (uint256 kind) {
         if (ownerOf(tokenId) != msg.sender) revert NotAuthorized();
         if (kindOf[tokenId] != 0) revert AlreadyOpened();
-        uint256 bought = boughtAt[tokenId];
-        if (block.number <= bought) revert TooSoon();
-        _keepSeal();
-        bytes32 h = blockhash(bought);
-        if (h == 0) h = blockSeal[bought];
-        // Only if nobody touched this contract for the ~256 blocks after the purchase and the pack was
-        // left shut all that time: fall back to the latest block. Rare, and costs the opener waiting.
-        if (h == 0) h = blockhash(block.number - 1);
-        kind = _draw(uint256(keccak256(abi.encode(h, tokenId))));
-        kindOf[tokenId] = kind;
-        opened += 1;
-        emit PackOpened(tokenId, msg.sender, kind);
-        if (equipped[msg.sender] == 0) _equip(msg.sender, tokenId);
+        if (block.number <= sealBlock(tokenId)) revert TooSoon();
+        _deal(tokenId);
+        kind = kindOf[tokenId];
     }
 
-    /// @dev Remember the hash of the last block packs were bought in while it can still be read.
+    /// @notice Deal sealed packs in sale order up to `upTo` (at most MAX_DEAL a call). Anyone can call
+    /// it; it changes no outcome, only when packs show their gun.
+    function deal(uint256 upTo) external returns (uint256) {
+        _deal(upTo);
+        return opened;
+    }
+
+    /// @notice Keep the hash of the last block packs were sealed in, before it ages out. Anyone can call
+    /// it; the game's keeper does after every sale.
+    function keepSeal() external {
+        _keepSeal();
+    }
+
+    /// @notice The block whose hash decides `tokenId` (its purchase block, or where it was re-sealed).
+    function sealBlock(uint256 tokenId) public view returns (uint256 b) {
+        b = boughtAt[tokenId];
+        while (movedTo[b] != 0) b = movedTo[b];
+    }
+
+    function _deal(uint256 upTo) internal {
+        _keepSeal();
+        if (upTo > totalSupply) upTo = totalSupply;
+        uint256 id = opened;
+        uint256 end = id + MAX_DEAL < upTo ? id + MAX_DEAL : upTo;
+        while (id < end) {
+            uint256 b = sealBlock(id + 1);
+            if (b >= block.number) break;
+            bytes32 h = blockhash(b);
+            if (h == 0) h = blockSeal[b];
+            if (h == 0) {
+                // Nobody touched this contract for the ~256 blocks after the sale: the hash is gone. The
+                // pack (and the rest sold in that block) is re-sealed to this block, whose hash nobody
+                // knows yet, so whoever finds it lost cannot pick a new outcome.
+                movedTo[b] = block.number;
+                _lastBuyBlock = block.number;
+                emit Resealed(b, block.number);
+                break;
+            }
+            ++id;
+            uint256 kind = _draw(uint256(keccak256(abi.encode(h, id))), MAX_PACKS - (id - 1));
+            kindOf[id] = kind;
+            address holder = _owner[id];
+            emit PackOpened(id, holder, kind);
+            if (equipped[holder] == 0) _equip(holder, id);
+        }
+        opened = id;
+    }
+
+    /// @dev Remember the hash of the last block packs were sealed in while it can still be read.
     function _keepSeal() internal {
         uint256 b = _lastBuyBlock;
         if (b != 0 && b < block.number && blockSeal[b] == 0) {
@@ -192,17 +238,17 @@ contract HamPowerUps {
         }
     }
 
-    /// @dev Deal one card from what is left of the deck.
-    function _draw(uint256 rnd) internal returns (uint256) {
-        uint256 r = rnd % (MAX_PACKS - opened);
+    /// @dev Deal one card from what is left of the deck (`left` cards).
+    function _draw(uint256 rnd, uint256 left) internal returns (uint256) {
+        uint256 r = rnd % left;
         for (uint256 i; i < _kinds.length; ++i) {
             Kind storage k = _kinds[i];
-            uint256 left = k.cap - k.minted;
-            if (r < left) {
+            uint256 n = k.cap - k.minted;
+            if (r < n) {
                 k.minted += 1;
                 return i + 1;
             }
-            r -= left;
+            r -= n;
         }
         revert SoldOut(); // unreachable: the caps add up to MAX_PACKS
     }
@@ -227,7 +273,8 @@ contract HamPowerUps {
         if (tokenId == 0 || _owner[tokenId] != player) return;
         Stats storage s = stats[tokenId];
         s.runs += 1;
-        s.kills += kills;
+        uint256 k = uint256(s.kills) + kills; // saturates: a uint32 tally must never revert a run
+        s.kills = k > type(uint32).max ? type(uint32).max : uint32(k);
         emit RunRecorded(tokenId, s.runs, s.kills);
     }
 

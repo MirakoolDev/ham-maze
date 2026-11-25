@@ -414,7 +414,7 @@ contract HamRobinhood {
 
         uint32 boosted = _rankedPoints(r.points, r.boostBps, attempt);
         if (boosted == 0) revert BadTime();
-        tokenId = _mintScore(day, msg.sender, attempt, boosted, r);
+        tokenId = _mintScore(day, msg.sender, attempt, boosted, r, !paid);
         _rank(_days[day], tokenId, boosted, r.timeMs);
         _notifyRun(msg.sender, r.kills, r.completed, boosted, _streak(day, r.completed));
 
@@ -539,6 +539,9 @@ contract HamRobinhood {
 
     /// @dev One top-3 place's payout: holder bonus and referral reward (crew-boosted if the
     /// referrer's crew reached CREW_SIZE that day), both carved out of the treasury share.
+    /// By design (audit 2, finding 6): places are paid in order, first to third, and the extras stop
+    /// when the 10% runs out, so a lower place can get less (or none) of its bonus or referral. Its
+    /// base share (40 / 20 / 10%) is never touched.
     function _settlePlace(uint256 day, uint256 tokenId, uint256 baseAmount, uint256 treasuryShare)
         internal
         returns (uint256 amount, uint256 remainingTreasury)
@@ -577,7 +580,8 @@ contract HamRobinhood {
     }
 
     /// @notice Pay out a frozen score NFT's prize, once CLAIM_DELAY has passed since claimIntent.
-    function claimFinalize(uint256 tokenId) external nonReentrant {
+    /// Pays `to` (the holder picks it, so a holder that can't take ETH can still be paid).
+    function claimFinalize(uint256 tokenId, address to) external nonReentrant {
         uint256 startedAt = claimIntentAt[tokenId];
         if (startedAt == 0) revert ClaimNotIntended();
         if (block.timestamp < startedAt + CLAIM_DELAY) revert TooEarly();
@@ -588,10 +592,11 @@ contract HamRobinhood {
         uint256 amount = prizeOf[tokenId];
         if (amount == 0) revert NothingToClaim();
         claimed[tokenId] = true;
-        uint256 day = scores[tokenId].day;
-        _days[day].unclaimed -= uint128(amount);
-        _send(holder, amount);
-        emit PrizeClaimed(tokenId, holder, amount);
+        prizeOf[tokenId] = 0;
+        delete _approved[tokenId];
+        _days[scores[tokenId].day].unclaimed -= uint128(amount);
+        _send(to, amount);
+        emit PrizeClaimed(tokenId, to, amount);
     }
 
     /// @notice After CLAIM_WINDOW from claimIntent (or indefinitely if claimIntent was never
@@ -628,11 +633,11 @@ contract HamRobinhood {
         if (amount + toBackers == 0) revert NothingToClaim();
         // each share is paid on its own: one recipient refusing ETH keeps its share owed, never blocks the other
         if (amount != 0 && _trySend(treasury, amount)) {
-            treasuryOwed = 0;
+            treasuryOwed -= amount;
             emit TreasuryWithdrawn(treasury, amount);
         }
         if (toBackers != 0 && _trySend(backers, toBackers)) {
-            backersOwed = 0;
+            backersOwed -= toBackers;
             emit TreasuryWithdrawn(backers, toBackers);
         }
     }
@@ -785,6 +790,8 @@ contract HamRobinhood {
 
     /// @notice Where the treasury share goes. Can point at a buyback vault for an existing
     /// token instead of a plain wallet; this contract itself never mints or holds any token.
+    /// Trust note (audit 2, finding 10): the new address also receives what is already owed and
+    /// not yet withdrawn, as does `setBackers` for the backers' share.
     function setTreasury(address treasury_) external onlyOwner {
         if (treasury_ == address(0)) revert ZeroAddress();
         treasury = treasury_;
@@ -880,7 +887,7 @@ contract HamRobinhood {
         }
     }
 
-    function _mintScore(uint256 day, address player, uint32 attempt, uint32 points, RunResult calldata r)
+    function _mintScore(uint256 day, address player, uint32 attempt, uint32 points, RunResult calldata r, bool holder)
         internal
         returns (uint256 tokenId)
     {
@@ -893,7 +900,7 @@ contract HamRobinhood {
             timeMs: r.timeMs,
             kills: r.kills,
             completed: r.completed,
-            holder: isHolder(player)
+            holder: holder // only a pass's free run: one per pass per day, by the wallet holding it then
         });
         _owner[tokenId] = player;
         _balance[player] += 1;

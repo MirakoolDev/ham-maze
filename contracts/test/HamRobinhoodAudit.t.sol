@@ -112,7 +112,7 @@ contract HamRobinhoodAuditTest is Test {
         game.claimIntent(bobToken);
         vm.warp(block.timestamp + game.CLAIM_DELAY());
         vm.prank(bob);
-        game.claimFinalize(bobToken);
+        game.claimFinalize(bobToken, bob);
     }
 
     // ── 2 (medium): one holder NFT, many free runs ─────────────────────────────
@@ -201,7 +201,7 @@ contract HamRobinhoodAuditTest is Test {
         assertTrue(game.isFrozen(id));
         vm.warp(block.timestamp + game.CLAIM_DELAY());
         vm.prank(alice);
-        game.claimFinalize(id);
+        game.claimFinalize(id, alice);
         assertFalse(game.isFrozen(id));
         vm.prank(alice);
         game.transferFrom(alice, bob, id);
