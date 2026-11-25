@@ -38,6 +38,8 @@ const REPEAT_ABI = [
   'function currentDay() view returns (uint256)',
   'function attempts(uint256,address) view returns (uint32)',
   'function attemptShare(uint32) view returns (uint256)',
+  'function streakOf(address) view returns (uint32 length, bool today)',
+  'function streakBonusBps(uint32) view returns (uint256)',
 ];
 const NFT_ABI = [
   'function mint() returns (uint256)',
@@ -182,6 +184,22 @@ export const chain = {
       const attempt = await k.attempts(await k.currentDay(), account);
       const bps = await k.attemptShare(attempt);
       return { run: Number(attempt) + 1, pct: Number(bps) / 100 };
+    } catch { return null; }
+  },
+
+  /**
+   * The wallet's on-chain streak (HamRobinhood): { count, today, bonusPct } where bonusPct is the HAM Points
+   * bonus its runs earn while the streak holds. Null where the contract has no streak or can't be read.
+   */
+  async streak(account = this.account) {
+    if (!account || !this.enabled()) return null;
+    const k = new Contract(CHAIN.contract, REPEAT_ABI, new JsonRpcProvider(CHAIN.rpc, CHAIN.id, { staticNetwork: true }));
+    try {
+      const [len, today] = await k.streakOf(account);
+      const count = Number(len);
+      // the bonus once today's run is in: the streak as it stands, or one longer if today isn't done yet
+      const bps = count ? await k.streakBonusBps(today ? count : count + 1) : 0n;
+      return { count, today, bonusPct: Number(bps) / 100 };
     } catch { return null; }
   },
 

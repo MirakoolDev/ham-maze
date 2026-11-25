@@ -68,6 +68,8 @@ contract HamRobinhood {
     uint256 public constant MAX_BOOSTERS = 4;
     uint256 public constant MAX_BOOST_BPS = 5000;
     uint32 public constant MAX_RUN_POINTS = 100_000; // well above the best possible run (~40k); caps what any key can sign
+    uint256 public constant STREAK_STEP_BPS = 1000; // HAM Points bonus per day in a row after the first
+    uint256 public constant STREAK_MAX_BPS = 5000; // reached on day 6
     uint256 public constant REFEREE_DELAY = 2 days; // a new referee key only takes effect after this
 
     string public constant name = "HAM Score";
@@ -150,6 +152,10 @@ contract HamRobinhood {
 
     mapping(uint256 => Day) internal _days;
     mapping(uint256 => mapping(address => uint32)) public attempts;
+    // Streak: days in a row the wallet reached the monolith (a recorded run with completed = true). It only adds
+    // HAM Points, never ranked points, so it can't move anyone up the pot.
+    mapping(address => uint32) public lastFinishDay;
+    mapping(address => uint32) public streakDays;
     mapping(uint256 => mapping(uint256 => bool)) public freeRunUsed; // day => holder NFT id => used: one free run per pass per day, whoever holds it
     Booster[] internal _boosters;
 
@@ -183,6 +189,7 @@ contract HamRobinhood {
 
     // ── Events ──────────────────────────────────────────────────────────────────
     event RunPlayed(uint256 indexed day, address indexed player, uint32 attempt, uint256 tokenId, uint32 points, uint32 boosted, uint32 timeMs, bool paid);
+    event StreakSet(address indexed player, uint256 indexed day, uint32 streakDays);
     event CrewBonusUnlocked(uint256 indexed day, address indexed referrer, uint32 crewSize);
     event PowerUpSet(address powerUp);
     event HamPointsSet(address hamPoints);
@@ -409,7 +416,7 @@ contract HamRobinhood {
         if (boosted == 0) revert BadTime();
         tokenId = _mintScore(day, msg.sender, attempt, boosted, r);
         _rank(_days[day], tokenId, boosted, r.timeMs);
-        _notifyRun(msg.sender, r.kills, r.completed, boosted);
+        _notifyRun(msg.sender, r.kills, r.completed, boosted, _streak(day, r.completed));
 
         emit RunPlayed(day, msg.sender, attempt, tokenId, r.points, boosted, r.timeMs, paid);
     }
@@ -427,11 +434,44 @@ contract HamRobinhood {
 
     /// @dev Tells the power-up NFT about the run and mints its HAM Points. Best-effort: a missing
     /// or reverting contract never blocks a run.
-    function _notifyRun(address player, uint32 kills, bool completed, uint32 ranked) internal {
+    function _notifyRun(address player, uint32 kills, bool completed, uint32 ranked, uint256 streakBps) internal {
         address p = powerUp;
         if (p != address(0)) try IHamPowerUps(p).recordRun(player, kills, completed) {} catch {}
         p = hamPoints;
-        if (p != address(0)) try IHamPoints(p).mint(player, uint256(ranked) * 1e18) {} catch {}
+        if (p != address(0)) try IHamPoints(p).mint(player, uint256(ranked) * (BPS + streakBps) * 1e18 / BPS) {} catch {}
+    }
+
+    /// @dev A finished run extends the sender's streak (once a day: +1 if their last finish was yesterday,
+    /// else back to 1). Returns the HAM Points bonus for this run: it applies to every run the day after
+    /// the wallet has finished one, and to none before.
+    function _streak(uint256 day, bool completed) internal returns (uint256) {
+        uint32 last = lastFinishDay[msg.sender];
+        uint32 n = streakDays[msg.sender];
+        if (completed && last != day) {
+            n = n != 0 && uint256(last) + 1 == day ? n + 1 : 1;
+            streakDays[msg.sender] = n;
+            lastFinishDay[msg.sender] = uint32(day);
+            emit StreakSet(msg.sender, day, n);
+        } else if (last != day) {
+            return 0;
+        }
+        return streakBonusBps(n);
+    }
+
+    /// @notice The HAM Points bonus for a streak of `n` days: 0 on day 1, +10% a day after, at most +50%.
+    function streakBonusBps(uint32 n) public pure returns (uint256) {
+        if (n <= 1) return 0;
+        uint256 b = uint256(n - 1) * STREAK_STEP_BPS;
+        return b > STREAK_MAX_BPS ? STREAK_MAX_BPS : b;
+    }
+
+    /// @notice A wallet's live streak: its length (0 if it was broken) and whether today's maze is done.
+    function streakOf(address player) external view returns (uint32 length, bool today) {
+        uint256 day = currentDay();
+        uint32 last = lastFinishDay[player];
+        if (last == day) return (streakDays[player], true);
+        if (last != 0 && uint256(last) + 1 == day) return (streakDays[player], false);
+        return (0, false);
     }
 
     function _verifySignature(uint256 day, RunResult calldata r, bytes calldata signature) internal view {

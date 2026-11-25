@@ -219,6 +219,7 @@ async function refreshPot() {
   } catch { v.textContent = 'Could not reach the chain'; }
   refreshPowerup();
   refreshRepeat();
+  chain.streak().then((st) => { chainStreak = st; showStreak(); });
 }
 
 // Repeat runs: say what the next paid run counts for before anyone pays for it. Only where the
@@ -375,11 +376,15 @@ const streakEl = document.querySelector('.m-streak'), shareBox = document.queryS
   shareImg = document.querySelector('.m-share-img'), shareLinks = document.querySelector('.m-share-links'),
   shareX = document.querySelector('[data-share-x]'), shareSave = document.querySelector('[data-share-save]'),
   shareBtn = document.querySelector('[data-act="share"]');
+// The streak shown is the chain's when a wallet is connected to a contract that keeps one (that's the one that
+// pays the HAM Points bonus), else this browser's own count.
+let chainStreak = null;
 function showStreak() {
-  const s = streak(seed);
+  const s = chainStreak || streak(seed);
   streakEl.hidden = s.count < 2 && !(s.count === 1 && !s.today);
   if (streakEl.hidden) return;
-  streakEl.textContent = s.today ? `Day ${s.count} in a row` : `${s.count}-day streak: play today to keep it`;
+  const bonus = chainStreak && chainStreak.bonusPct ? ` · +${chainStreak.bonusPct}% HAM Points` : '';
+  streakEl.textContent = (s.today ? `Day ${s.count} in a row` : `${s.count}-day streak: play today to keep it`) + bonus;
   streakEl.classList.toggle('due', !s.today);
 }
 showStreak();
