@@ -60,12 +60,14 @@ export function scoreRun({ timeMs, walked, kills = 0, rivals = 0 }, shortest) {
 // the Manhattan distance, so the margins below have to tolerate that, not just rounding error.
 const CORNER_CUT = 0.6; // a genuine run can cover as little as this fraction of the Manhattan route
 
-/** Why a run is not believable, or null. Used by the referee before it signs. */
-export function implausible({ timeMs, walked, kills = 0, rivals = 0 }, shortest, cfg) {
+/** Why a run is not believable, or null. Used by the referee before it signs. `skip`: metres of route the
+ *  day's Blink crates can jump (src/crates.js blinkSkipMetres), which a run doesn't have to walk or time. */
+export function implausible({ timeMs, walked, kills = 0, rivals = 0 }, shortest, cfg, skip = 0) {
   if (!(timeMs > 0) || !(walked >= 0)) return 'bad numbers';
   if (timeMs > 3 * 3600e3) return 'run too long';
-  if (timeMs / 1000 < (shortest * CORNER_CUT) / MAX_SPEED) return 'faster than possible';
-  if (walked < shortest * CORNER_CUT) return 'walked less than the shortest route';
+  const least = Math.max(0, shortest * CORNER_CUT - skip);
+  if (timeMs / 1000 < least / MAX_SPEED) return 'faster than possible';
+  if (walked < least) return 'walked less than the shortest route';
   if (walked > (MAX_SPEED * timeMs) / 1000 + 5) return 'walked further than possible in that time';
   if (kills < 0 || kills > cfg.sentries) return 'more sentries than exist';
   if (rivals < 0 || rivals > 3) return 'too many rivals';

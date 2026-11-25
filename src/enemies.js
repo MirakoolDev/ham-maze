@@ -19,7 +19,9 @@ const shared = {
 
 export function createEnemies(scene, world, maze, effects, audio, { count = 8 } = {}) {
   const drones = [], bolts = [];
-  const api = { drones, kills: 0, total: count, onPlayerHit: null, onKill: null };
+  // lure: a Decoy crate's walking copy ({ pos, eye, vel }), or null. A sentry that can see it chases and shoots
+  // it instead of you, and keeps hunting where it last saw it.
+  const api = { drones, kills: 0, total: count, onPlayerHit: null, onKill: null, lure: null };
 
   function spawn() {
     for (const d of drones) scene.remove(d.group);
@@ -130,19 +132,23 @@ export function createEnemies(scene, world, maze, effects, audio, { count = 8 } 
         g.position.copy(d.pos); continue;
       }
       d.phase += dt;
-      tmp.copy(eye).sub(d.pos);
+      // who it's after: the decoy if it can see it, else you
+      const lure = api.lure;
+      const lureSeen = active && lure && d.pos.distanceTo(lure.eye) < SIGHT && world.los(d.pos, lure.eye);
+      const tgt = lureSeen ? { pos: lure.pos, vel: lure.vel } : player, tEye = lureSeen ? lure.eye : eye;
+      tmp.copy(tEye).sub(d.pos);
       const dist = tmp.length();
       const fwd = new THREE.Vector3(-Math.sin(d.yaw), 0, -Math.cos(d.yaw));
       const flat = tmp.clone().setY(0).normalize();
-      const sees = active && dist < SIGHT && world.los(d.pos, eye) && (d.state === 'hunt' || fwd.dot(flat) > FOV_COS || dist < 7);
-      if (sees) { if (d.state !== 'hunt') audio.alert(d.pos); alert(d, player.pos); d.seeT += dt; } else d.seeT = 0;
+      const sees = lureSeen || (active && dist < SIGHT && world.los(d.pos, eye) && (d.state === 'hunt' || fwd.dot(flat) > FOV_COS || dist < 7));
+      if (sees) { if (d.state !== 'hunt') audio.alert(d.pos); alert(d, tgt.pos); d.seeT += dt; } else d.seeT = 0;
 
       let goal = null, speed = SPEED_PATROL, face = null;
       if (d.state === 'hunt') {
         speed = SPEED_HUNT;
         if (sees) {
-          face = eye;
-          if (dist > 18) { d.repath -= dt; if (d.repath <= 0) { routeTo(d, player.pos); d.repath = 0.6; } goal = d.route[0]; }
+          face = tEye;
+          if (dist > 18) { d.repath -= dt; if (d.repath <= 0) { routeTo(d, tgt.pos); d.repath = 0.6; } goal = d.route[0]; }
           else { // hold range and strafe across the corridor
             goal = d.pos.clone().add(new THREE.Vector3(-flat.z, 0, flat.x).multiplyScalar(d.strafe * 2));
             if (dist < 7) goal.addScaledVector(flat, -2);
@@ -151,7 +157,7 @@ export function createEnemies(scene, world, maze, effects, audio, { count = 8 } 
           }
           // attack: short charge (eye flares) then a bolt
           d.cooldown -= dt;
-          if (d.charge > 0) { d.charge -= dt; if (d.charge <= 0) { fire(d, player, eye); d.cooldown = 1.2 + d.rng.sample(); } }
+          if (d.charge > 0) { d.charge -= dt; if (d.charge <= 0) { fire(d, tgt, tEye); d.cooldown = 1.2 + d.rng.sample(); } }
           else if (d.cooldown <= 0 && d.seeT > REACT && dist < RANGE) { d.charge = 0.45; audio.charge(d.pos); }
         } else {
           d.charge = 0; d.lostT += dt;

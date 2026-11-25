@@ -88,6 +88,7 @@ export function createInput(canvas) {
       if (act === 'ads') { t.ads = !t.ads; b.classList.toggle('active', t.ads); }
       if (act === 'jump') pressed.add('Space');
       if (act === 'reload') pressed.add('KeyR');
+      if (act === 'use') pressed.add('KeyQ');
       if (act === 'pause' && inp.onPause) inp.onPause();
     });
     const up = () => { if (act === 'fire') { t.fire = false; b.classList.remove('active'); } };

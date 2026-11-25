@@ -106,6 +106,23 @@ export function createAudio() {
       tone(d, { t: 0.55 + i * 0.07, dur: 1.6, type: 'triangle', f: f * 2.003, gain: 0.05 });
     });
   };
+  // crates: a glassy pick-up chime, Blink's rising whoosh, Decoy's soft double shimmer
+  a.pickup = () => {
+    if (!ok()) return;
+    const d = out(null, 0.5);
+    tone(d, { dur: 0.25, type: 'sine', f: 988, gain: 0.25 }); tone(d, { t: 0.08, dur: 0.35, type: 'sine', f: 1480, gain: 0.2 });
+  };
+  a.blink = () => {
+    if (!ok()) return;
+    const d = out(null, 0.7);
+    noise(d, { dur: 0.35, type: 'bandpass', f: 400, f2: 4000, q: 1.2, gain: 0.5 });
+    tone(d, { dur: 0.3, type: 'sine', f: 220, f2: 1760, gain: 0.35 });
+  };
+  a.decoy = () => {
+    if (!ok()) return;
+    const d = out(null, 0.5);
+    tone(d, { dur: 0.5, type: 'triangle', f: 660, f2: 440, gain: 0.18 }); tone(d, { t: 0.12, dur: 0.5, type: 'triangle', f: 880, f2: 587, gain: 0.14 });
+  };
   let stepT = 0;
   a.step = (dt, speed, grounded) => {
     if (!ok() || !grounded || speed < 1) { stepT = 0; return; }

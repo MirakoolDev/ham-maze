@@ -8,6 +8,8 @@ import { createHud, fmtTime } from './hud.js';
 import { recordFinish, streak, shareText, drawCard } from './share.js';
 import { createWeapon, MAG } from './weapon.js';
 import { createEnemies } from './enemies.js';
+import { createCrates } from './crateplay.js';
+import { CRATE_KINDS } from './crates.js';
 import { createEffects } from './effects.js';
 import { createAudio } from './audio.js';
 import { createPost } from './post.js';
@@ -64,6 +66,16 @@ const player = new Player(camera, world);
 const weapon = createWeapon(envMap);
 const enemies = createEnemies(scene, world, maze, effects, audio, { count: DRONES });
 const hud = createHud({ magSize: CFG.magSize });
+const crates = createCrates(scene, world, maze, effects, audio);
+// the held crate: one slot on the HUD (and a Use button on touch)
+const crateEl = document.getElementById('crate'), useBtn = document.querySelector('[data-t="use"]');
+crates.onChange = (k) => {
+  crateEl.hidden = !k; useBtn.hidden = !k;
+  if (!k) return;
+  crateEl.dataset.kind = k;
+  crateEl.querySelector('b').textContent = CRATE_KINDS[k].name;
+  crateEl.querySelector('span').textContent = CRATE_KINDS[k].hint;
+};
 // the runner (third person): loads beside the game; if it can't (an embed with no /models), V just says so
 // Third person is switched off until the hold is right (tune it on design/character); flip this to bring V back.
 const THIRD_PERSON = false;
@@ -132,6 +144,7 @@ function startRun() {
   audio.init();
   player.reset(world.spawn, 0);
   weapon.reset(); enemies.reset(); effects.clear(); hud.reset(); input.resetTouch();
+  crates.reset(); enemies.lure = null;
   hud.setKills(0, DRONES);
   state.elapsed = 0; state.timerOn = false; state.hp = MAX_HP; state.sinceHurt = 99;
   hud.setScreen(null);
@@ -497,6 +510,11 @@ function tick(dt, inp) {
       if (state.timerOn) state.elapsed += dt;
       state.sinceHurt += dt;
       if (state.sinceHurt > REGEN_DELAY && state.hp < MAX_HP) state.hp = Math.min(MAX_HP, state.hp + REGEN_RATE * dt);
+      // crates: walk into one to pick it up (one at a time), Q to use it
+      const got = crates.update(dt, state.t, player, true);
+      if (got) hud.message(`${CRATE_KINDS[got].name}: press ${input.touch ? 'Use' : 'Q'}`, 3);
+      if (inp.pressed.has('KeyQ')) crates.use(player);
+      enemies.lure = crates.lure;
       if (world.reachedGoal(player.pos, RADIUS)) complete();
     }
   } else if (state.mode === 'intro') {
@@ -522,6 +540,7 @@ function tick(dt, inp) {
     camera.lookAt(g.x - Math.sin(a) * shift, 11, g.z + Math.cos(a) * shift);
   }
 
+  if (state.mode !== 'play') crates.update(dt, state.t, player, false);
   const live = state.mode === 'play';
   eye.set(player.pos.x, player.pos.y + player.eye, player.pos.z);
   if (state.mode !== 'paused') {

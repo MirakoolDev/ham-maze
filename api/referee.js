@@ -10,6 +10,7 @@ import { JsonRpcProvider, Contract, Wallet, getBytes, isAddress, getAddress } fr
 import { CHAINS, FIELDS } from '../src/config.js';
 import { dailySeed } from '../src/maze.js';
 import { dayMaze, shortestMetres, scoreRun, implausible } from '../src/score.js';
+import { blinkSkipMetres } from '../src/crates.js';
 import { nextAttempt, CounterUnavailable } from './run-counter.js';
 
 const ABI = [
@@ -63,7 +64,7 @@ export async function referee(body, key = process.env.REFEREE_KEY) {
   const cfg = Object.fromEntries(FIELDS.map((f, i) => [f.key, Number(cfgRaw[i])]));
   const maze = dayMaze(dailySeed(new Date(day * 86400e3)), cfg);
   const shortest = shortestMetres(maze, cfg.cellSize);
-  const why = implausible(r, shortest, cfg);
+  const why = implausible(r, shortest, cfg, blinkSkipMetres(maze, cfg.cellSize));
   if (why) return fail(422, `Run rejected: ${why}`);
 
   const score = scoreRun(r, shortest);
@@ -89,7 +90,7 @@ async function robinhood({ chain, day, p, r, completed }, k, wallet) {
   const cfg = Object.fromEntries(FIELDS.map((f, i) => [f.key, Number(cfgRaw[i])]));
   const maze = dayMaze(dailySeed(new Date(day * 86400e3)), cfg);
   const shortest = shortestMetres(maze, cfg.cellSize);
-  const why = implausible(r, shortest, cfg);
+  const why = implausible(r, shortest, cfg, blinkSkipMetres(maze, cfg.cellSize));
   if (why) return fail(422, `Run rejected: ${why}`);
 
   const score = scoreRun(r, shortest);
